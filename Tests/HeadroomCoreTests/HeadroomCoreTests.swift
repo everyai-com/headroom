@@ -247,6 +247,7 @@ final class HeadroomCoreTests: XCTestCase {
         XCTAssertEqual(DevTools.parseDockerSize("12.5kB"), 12_500)
         XCTAssertEqual(DevTools.parseDockerSize("0B"), 0)
         XCTAssertNil(DevTools.parseDockerSize("lots"))
+        XCTAssertNil(DevTools.parseDockerSize("-5.11e+08B (-19%)"), "docker sometimes reports a negative; never trust it")
     }
 
     func testOnlyOlderToolchainVersionsAreOffered() throws {
@@ -379,6 +380,31 @@ final class HeadroomCoreTests: XCTestCase {
         let colima = home.appendingPathComponent(".colima")
         let prune = finding(colima, method: .command(executable: "/opt/homebrew/bin/docker", arguments: ["builder", "prune", "-f"]))
         XCTAssertEqual(guardrail.check(colima, for: prune), .allowed, "docker's own prune still runs")
+    }
+
+    // MARK: - Updates
+
+    func testVersionsCompareNumerically() {
+        XCTAssertTrue(Updates.isNewer("0.10.0", than: "0.9.3"))
+        XCTAssertTrue(Updates.isNewer("v1.2", than: "1.1.9"))
+        XCTAssertTrue(Updates.isNewer("1.0.1", than: "1.0"))
+        XCTAssertFalse(Updates.isNewer("1.0", than: "1.0.0"), "equal is not newer")
+        XCTAssertFalse(Updates.isNewer("0.2.0", than: "0.10.0"))
+        XCTAssertFalse(Updates.isNewer("1.0.0-beta", than: "1.0.0"))
+    }
+
+    func testUpdateFeedIsReadAndOnlyNewerReleasesAreOffered() async throws {
+        let feed = home.appendingPathComponent("update.json")
+        try Data(#"{"version": "0.3.0", "url": "https://example.com/Headroom.zip", "notes": "Faster map", "minimumSystem": "15.0"}"#.utf8)
+            .write(to: feed)
+        let release = try await Updates.check(feed: feed, current: "0.2.0")
+        XCTAssertEqual(release?.version, "0.3.0")
+        XCTAssertEqual(release?.notes, "Faster map")
+        let none = try await Updates.check(feed: feed, current: "0.3.0")
+        XCTAssertNil(none, "already on it")
+        try Data(#"{"version": "9.0.0", "url": "https://example.com/x.zip", "minimumSystem": "99.0"}"#.utf8).write(to: feed)
+        let tooNew = try await Updates.check(feed: feed, current: "0.2.0")
+        XCTAssertNil(tooNew, "never offer a release this Mac can't run")
     }
 
     // MARK: - Treemap

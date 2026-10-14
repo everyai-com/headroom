@@ -13,6 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var monitor: Timer?
     private var lastAlert: Date?
     private var lastAutoReclaim: Date?
+    private var updateItem: NSMenuItem?
+    private var notifiedVersion: String?
     private var ticks = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -29,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         Task {
             await model.scan()
             await model.buildMap()
+            await checkForUpdates()
         }
         // Watch: free space every 30 s (cheap), the reclaim scan every 30 min.
         monitor = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
@@ -48,6 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         if ticks % 60 == 0 { Task { await model.scan() } }
         // The map every 6 hours, so growth can be compared folder by folder.
         if ticks % 720 == 0, model.mapProgress == nil { Task { await model.buildMap() } }
+        if ticks % 2880 == 0 { Task { await checkForUpdates() } } // daily
         checkForAlert()
     }
 
@@ -99,6 +103,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                names.joined(separator: ", ") + (gone.count > 3 ? " and \(gone.count - 3) more" : "") + ". See Activity for the full list.")
     }
 
+    /// A newer release: one notification per version, and a menu bar item until it's installed.
+    private func checkForUpdates() async {
+        guard let release = await model.checkForUpdates() else { return }
+        updateItem?.title = "Update available — Headroom \(release.version)"
+        updateItem?.isHidden = false
+        if notifiedVersion != release.version, model.notificationsEnabled {
+            notifiedVersion = release.version
+            notify("Headroom \(release.version) is available", release.notes ?? "Open the menu bar item to get it.")
+        }
+    }
+
+    @objc private func openUpdate() {
+        if let url = model.update?.url { NSWorkspace.shared.open(url) }
+    }
+
     private func notify(_ title: String, _ body: String) {
         let content = UNMutableNotificationContent()
         content.title = title
@@ -124,6 +143,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let menu = NSMenu()
         menu.addItem(withTitle: "Open Headroom", action: #selector(openWindowAction), keyEquivalent: "o").target = self
         menu.addItem(withTitle: "Reclaim safely", action: #selector(reclaimAction), keyEquivalent: "r").target = self
+        let update = menu.addItem(withTitle: "Update available", action: #selector(openUpdate), keyEquivalent: "")
+        update.target = self
+        update.isHidden = true
+        updateItem = update
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Headroom", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         item.menu = menu

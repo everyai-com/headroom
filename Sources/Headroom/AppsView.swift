@@ -225,6 +225,25 @@ struct SettingsView: View {
                         }
                     }
                 }
+                Card {
+                    VStack(alignment: .leading, spacing: 12) {
+                        SectionTitle(title: "Updates", trailing: "version \(Updates.currentVersion)")
+                        HStack(spacing: 10) {
+                            Button("Check for updates") { Task { await model.checkForUpdates(manual: true) } }
+                                .buttonStyle(GhostButtonStyle())
+                            if let release = model.update {
+                                Button("Get Headroom \(release.version)") { NSWorkspace.shared.open(release.url) }
+                                    .buttonStyle(PrimaryButtonStyle())
+                            }
+                            if let status = model.updateStatus {
+                                Text(status).font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
+                            }
+                        }
+                        if let notes = model.update?.notes {
+                            Text(notes).font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
                 if model.history.totalFreed > 0 {
                     Card {
                         HStack {

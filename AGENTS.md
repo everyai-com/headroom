@@ -11,6 +11,10 @@ repo (github.com/everyai-com/headroom, private) and the installed app.
 - tests: `swift test` (engine only; every test runs in a throwaway temp folder)
 - read-only reports: `./headroom-cli status|reclaim|projects|apps|map|files|growth|activity` (`--json`)
 - distribution signing: `HEADROOM_SIGN_ID="Developer ID Application: …" HEADROOM_NOTARY_PROFILE=<profile> ./scripts/bundle.sh`
+  (version from `VERSION`; Developer ID builds keep Full Disk Access across rebuilds, ad-hoc ones don't)
+- release: bump `VERSION`, then `HEADROOM_SIGN_ID=… HEADROOM_NOTARY_PROFILE=… HEADROOM_RELEASE_REPO=owner/public-repo
+  ./scripts/release.sh "notes"` → notarized zip + `update.json` on a GitHub release. Builds with
+  `HEADROOM_UPDATE_FEED` set check it daily (`Updates`); they notify and open the download, never self-install.
 - design review: `.build/release/Headroom --render <dir>` draws every screen + both notch
   states to PNG from real scans (ImageRenderer can't draw ScrollView — views use
   `Scrolling {}`, which lays out flat in snapshot mode)

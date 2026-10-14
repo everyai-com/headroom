@@ -22,7 +22,10 @@ done
 rm "$ICONSET/base.png"
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/Headroom.icns"
 
-VERSION=$(git describe --tags --always 2>/dev/null || echo 0.1.0)
+VERSION=$(cat VERSION 2>/dev/null || echo 0.1.0)
+BUILD=$(git rev-list --count HEAD 2>/dev/null || echo 1)
+# Optional release feed (see scripts/release.sh); empty = the app never checks for updates.
+FEED="${HEADROOM_UPDATE_FEED:-}"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -33,8 +36,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleExecutable</key><string>Headroom</string>
   <key>CFBundleIconFile</key><string>Headroom</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.1.0</string>
-  <key>CFBundleVersion</key><string>${VERSION}</string>
+  <key>CFBundleShortVersionString</key><string>${VERSION}</string>
+  <key>CFBundleVersion</key><string>${BUILD}</string>
+  <key>HeadroomUpdateFeed</key><string>${FEED}</string>
   <key>LSMinimumSystemVersion</key><string>15.0</string>
   <key>LSUIElement</key><true/>
   <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>

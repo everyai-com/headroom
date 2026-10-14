@@ -33,6 +33,9 @@ final class AppModel: ObservableObject {
     @AppStorage("notificationsEnabled") var notificationsEnabled = true
     @AppStorage("showNotch") var showNotch = true
     @AppStorage("autoReclaim") var autoReclaim = false
+    /// A newer release from the update feed, when there is one.
+    @Published var update: Updates.Release?
+    @Published var updateStatus: String?
 
     /// `--demo` (for recording): projects and personal files are limited to what
     /// scripts/demo-seed.sh made, so your real projects and documents never appear on camera.
@@ -338,6 +341,23 @@ final class AppModel: ObservableObject {
     func reflect(_ outcome: MapOutcome, ancestors: Set<String>) {
         map = map?.reflecting(removalOf: outcome.nodeID, remaining: outcome.remaining, freed: outcome.freedFromMap,
                               ancestors: ancestors)
+    }
+
+    /// Ask the release feed for a newer version. Quiet unless `manual` (the Settings button).
+    @discardableResult
+    func checkForUpdates(manual: Bool = false) async -> Updates.Release? {
+        guard let feed = Updates.feedURL else {
+            if manual { updateStatus = "Updates aren't set up in this build." }
+            return nil
+        }
+        if manual { updateStatus = "Checking…" }
+        do {
+            update = try await Updates.check(feed: feed)
+            updateStatus = update.map { "Headroom \($0.version) is available." } ?? "You're up to date (\(Updates.currentVersion))."
+        } catch {
+            if manual { updateStatus = "Couldn't reach the update feed." }
+        }
+        return update
     }
 
     static func openFullDiskAccessSettings() {
