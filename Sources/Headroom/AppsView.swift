@@ -162,6 +162,7 @@ struct AppRow: View {
 
 struct SettingsView: View {
     @EnvironmentObject var model: AppModel
+    @Environment(\.snapshotMode) private var snapshot
     var launchAtLogin: Binding<Bool>
 
     var body: some View {
@@ -175,6 +176,31 @@ struct SettingsView: View {
                         sliderRow("Warn below", value: $model.lowSpaceThresholdGB, range: 5...60, unit: "GB")
                         toggleRow("Show in the notch", "The live readout around your camera notch. Hover it for details.", on: $model.showNotch)
                         toggleRow("Open at login", "Headroom runs quietly in the notch and menu bar.", on: launchAtLogin)
+                        toggleRow("Reclaim automatically when space is low",
+                                  "Below the threshold, Headroom reclaims the safe set on its own (at most every 6 hours) and tells you exactly what went. Never anything marked review.",
+                                  on: $model.autoReclaim)
+                    }
+                }
+                Card {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            SectionTitle(title: "Never touch")
+                            Spacer()
+                            Button("Add folder…") { addExclusion() }.buttonStyle(GhostButtonStyle())
+                        }
+                        Text("Headroom never suggests, reclaims or deletes anything at, inside or containing these — even from the map. Right-click any item to add it.")
+                            .font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
+                        if model.excluded.isEmpty {
+                            Text("Nothing yet.").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
+                        }
+                        ForEach(model.excluded, id: \.self) { path in
+                            HStack {
+                                Image(systemName: "hand.raised.fill").foregroundStyle(Theme.review).font(.system(size: 11))
+                                Text(URL(fileURLWithPath: path).tildePath).font(.system(size: 12.5)).lineLimit(1).truncationMode(.middle)
+                                Spacer()
+                                Button("Remove") { model.unexclude(path) }.buttonStyle(GhostButtonStyle())
+                            }
+                        }
                     }
                 }
                 Card {
@@ -190,13 +216,13 @@ struct SettingsView: View {
                 }
                 Card {
                     VStack(alignment: .leading, spacing: 12) {
-                        SectionTitle(title: "Full Disk Access")
+                        SectionTitle(title: "Full Disk Access", trailing: model.hasFullDiskAccess ? "granted" : "not granted")
                         Text("Without it macOS hides a few folders (Mail, Safari, some app containers), shown as “Other” on the map. Headroom never needs it to reclaim safely.")
                             .font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
-                        Button("Open Privacy & Security") {
-                            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")!)
+                        if !model.hasFullDiskAccess {
+                            Button("Open Privacy & Security") { AppModel.openFullDiskAccessSettings() }
+                                .buttonStyle(GhostButtonStyle())
                         }
-                        .buttonStyle(GhostButtonStyle())
                     }
                 }
                 if model.history.totalFreed > 0 {
@@ -209,6 +235,15 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    func addExclusion() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = true
+        panel.prompt = "Never Touch"
+        if panel.runModal() == .OK { model.exclude(panel.urls) }
     }
 
     func toggleRow(_ title: String, _ detail: String, on: Binding<Bool>) -> some View {
@@ -233,7 +268,21 @@ struct SettingsView: View {
     func sliderRow(_ title: String, value: Binding<Double>, range: ClosedRange<Double>, unit: String) -> some View {
         HStack {
             Text(title).font(.system(size: 13.5, weight: .medium))
-            Slider(value: value, in: range, step: 1).tint(Theme.safe)
+            if snapshot {
+                // ImageRenderer can't draw a Slider: the same track, drawn by hand.
+                GeometryReader { geo in
+                    let f = (value.wrappedValue - range.lowerBound) / (range.upperBound - range.lowerBound)
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.white.opacity(0.12)).frame(height: 4)
+                        Capsule().fill(Theme.safe).frame(width: geo.size.width * f, height: 4)
+                        Circle().fill(.white).frame(width: 18, height: 18).shadow(radius: 2).offset(x: geo.size.width * f - 9)
+                    }
+                    .frame(maxHeight: .infinity)
+                }
+                .frame(height: 20)
+            } else {
+                Slider(value: value, in: range, step: 1).tint(Theme.safe)
+            }
             Text("\(Int(value.wrappedValue)) \(unit)").font(Theme.number(13, weight: .medium)).frame(width: 64, alignment: .trailing)
         }
     }

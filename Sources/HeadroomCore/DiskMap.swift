@@ -49,6 +49,31 @@ public struct DiskNode: Identifiable, Sendable, Hashable {
     }
 }
 
+extension DiskNode {
+    /// True when `id` is this node or anywhere below it.
+    public func contains(_ id: String) -> Bool {
+        self.id == id || children.contains { $0.contains(id) }
+    }
+
+    /// Reflect a removal without rescanning the disk: the node `id` keeps `remaining` bytes
+    /// (and disappears at 0), and it and every ancestor — those in this tree plus `ancestors`,
+    /// for drill-downs loaded outside it — shrink by `freed`. Returns nil if this node is gone.
+    public func reflecting(removalOf id: String, remaining: Int64, freed: Int64, ancestors: Set<String> = []) -> DiskNode? {
+        var node = self
+        if node.id == id {
+            guard remaining > 0 else { return nil }
+            node.bytes = remaining
+            node.children = []
+            return node
+        }
+        if ancestors.contains(node.id) || node.contains(id) { node.bytes = max(0, node.bytes - freed) }
+        node.children = node.children.compactMap {
+            $0.reflecting(removalOf: id, remaining: remaining, freed: freed, ancestors: ancestors)
+        }
+        return node
+    }
+}
+
 /// Builds the disk map: every top-level area measured, two levels deep, so the whole
 /// used space is accounted for — what we can't read is shown as such, never hidden.
 public enum DiskMap {
@@ -67,6 +92,7 @@ public enum DiskMap {
     public static func build(home: URL = URL(fileURLWithPath: NSHomeDirectory()),
                              volume: VolumeStatus = .current(),
                              safetyByPath: [String: Safety] = [:],
+                             bigFiles: BigFileCollector? = nil,
                              progress: @escaping @Sendable (Progress) -> Void = { _ in },
                              isCancelled: @escaping @Sendable () -> Bool = { false }) async -> DiskNode {
         let fm = FileManager.default
@@ -122,7 +148,7 @@ public enum DiskMap {
             var next = 0
             for _ in 0..<min(6, tiles.count) {
                 let t = tiles[next]; next += 1
-                group.addTask { (t.group, t.url, DiskWalker.measure(t.url, isCancelled: isCancelled)) }
+                group.addTask { (t.group, t.url, DiskWalker.measure(t.url, bigFiles: bigFiles, isCancelled: isCancelled)) }
             }
             var out: [(Int, URL, DirectorySize)] = []
             for await r in group {
@@ -130,7 +156,7 @@ public enum DiskMap {
                 progress(Progress(done: counter.increment(), total: total, current: r.1.tildePath))
                 if next < tiles.count {
                     let t = tiles[next]; next += 1
-                    group.addTask { (t.group, t.url, DiskWalker.measure(t.url, isCancelled: isCancelled)) }
+                    group.addTask { (t.group, t.url, DiskWalker.measure(t.url, bigFiles: bigFiles, isCancelled: isCancelled)) }
                 }
             }
             return out

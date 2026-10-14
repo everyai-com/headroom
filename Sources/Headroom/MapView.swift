@@ -3,12 +3,23 @@ import HeadroomCore
 
 /// The heatmap: every GB on the disk as squares sized by space, coloured by area.
 /// Safe-to-reclaim folders glow mint with hatching; review items get an amber dash.
+/// Click a square to select it, double-click to look inside, right-click for everything you can do.
 struct MapView: View {
     @EnvironmentObject var model: AppModel
     @State private var path: [DiskNode] = []
     @State private var loading = false
     @State private var hovered: DiskNode?
+    @State private var selected: DiskNode?
     @State private var highlightSafe = true
+    @State private var pending: PendingAction?
+    @State private var working = false
+    @State private var outcome: AppModel.MapOutcome?
+    @Environment(\.snapshotMode) private var snapshot
+
+    init(path: [DiskNode] = [], selected: DiskNode? = nil) {
+        _path = State(initialValue: path)
+        _selected = State(initialValue: selected)
+    }
 
     var current: DiskNode? { path.last ?? model.map }
 
@@ -17,13 +28,20 @@ struct MapView: View {
             header
             if let node = current {
                 GeometryReader { geo in
-                    TreemapTiles(node: node, size: geo.size, highlightSafe: highlightSafe, hovered: $hovered) { tile in
-                        Task { await drill(into: tile) }
-                    }
+                    TreemapTiles(node: node, size: geo.size, highlightSafe: highlightSafe, hovered: $hovered,
+                                 selectedID: selected?.id,
+                                 onSelect: { tile in
+                                     // Summary groups have nothing to act on: one click opens them, as before.
+                                     if tile.url == nil, canLookInside(tile) { Task { await drill(into: tile) } }
+                                     else { selected = tile }
+                                 },
+                                 onOpen: { tile in Task { await drill(into: tile) } },
+                                 menu: { tile in menu(for: tile) })
                 }
                 .overlay(alignment: .center) {
-                    if loading { ProgressView().controlSize(.large).tint(.white) }
+                    if loading || working { ProgressView().controlSize(.large).tint(.white) }
                 }
+                .overlay(alignment: .top) { toast }
                 footer
             } else if let p = model.mapProgress {
                 Card {
@@ -38,15 +56,21 @@ struct MapView: View {
                 Spacer()
             }
         }
+        .confirmingAction($pending) { p in await run(p) }
+        .background {
+            // ⌘⌫ moves the selection to the Trash, as in Finder (after the usual confirm).
+            Button("") { if let s = selected { ask(.trash, s) } }
+                .keyboardShortcut(.delete, modifiers: .command).hidden()
+        }
     }
 
     var header: some View {
         HStack(spacing: 6) {
-            Button { path = [] } label: { Text(model.map?.name ?? "Macintosh HD") }
+            Button { go(to: 0) } label: { Text(model.map?.name ?? "Macintosh HD") }
                 .buttonStyle(.plain).font(.system(size: 13, weight: path.isEmpty ? .semibold : .regular))
             ForEach(Array(path.enumerated()), id: \.element.id) { i, n in
                 Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(Theme.textTertiary)
-                Button { path = Array(path.prefix(i + 1)) } label: { Text(n.name).lineLimit(1) }
+                Button { go(to: i + 1) } label: { Text(n.name).lineLimit(1) }
                     .buttonStyle(.plain).font(.system(size: 13, weight: i == path.count - 1 ? .semibold : .regular))
             }
             Spacer()
@@ -62,49 +86,179 @@ struct MapView: View {
         .foregroundStyle(Theme.textPrimary)
     }
 
+    /// The selected square and what you can do with it; otherwise whatever is under the pointer.
     var footer: some View {
-        HStack(spacing: 14) {
-            if let h = hovered {
-                Image(systemName: h.safety == .safe ? "sparkles" : "folder.fill")
+        HStack(spacing: 10) {
+            if let h = selected ?? hovered {
+                Image(systemName: h.safety == .safe ? "sparkles" : h.url?.pathExtension == "app" ? "app.fill" : "folder.fill")
                     .foregroundStyle(h.safety.map(Theme.color(for:)) ?? Theme.color(for: h.area))
-                Text(h.url?.tildePath ?? h.name).font(.system(size: 12)).lineLimit(1).truncationMode(.middle)
-                Text(h.bytes.gb).font(Theme.number(12, weight: .semibold))
-                if let s = h.safety { Badge(text: s.label, color: Theme.color(for: s)) }
-                Spacer()
-                if let url = h.url { Button("Reveal") { model.reveal([url]) }.buttonStyle(GhostButtonStyle()) }
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 8) {
+                        Text(h.name).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                        Text(h.bytes.gb).font(Theme.number(12, weight: .semibold))
+                        if let s = h.safety { Badge(text: s.label, color: Theme.color(for: s)) }
+                    }
+                    Text(h.url?.tildePath ?? (selected == nil ? "Click to select" : "Look inside to act on these"))
+                        .font(.system(size: 11)).foregroundStyle(Theme.textTertiary).lineLimit(1).truncationMode(.middle)
+                }
+                Spacer(minLength: 8)
+                if let s = selected { actions(for: s) }
             } else {
                 HStack(spacing: 14) {
                     LegendDot(color: Theme.safe, label: "Safe to reclaim")
                     LegendDot(color: Theme.review, label: "Review first")
-                    Text("Click a square to look inside").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
+                    Text("Click a folder to select it · double-click to look inside · right-click for options")
+                        .font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                 }
                 Spacer()
             }
         }
-        .frame(height: 28)
+        .frame(height: 34)
         .foregroundStyle(Theme.textPrimary)
+    }
+
+    @ViewBuilder func actions(for node: DiskNode) -> some View {
+        if canLookInside(node) {
+            Button("Look inside") { Task { await drill(into: node) } }.buttonStyle(GhostButtonStyle())
+        }
+        if let url = node.url {
+            Button("Reveal") { model.reveal([url]) }.buttonStyle(GhostButtonStyle())
+        }
+        // The one action that fits best, up front; everything else in the menu.
+        if let primary = primaryAction(for: node) {
+            Button(ActionText.label(primary) + (primary == .reclaim ? "" : "…")) { ask(primary, node) }
+                .buttonStyle(PrimaryButtonStyle(tint: primary == .reclaim ? Theme.safe : Theme.critical))
+                .disabled(working)
+        }
+        if snapshot {
+            Image(systemName: "ellipsis.circle").foregroundStyle(Theme.textSecondary)
+        } else {
+            Menu { menu(for: node) } label: { Image(systemName: "ellipsis.circle") }
+                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+        }
+        Button { selected = nil } label: { Image(systemName: "xmark").font(.system(size: 10, weight: .bold)) }
+            .buttonStyle(.plain).foregroundStyle(Theme.textTertiary).help("Deselect")
+    }
+
+    /// Every option for a square: the right-click menu and the ⋯ button.
+    @ViewBuilder func menu(for node: DiskNode) -> some View {
+        if canLookInside(node) { Button("Look Inside") { Task { await drill(into: node) } } }
+        if let url = node.url {
+            Button("Reveal in Finder") { model.reveal([url]) }
+            Button("Open") { model.open(url) }
+            if model.isDirectory(url) { Button("Open in Terminal") { model.openInTerminal(url) } }
+            Button("Copy Path") { model.copyPath(url) }
+            Divider()
+            if let known = model.knownFinding(for: url), known.method != .none, known.safety != .keep {
+                actionItem(.reclaim, "Reclaim — \(known.title)", node)
+            }
+            if url.pathExtension == "app" { actionItem(.uninstall, "Uninstall App…", node) }
+            actionItem(.trash, "Move to Trash…", node)
+            if model.isDirectory(url) { actionItem(.emptyContents, "Empty Folder (keep the folder)…", node) }
+            actionItem(.delete, "Delete Permanently…", node)
+            Divider()
+            Button("Never Touch This") { model.exclude([url]); selected = nil }
+        } else {
+            Text("Look inside to act on what's in it")
+        }
+    }
+
+    @ViewBuilder func actionItem(_ action: AppModel.MapAction, _ title: String, _ node: DiskNode) -> some View {
+        if let why = model.refusal(action, for: node) {
+            Button("\(title.replacingOccurrences(of: "…", with: "")) — \(why)") {}.disabled(true)
+        } else {
+            Button(title) { ask(action, node) }.disabled(working)
+        }
+    }
+
+    @ViewBuilder var toast: some View {
+        if let o = outcome {
+            HStack(spacing: 8) {
+                Image(systemName: o.failed ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                    .foregroundStyle(o.failed ? Theme.review : Theme.safe)
+                Text(o.message).font(.system(size: 12, weight: .medium)).lineLimit(2)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 9)
+            .background(Capsule().fill(Theme.surfaceRaised).shadow(color: .black.opacity(0.4), radius: 12, y: 4))
+            .overlay(Capsule().strokeBorder(Theme.hairline))
+            .padding(.top, 10)
+            .transition(.move(edge: .top).combined(with: .opacity))
+        }
+    }
+
+    // MARK: Actions
+
+    func primaryAction(for node: DiskNode) -> AppModel.MapAction? {
+        [.reclaim, .uninstall, .trash].first { action in
+            if action == .reclaim, node.url.flatMap(model.knownFinding(for:)) == nil { return false }
+            if action == .uninstall, node.url?.pathExtension != "app" { return false }
+            return model.refusal(action, for: node) == nil
+        }
+    }
+
+    func ask(_ action: AppModel.MapAction, _ node: DiskNode) {
+        guard !working, model.refusal(action, for: node) == nil else { return }
+        pending = PendingAction(action: action, node: node)
+    }
+
+    func run(_ p: PendingAction) async {
+        working = true
+        let result = await model.perform(p.action, on: p.node)
+        // Update the map in place: the square shrinks or goes, and so do its parents.
+        let ancestors = Set(path.map(\.id) + [model.map?.id ?? "root"])
+        model.reflect(result, ancestors: ancestors)
+        var updated: [DiskNode] = []
+        for node in path {
+            guard let n = node.reflecting(removalOf: result.nodeID, remaining: result.remaining,
+                                          freed: result.freedFromMap, ancestors: ancestors) else { break }
+            updated.append(n)
+        }
+        path = updated
+        if selected?.id == result.nodeID { selected = nil }
+        working = false
+        withAnimation(.spring(response: 0.35)) { outcome = result }
+        try? await Task.sleep(for: .seconds(6))
+        if outcome?.message == result.message { withAnimation { outcome = nil } }
+    }
+
+    // MARK: Navigation
+
+    func canLookInside(_ node: DiskNode) -> Bool {
+        !node.children.isEmpty || (node.expandable && node.url != nil && model.isDirectory(node.url!))
+    }
+
+    func go(to depth: Int) {
+        path = Array(path.prefix(depth))
+        selected = nil
     }
 
     func drill(into tile: DiskNode) async {
         if !tile.children.isEmpty {
             path.append(tile)
+            selected = nil
             return
         }
-        guard tile.expandable, tile.url != nil else { return }
+        guard canLookInside(tile) else { return }
         loading = true
         var expanded = tile
         expanded.children = await DiskMap.expand(tile, safetyByPath: model.safetyByPath)
         loading = false
-        if !expanded.children.isEmpty { path.append(expanded) }
+        if !expanded.children.isEmpty {
+            path.append(expanded)
+            selected = nil
+        }
     }
 }
 
-struct TreemapTiles: View {
+struct TreemapTiles<Menu: View>: View {
     var node: DiskNode
     var size: CGSize
     var highlightSafe: Bool
     @Binding var hovered: DiskNode?
+    var selectedID: String?
+    var onSelect: (DiskNode) -> Void
     var onOpen: (DiskNode) -> Void
+    @ViewBuilder var menu: (DiskNode) -> Menu
 
     /// Tiny tiles are merged into one "N smaller items" square so the map stays legible.
     var tiles: [DiskNode] {
@@ -128,9 +282,12 @@ struct TreemapTiles: View {
         let rects = Treemap.layout(items.map { Double($0.bytes) }, in: .init(x: 0, y: 0, width: size.width, height: size.height))
         ZStack(alignment: .topLeading) {
             ForEach(Array(zip(items, rects)), id: \.0.id) { item, rect in
-                Tile(node: item, rect: rect, highlightSafe: highlightSafe, isHovered: hovered?.id == item.id)
+                Tile(node: item, rect: rect, highlightSafe: highlightSafe, isHovered: hovered?.id == item.id,
+                     isSelected: selectedID == item.id)
                     .onHover { inside in if inside { hovered = item } else if hovered?.id == item.id { hovered = nil } }
-                    .onTapGesture { onOpen(item) }
+                    .onTapGesture(count: 2) { onOpen(item) }
+                    .onTapGesture { onSelect(item) }
+                    .contextMenu { menu(item) }
             }
         }
         .frame(width: size.width, height: size.height, alignment: .topLeading)
@@ -143,6 +300,7 @@ struct Tile: View {
     var rect: Treemap.Rect
     var highlightSafe: Bool
     var isHovered: Bool
+    var isSelected = false
 
     var body: some View {
         let base = Theme.color(for: node.area)
@@ -168,7 +326,10 @@ struct Tile: View {
             }
         }
         .overlay {
-            if safety == .safe {
+            if isSelected {
+                RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.white, lineWidth: 2.5)
+                    .shadow(color: .white.opacity(0.5), radius: 6)
+            } else if safety == .safe {
                 RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Theme.safe, lineWidth: 2)
                     .shadow(color: Theme.safe.opacity(0.6), radius: 6)
             } else if safety == .review {

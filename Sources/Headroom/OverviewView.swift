@@ -5,14 +5,88 @@ struct OverviewView: View {
     @EnvironmentObject var model: AppModel
     var openReclaim: () -> Void = {}
     var openMap: () -> Void = {}
+    @AppStorage("fdaBannerDismissed") private var fdaDismissed = false
+    @State private var growthHours: Double = 24
 
     var body: some View {
         Scrolling {
             VStack(alignment: .leading, spacing: 18) {
+                if !model.hasFullDiskAccess && !fdaDismissed { fdaBanner }
                 hero
                 HStack(alignment: .top, spacing: 18) {
                     reclaimCard.frame(maxWidth: .infinity)
                     whereCard.frame(maxWidth: .infinity)
+                }
+                growthCard
+            }
+        }
+    }
+
+    // MARK: Full Disk Access — without it part of the disk is a black box
+
+    var fdaBanner: some View {
+        Card {
+            HStack(spacing: 14) {
+                Image(systemName: "lock.shield.fill").font(.system(size: 22)).foregroundStyle(Theme.review)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("See inside “Other”").font(.system(size: 14, weight: .semibold))
+                    Text("macOS hides Mail, Safari and some app containers until you give Headroom Full Disk Access. Turn on Headroom in the list — this banner goes away by itself. Reclaiming never needs it.")
+                        .font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 12)
+                Button("Open Settings") { AppModel.openFullDiskAccessSettings() }.buttonStyle(PrimaryButtonStyle(tint: Theme.review))
+                Button { fdaDismissed = true } label: { Image(systemName: "xmark").font(.system(size: 10, weight: .bold)) }
+                    .buttonStyle(.plain).foregroundStyle(Theme.textTertiary).help("Hide")
+            }
+        }
+    }
+
+    // MARK: What grew — "where did my space go?" by folder
+
+    var growthCard: some View {
+        let changes = model.growthChanges(overHours: growthHours)
+        let grew = changes.filter { $0.delta > 0 }
+        let since = model.growth.baseline(hoursBefore: growthHours)?.date
+        return Card {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    SectionTitle(title: "What grew", trailing: since.map { "since \($0.ago)" })
+                    Spacer()
+                    ForEach([(24.0, "Day"), (168.0, "Week"), (720.0, "Month")], id: \.0) { hours, label in
+                        Button(label) { growthHours = hours }
+                            .buttonStyle(.plain).font(.system(size: 12, weight: growthHours == hours ? .semibold : .regular))
+                            .foregroundStyle(growthHours == hours ? Theme.textPrimary : Theme.textTertiary)
+                    }
+                }
+                if since == nil {
+                    Text("Headroom compares the map over time. Check back after it has measured your disk again — a few hours from now.")
+                        .font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary)
+                } else if grew.isEmpty {
+                    Text("Nothing grew by more than 100 MB.").font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary)
+                } else {
+                    let top = Double(grew.first?.delta ?? 1)
+                    ForEach(grew.prefix(6)) { c in
+                        HStack(spacing: 10) {
+                            Text(c.name).font(.system(size: 12.5)).lineLimit(1).truncationMode(.middle)
+                            Spacer()
+                            GeometryReader { geo in
+                                RoundedRectangle(cornerRadius: 3).fill(Theme.review)
+                                    .frame(width: max(3, geo.size.width * Double(c.delta) / top))
+                                    .frame(maxWidth: .infinity, alignment: .trailing)
+                            }
+                            .frame(width: 120, height: 5)
+                            Text("+\(c.delta.gb)").font(Theme.number(12.5, weight: .semibold)).foregroundStyle(Theme.review)
+                                .frame(width: 80, alignment: .trailing)
+                            if let url = c.url {
+                                Button { model.reveal([url]) } label: { Image(systemName: "magnifyingglass") }
+                                    .buttonStyle(.plain).foregroundStyle(Theme.textTertiary).help("Reveal in Finder")
+                            }
+                        }
+                    }
+                    let shrank = changes.filter { $0.delta < 0 }.reduce(0) { $0 + $1.delta }
+                    if shrank < 0 {
+                        Text("Elsewhere \((-shrank).gb) was freed.").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                    }
                 }
             }
         }

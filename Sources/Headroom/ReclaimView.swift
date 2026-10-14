@@ -7,6 +7,11 @@ struct ReclaimView: View {
     @EnvironmentObject var model: AppModel
     @State private var filter: StorageCategory?
     @State private var showKeep = true
+    @State private var byProject: Bool
+
+    init(byProject: Bool = false) {
+        _byProject = State(initialValue: byProject)
+    }
     @Environment(\.snapshotMode) private var snapshot
 
     var visible: [Finding] {
@@ -17,11 +22,23 @@ struct ReclaimView: View {
         VStack(spacing: 0) {
             Scrolling {
                 VStack(alignment: .leading, spacing: 18) {
-                    chips
-                    ForEach(Safety.allCases, id: \.self) { safety in
-                        let group = visible.filter { $0.safety == safety }
-                        if !group.isEmpty && (safety != .keep || showKeep) {
-                            section(safety, group)
+                    HStack(alignment: .top) {
+                        chips
+                        Spacer(minLength: 12)
+                        HStack(spacing: 6) {
+                            chip("By safety", color: Theme.safe, on: !byProject) { byProject = false }
+                            chip("By project", color: Theme.color(for: .projectArtifacts), on: byProject) { byProject = true }
+                        }
+                        .fixedSize()
+                    }
+                    if byProject {
+                        projects
+                    } else {
+                        ForEach(Safety.allCases, id: \.self) { safety in
+                            let group = visible.filter { $0.safety == safety }
+                            if !group.isEmpty && (safety != .keep || showKeep) {
+                                section(safety, group)
+                            }
                         }
                     }
                     if model.findings.isEmpty {
@@ -88,6 +105,77 @@ struct ReclaimView: View {
                     if f.id != items.last?.id { Divider().overlay(Theme.hairline).padding(.leading, 58) }
                 }
             }
+        }
+    }
+
+    // MARK: By project — agents make many repos; this is how you think about them
+
+    struct ProjectGroup: Identifiable {
+        var id: String
+        var items: [Finding]
+        var bytes: Int64 { items.reduce(0) { $0 + $1.reclaimable } }
+        var lastUsed: Date? { items.compactMap(\.lastUsed).max() }
+        var folder: URL? { items.first?.paths.first?.deletingLastPathComponent() }
+    }
+
+    var projectGroups: [ProjectGroup] {
+        Dictionary(grouping: model.findings.filter { $0.category == .projectArtifacts }) { $0.project ?? "?" }
+            .map { ProjectGroup(id: $0.key, items: $0.value) }
+            .sorted { $0.bytes > $1.bytes }
+    }
+
+    @ViewBuilder var projects: some View {
+        let groups = projectGroups
+        let idle = groups.filter { ($0.lastUsed ?? .distantPast) < Date().addingTimeInterval(-30 * 86_400) }
+        Card {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("\(groups.count) projects with build output · \(groups.reduce(0) { $0 + $1.bytes }.gb)")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text("\(idle.count) untouched for 30+ days hold \(idle.reduce(0) { $0 + $1.bytes }.gb)")
+                        .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
+                }
+                Spacer()
+                Button("Select every project idle 30+ days") {
+                    for g in idle { for f in g.items where f.reclaimable > 0 { model.selected.insert(f.id) } }
+                }
+                .buttonStyle(GhostButtonStyle())
+                .disabled(idle.isEmpty)
+            }
+        }
+        ForEach(groups.prefix(snapshot ? 4 : 300)) { g in
+            let allOn = g.items.allSatisfy { model.selected.contains($0.id) || $0.reclaimable == 0 }
+            Card(padding: 0) {
+                VStack(spacing: 0) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "folder.fill").foregroundStyle(Theme.color(for: .projectArtifacts))
+                        Text(g.id).font(.system(size: 14, weight: .semibold))
+                        if let used = g.lastUsed {
+                            Text("touched \(used.ago)").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
+                        }
+                        Spacer()
+                        Text(g.bytes.gb).font(Theme.number(14, weight: .semibold))
+                        Button(allOn ? "Deselect" : "Select all") {
+                            for f in g.items where f.reclaimable > 0 {
+                                if allOn { model.selected.remove(f.id) } else { model.selected.insert(f.id) }
+                            }
+                        }
+                        .buttonStyle(GhostButtonStyle())
+                    }
+                    .padding(.horizontal, 18).padding(.vertical, 12)
+                    .contextMenu {
+                        if let folder = g.folder {
+                            Button("Reveal Project") { model.reveal([folder]) }
+                            Button("Never Touch This Project") { model.exclude([folder]) }
+                        }
+                    }
+                    Divider().overlay(Theme.hairline)
+                    ForEach(g.items) { f in FindingRow(finding: f) }
+                }
+            }
+        }
+        if groups.isEmpty {
+            Card { Text("No build output found in your code folders.").foregroundStyle(Theme.textSecondary) }
         }
     }
 
@@ -175,7 +263,7 @@ struct FindingRow: View {
             }
             Spacer(minLength: 12)
             VStack(alignment: .trailing, spacing: 4) {
-                Text(finding.size.allocated.gb).font(Theme.number(14, weight: .semibold))
+                Text(finding.size.allocated > 0 ? finding.size.allocated.gb : "—").font(Theme.number(14, weight: .semibold))
                 if reclaimable, finding.reclaimable < finding.size.allocated * 9 / 10 {
                     Text("frees \(finding.reclaimable.gb)").font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
                         .help("Shared with other projects through hard links — only this much is actually freed.")
@@ -188,5 +276,14 @@ struct FindingRow: View {
         }
         .padding(.horizontal, 18).padding(.vertical, 12)
         .contentShape(Rectangle())
+        .contextMenu {
+            if !finding.paths.isEmpty {
+                Button("Reveal in Finder") { model.reveal(finding.paths) }
+                Button("Never Suggest This") { model.exclude(finding.paths) }
+                if finding.category == .projectArtifacts, let project = finding.paths.first?.deletingLastPathComponent() {
+                    Button("Never Touch This Project") { model.exclude([project]) }
+                }
+            }
+        }
     }
 }

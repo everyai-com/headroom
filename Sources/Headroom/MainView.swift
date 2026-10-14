@@ -2,14 +2,17 @@ import SwiftUI
 import HeadroomCore
 
 enum Screen: String, CaseIterable, Identifiable {
-    case overview = "Overview", map = "Map", reclaim = "Reclaim", apps = "Apps", settings = "Settings"
+    case overview = "Overview", map = "Map", reclaim = "Reclaim", files = "Large files", apps = "Apps", activity = "Activity",
+         settings = "Settings"
     var id: String { rawValue }
     var symbol: String {
         switch self {
         case .overview: "gauge.with.dots.needle.67percent"
         case .map: "square.grid.3x3.square"
         case .reclaim: "sparkles"
+        case .files: "doc.text.magnifyingglass"
         case .apps: "app.badge"
+        case .activity: "clock.arrow.circlepath"
         case .settings: "gearshape"
         }
     }
@@ -19,6 +22,8 @@ struct MainView: View {
     @EnvironmentObject var model: AppModel
     @State var screen: Screen = .overview
     var launchAtLogin: Binding<Bool> = .constant(false)
+    /// The demo reel opens screens in a set state (a drilled-in map, a selection…).
+    var override: AnyView? = nil
 
     var body: some View {
         HStack(spacing: 0) {
@@ -49,11 +54,17 @@ struct MainView: View {
     }
 
     @ViewBuilder var content: some View {
+        if let override { override } else { screenContent }
+    }
+
+    @ViewBuilder var screenContent: some View {
         switch screen {
         case .overview: OverviewView(openReclaim: { screen = .reclaim }, openMap: { screen = .map })
         case .map: MapView()
         case .reclaim: ReclaimView()
+        case .files: FilesView()
         case .apps: AppsView()
+        case .activity: ActivityView()
         case .settings: SettingsView(launchAtLogin: launchAtLogin)
         }
     }

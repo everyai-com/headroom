@@ -39,13 +39,13 @@ public enum DiskWalker {
     }
 
     /// Measure a tree. `isCancelled` is polled so a UI can abandon long scans.
-    public static func measure(_ url: URL, isCancelled: () -> Bool = { false }) -> DirectorySize {
-        measure([url], isCancelled: isCancelled)
+    public static func measure(_ url: URL, bigFiles: BigFileCollector? = nil, isCancelled: () -> Bool = { false }) -> DirectorySize {
+        measure([url], bigFiles: bigFiles, isCancelled: isCancelled)
     }
 
     /// Measure several trees as ONE set: a hard link shared between them counts as reclaimable
     /// only if every link is inside the set (e.g. deleting all selected `node_modules` together).
-    public static func measure(_ urls: [URL], isCancelled: () -> Bool = { false }) -> DirectorySize {
+    public static func measure(_ urls: [URL], bigFiles: BigFileCollector? = nil, isCancelled: () -> Bool = { false }) -> DirectorySize {
         var size = DirectorySize()
         let existing = urls.filter { FileManager.default.fileExists(atPath: $0.path) }
         guard !existing.isEmpty else { return size }
@@ -77,6 +77,9 @@ public enum DiskWalker {
                 size.files += 1
                 let mtime = Int(st.st_mtimespec.tv_sec)
                 if mtime > newest { newest = mtime }
+                if let bigFiles, info == FTS_F, bytes >= bigFiles.threshold, let p = entry.pointee.fts_path {
+                    bigFiles.add(String(cString: p), bytes: bytes, modified: Date(timeIntervalSince1970: TimeInterval(mtime)))
+                }
                 if st.st_nlink <= 1 {
                     size.allocated += bytes
                     size.reclaimable += bytes

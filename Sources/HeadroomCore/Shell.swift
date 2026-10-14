@@ -26,18 +26,28 @@ public enum Shell {
         process.environment = env
         let out = Pipe()
         process.standardOutput = out
-        process.standardError = Pipe()
+        // Never read: a pipe nobody drains fills up and stalls a chatty tool.
+        process.standardError = FileHandle.nullDevice
+        let exited = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in exited.signal() }
         do { try process.run() } catch { return nil }
-        let deadline = Date().addingTimeInterval(timeout)
-        // Read while waiting so a chatty tool can't fill the pipe and stall.
-        var data = Data()
-        let handle = out.fileHandleForReading
-        while process.isRunning {
-            data.append(handle.availableData)
-            if Date() > deadline { process.terminate(); return nil }
+        // Read on another thread so a silent, hung tool can't block the timeout.
+        let collected = Collected()
+        let reader = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            collected.data = out.fileHandleForReading.readDataToEndOfFile()
+            reader.signal()
         }
-        data.append(handle.readDataToEndOfFile())
-        guard process.terminationStatus == 0 else { return nil }
-        return String(data: data, encoding: .utf8)
+        if exited.wait(timeout: .now() + timeout) == .timedOut {
+            process.terminate()
+            return nil
+        }
+        // A child the tool left behind can keep the pipe open; don't wait on it forever.
+        guard reader.wait(timeout: .now() + 5) == .success, process.terminationStatus == 0 else { return nil }
+        return String(data: collected.data, encoding: .utf8)
+    }
+
+    private final class Collected: @unchecked Sendable {
+        var data = Data()
     }
 }

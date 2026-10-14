@@ -136,17 +136,23 @@ public enum Catalog {
         if let f = await remainingAppCaches(home: home, isCancelled: isCancelled) { findings.append(f) }
         if let f = await unavailableSimulators(home: home) { findings.append(f) }
         if let f = pnpmStore(home: home) { findings.append(f) }
+        findings.append(contentsOf: await DevTools.scan(home: home))
         return findings.sorted { $0.size.allocated > $1.size.allocated }
     }
 
     /// Browser engines downloaded by Playwright/Puppeteer: every version but the newest per browser.
     static func scanVersionedCaches(home: URL) async -> [Finding] {
-        let roots = [("playwright-old", "Old Playwright browsers", "Library/Caches/ms-playwright"),
-                     ("puppeteer-old", "Old Puppeteer browsers", ".cache/puppeteer")]
+        // Playwright is flat (ms-playwright/chromium-1248); Puppeteer nests by browser
+        // (puppeteer/chrome/mac_arm-131.0.6778.85), so its versions live one level down.
+        let roots = [("playwright-old", "Old Playwright browsers", "Library/Caches/ms-playwright", false),
+                     ("puppeteer-old", "Old Puppeteer browsers", ".cache/puppeteer", true)]
         var out: [Finding] = []
-        for (id, title, rel) in roots {
+        for (id, title, rel, nested) in roots {
             let root = home.appendingPathComponent(rel)
-            let old = oldVersions(in: root)
+            let old = nested
+                ? ((try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? [])
+                    .filter { !$0.hasPrefix(".") }.flatMap { oldVersions(in: root.appendingPathComponent($0)) }
+                : oldVersions(in: root)
             guard !old.isEmpty else { continue }
             let size = DiskWalker.measure(old)
             out.append(Finding(id: id, title: title, subtitle: old.map(\.lastPathComponent).joined(separator: ", "),
@@ -157,19 +163,21 @@ public enum Catalog {
         return out
     }
 
-    /// `chromium-1234`, `chromium-1248` → keep the highest number per family.
+    /// `chromium-1234`, `chromium-1248` → keep the highest version per family. Versions compare
+    /// part by part (`131.0.6778.85` < `131.0.6778.108`), never just by their first number.
     public static func oldVersions(in root: URL) -> [URL] {
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: root.path) else { return [] }
-        var families: [String: [(Int, String)]] = [:]
+        var families: [String: [([Int], String)]] = [:]
         for name in names where !name.hasPrefix(".") {
-            // Puppeteer nests by browser: puppeteer/chrome/mac_arm-131.0…; Playwright is flat: chromium-1248.
-            guard let dash = name.lastIndex(of: "-"), let num = Int(name[name.index(after: dash)...].prefix { $0.isNumber }) else { continue }
-            families[String(name[..<dash]), default: []].append((num, name))
+            guard let dash = name.lastIndex(of: "-") else { continue }
+            let parts = name[name.index(after: dash)...].split(separator: ".").map { Int($0.prefix { $0.isNumber }) }
+            guard !parts.isEmpty, !parts.contains(nil) else { continue }
+            families[String(name[..<dash]), default: []].append((parts.compactMap { $0 }, name))
         }
         var old: [URL] = []
         for (_, versions) in families where versions.count > 1 {
-            let sorted = versions.sorted { $0.0 > $1.0 }
-            old.append(contentsOf: sorted.dropFirst().map { root.appendingPathComponent($0.1) })
+            let sorted = versions.sorted { $0.0.lexicographicallyPrecedes($1.0) }
+            old.append(contentsOf: sorted.dropLast().map { root.appendingPathComponent($0.1) })
         }
         return old.sorted { $0.path < $1.path }
     }

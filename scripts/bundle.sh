@@ -42,7 +42,27 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </dict></plist>
 PLIST
 
-codesign --force --deep --sign - "$APP" >/dev/null
+# Signing. Default: ad-hoc (runs on this Mac). For other Macs set HEADROOM_SIGN_ID to your
+# "Developer ID Application: …" identity (hardened runtime + timestamp), and HEADROOM_NOTARY_PROFILE
+# to a profile saved with `xcrun notarytool store-credentials` to notarize and staple.
+SIGN_ID="${HEADROOM_SIGN_ID:--}"
+if [ "$SIGN_ID" = "-" ]; then
+  codesign --force --deep --sign - "$APP" >/dev/null
+else
+  # Inside out, no --deep: the bundled CLI first, then the app.
+  codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$APP/Contents/Resources/headroom-cli"
+  codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$APP"
+  codesign --verify --strict --verbose=2 "$APP"
+  if [ -n "${HEADROOM_NOTARY_PROFILE:-}" ]; then
+    ZIP=$(mktemp -d)/Headroom.zip
+    ditto -c -k --keepParent "$APP" "$ZIP"
+    xcrun notarytool submit "$ZIP" --keychain-profile "$HEADROOM_NOTARY_PROFILE" --wait
+    xcrun stapler staple "$APP"
+    spctl --assess --type execute --verbose "$APP"
+    ditto -c -k --keepParent "$APP" dist/Headroom.zip
+    echo "notarized: dist/Headroom.zip is ready to share"
+  fi
+fi
 echo "built $APP ($(du -sh "$APP" | cut -f1))"
 
 # Install next to the source: the repo lives in /Applications/Headroom, so the app the user

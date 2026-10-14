@@ -135,6 +135,21 @@ public enum ProjectScanner {
         }.sorted { $0.size.reclaimable > $1.size.reclaimable }
     }
 
+    /// Scan results age (the app rescans every 30 min): a project that was stale then may be
+    /// open in an editor now. Before a one-click reclaim, artifacts whose project has been
+    /// touched since are put back to `.review`.
+    public static func revalidated(_ findings: [Finding], staleDays: Int, now: Date = .now) -> [Finding] {
+        findings.map { finding in
+            guard finding.category == .projectArtifacts, finding.safety == .safe, let artifact = finding.paths.first,
+                  let activity = lastActivity(of: artifact.deletingLastPathComponent()),
+                  now.timeIntervalSince(activity) < Double(staleDays) * 86_400 else { return finding }
+            var recent = finding
+            recent.safety = .review
+            recent.lastUsed = activity
+            return recent
+        }
+    }
+
     /// "realestate aios/platform" rather than a bare "platform": nested projects keep their parent.
     static func projectLabel(_ project: URL, roots: Set<String>) -> String {
         let parent = project.deletingLastPathComponent()

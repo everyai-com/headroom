@@ -122,8 +122,9 @@ public enum AppInventory {
                     let matches: Bool
                     switch place.folder {
                     case "Group Containers":
-                        // "group.net.whatsapp.WhatsApp.shared", "TEAMID.com.vendor.app"
-                        matches = e.contains(id)
+                        // "group.net.whatsapp.WhatsApp.shared", "TEAMID.com.vendor.app" — the ID as
+                        // whole dot-separated parts, so com.vendor.Notes never matches NotesPro's.
+                        matches = ("." + e + ".").contains("." + id + ".")
                     case "Application Support", "Logs":
                         // Folders named after the app are common here, but only an exact name counts.
                         matches = stem == id || e == appName
@@ -143,6 +144,8 @@ public enum AppInventory {
 
     public struct UninstallReport: Sendable {
         public var trashed: [URL] = []
+        /// Where each trashed item went, so the uninstall can be undone.
+        public var inTrash: [URL: URL] = [:]
         public var failed: [(URL, String)] = []
         public var bytes: Int64 = 0
 
@@ -157,8 +160,10 @@ public enum AppInventory {
         let targets = [app.url] + (includeData ? app.leftovers.map(\.url) : [])
         for url in targets {
             do {
-                try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+                var landed: NSURL?
+                try FileManager.default.trashItem(at: url, resultingItemURL: &landed)
                 report.trashed.append(url)
+                if let landed = landed as URL? { report.inTrash[url] = landed }
             } catch {
                 report.failed.append((url, error.localizedDescription))
             }

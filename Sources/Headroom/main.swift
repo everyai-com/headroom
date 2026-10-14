@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var window: NSWindow?
     private var monitor: Timer?
     private var lastAlert: Date?
+    private var lastAutoReclaim: Date?
     private var ticks = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -45,16 +46,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         updateStatusItem()
         if model.showNotch { notch?.show() } else { notch?.hide() }
         if ticks % 60 == 0 { Task { await model.scan() } }
+        // The map every 6 hours, so growth can be compared folder by folder.
+        if ticks % 720 == 0, model.mapProgress == nil { Task { await model.buildMap() } }
         checkForAlert()
     }
 
     /// Tell the user before it's a problem: below the threshold, or a fast drop (an agent
     /// installing dependencies, a build gone wild). At most one alert every 3 hours.
     private func checkForAlert() {
-        guard model.notificationsEnabled else { return }
-        if let last = lastAlert, Date().timeIntervalSince(last) < 3 * 3600 { return }
         let v = model.volume
         let threshold = Int64(model.lowSpaceThresholdGB * 1_000_000_000)
+        if model.autoReclaim, v.free < threshold, model.safeReclaimable > 0, !model.isBusy,
+           lastAutoReclaim.map({ Date().timeIntervalSince($0) > 6 * 3600 }) ?? true {
+            lastAutoReclaim = .now
+            Task { await autoReclaim() }
+            return
+        }
+        guard model.notificationsEnabled else { return }
+        if let last = lastAlert, Date().timeIntervalSince(last) < 3 * 3600 { return }
         let lostHour = model.history.lost(overHours: 1, now: v) ?? 0
         var title: String?
         var body = ""
@@ -64,11 +73,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 ? "Headroom can safely get back \(model.safeReclaimable.gb) — caches and build output only."
                 : "Open Headroom to see where it went."
         } else if lostHour > 5_000_000_000 {
-            title = "Your disk lost \(lostHour.gb) in the last hour"
-            body = "Usually an agent installing dependencies or a build cache growing. Open Headroom to see where."
+            // Measure first, so the alert can name the folder instead of "somewhere".
+            lastAlert = .now
+            Task {
+                await model.buildMap()
+                let top = model.growthChanges(overHours: 1).filter { $0.delta > 0 }.prefix(2)
+                notify("Your disk lost \(lostHour.gb) in the last hour",
+                       top.isEmpty ? "Usually an agent installing dependencies or a build cache growing. Open Headroom to see where."
+                                   : "Mostly " + top.map { "\($0.name) (+\($0.delta.gb))" }.joined(separator: " and ") + ".")
+            }
+            return
         }
         guard let title else { return }
         lastAlert = .now
+        notify(title, body)
+    }
+
+    /// Below the threshold with auto-reclaim on: the safe set only, then say exactly what went.
+    private func autoReclaim() async {
+        guard let result = await model.reclaim(safeOnly: true, automatic: true) else { return }
+        let gone = result.plan.filter { result.report.reclaimed.contains($0.id) }
+        guard model.notificationsEnabled, !gone.isEmpty else { return }
+        let names = gone.sorted { $0.reclaimable > $1.reclaimable }.prefix(3).map { f in f.project.map { "\($0) \(f.title)" } ?? f.title }
+        notify("Headroom freed \(result.report.freedBytes.gb) automatically",
+               names.joined(separator: ", ") + (gone.count > 3 ? " and \(gone.count - 3) more" : "") + ". See Activity for the full list.")
+    }
+
+    private func notify(_ title: String, _ body: String) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
@@ -155,6 +186,16 @@ if let i = CommandLine.arguments.firstIndex(of: "--icon"), CommandLine.arguments
     MainActor.assumeIsolated {
         _ = NSApplication.shared
         Snapshots.renderIcon(to: URL(fileURLWithPath: CommandLine.arguments[i + 1]))
+    }
+    exit(0)
+}
+
+// Demo reel: `Headroom --reel <dir> --demo` (see scripts/make-reel.sh).
+if let i = CommandLine.arguments.firstIndex(of: "--reel"), CommandLine.arguments.count > i + 1 {
+    let dir = URL(fileURLWithPath: CommandLine.arguments[i + 1])
+    MainActor.assumeIsolated {
+        _ = NSApplication.shared
+        Reel.make(to: dir)
     }
     exit(0)
 }

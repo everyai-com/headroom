@@ -19,11 +19,30 @@ final class AppModel: ObservableObject {
     @Published var lastScan: Date?
     @Published var lastReport: CleanupReport?
     @Published var history = History.load()
+    @Published var activity = ActivityLog.load()
+    @Published var growth = GrowthHistory.load()
+    @Published var bigFiles: [BigFile] = []
+    @Published var hasFullDiskAccess = AppModel.checkFullDiskAccess()
+    /// Your never-touch list (paths). The guard enforces it; scans hide what's on it.
+    @Published var excluded: [String] = UserDefaults.standard.stringArray(forKey: "neverTouch") ?? [] {
+        didSet { UserDefaults.standard.set(excluded, forKey: "neverTouch") }
+    }
 
     @AppStorage("lowSpaceThresholdGB") var lowSpaceThresholdGB: Double = 15
     @AppStorage("staleDays") var staleDays: Int = 7
     @AppStorage("notificationsEnabled") var notificationsEnabled = true
     @AppStorage("showNotch") var showNotch = true
+    @AppStorage("autoReclaim") var autoReclaim = false
+
+    /// `--demo` (for recording): projects and personal files are limited to what
+    /// scripts/demo-seed.sh made, so your real projects and documents never appear on camera.
+    static let demoMode = CommandLine.arguments.contains("--demo")
+    static let demoRoot = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Desktop/headroom-demo")
+
+    static func isDemoPath(_ url: URL) -> Bool {
+        let p = url.path
+        return p.hasPrefix(demoRoot.path + "/") || url.lastPathComponent.contains("-demo")
+    }
 
     // MARK: Derived
 
@@ -37,6 +56,8 @@ final class AppModel: ObservableObject {
         for f in findings { for p in f.paths { out[p.path] = f.safety } }
         return out
     }
+    /// Every removal goes through this: the standard rules plus your never-touch list.
+    var guardrail: SafetyGuard { SafetyGuard(excluded: excluded) }
     var isBusy: Bool {
         if case .idle = phase { return false }
         if case .done = phase { return false }
@@ -47,6 +68,12 @@ final class AppModel: ObservableObject {
 
     func refreshVolume() {
         volume = .current()
+        hasFullDiskAccess = Self.checkFullDiskAccess()
+    }
+
+    /// macOS gives no API for this; the TCC database opens only with Full Disk Access.
+    nonisolated static func checkFullDiskAccess() -> Bool {
+        FileHandle(forReadingAtPath: "/Library/Application Support/com.apple.TCC/TCC.db") != nil
     }
 
     /// The reclaim scan: known locations + every project's build output (~20 s).
@@ -54,9 +81,25 @@ final class AppModel: ObservableObject {
         guard !isBusy else { return }
         phase = .scanning("Looking for space you can safely get back…")
         let stale = staleDays
-        async let projects = ProjectScanner.scan(roots: ProjectScanner.defaultRoots(), staleDays: stale)
+        let excluded = self.excluded
+        let roots = Self.demoMode ? [Self.demoRoot] : ProjectScanner.defaultRoots()
+        async let projects = ProjectScanner.scan(roots: roots, staleDays: stale)
         async let known = Catalog.scanKnownLocations()
-        let all = await (projects + known).sorted { $0.size.allocated > $1.size.allocated }
+        let found = await projects + known
+        var all = await Task.detached { Exclusions.apply(found, excluded: excluded) }.value
+            .sorted { $0.size.allocated > $1.size.allocated }
+        if Self.demoMode {
+            // Personal files (installers in Downloads…) only when they're the demo's own.
+            all = all.compactMap { f in
+                guard f.category == .userData, f.method != .none else { return f }
+                var d = f
+                d.paths = f.paths.filter(Self.isDemoPath)
+                guard !d.paths.isEmpty else { return nil }
+                d.size = DiskWalker.measure(d.paths)
+                d.subtitle = "\(d.paths.count) disk image untouched for 30+ days"
+                return d
+            }
+        }
         findings = all
         // Safe items are pre-selected; review items wait for you.
         selected = Set(all.filter { $0.safety == .safe && $0.reclaimable > 0 }.map(\.id))
@@ -71,11 +114,14 @@ final class AppModel: ObservableObject {
         mapProgress = DiskMap.Progress(done: 0, total: 1, current: "")
         let safety = safetyByPath
         let volume = self.volume
-        let root = await DiskMap.build(volume: volume, safetyByPath: safety, progress: { p in
+        let collector = BigFileCollector()
+        let root = await DiskMap.build(volume: volume, safetyByPath: safety, bigFiles: collector, progress: { p in
             Task { @MainActor [weak self] in self?.mapProgress = p }
         })
         map = root
+        bigFiles = collector.files.filter { !Self.demoMode || Self.isDemoPath($0.url) }
         mapProgress = nil
+        growth.record(root)
     }
 
     func scanApps() async {
@@ -87,14 +133,21 @@ final class AppModel: ObservableObject {
     // MARK: Actions
 
     /// Reclaim the selection. With `safeOnly`, exactly the safe set — the one-click path.
-    func reclaim(safeOnly: Bool = false) async {
-        let plan = safeOnly ? safeFindings : selectedFindings
-        guard !plan.isEmpty, !isBusy else { return }
+    @discardableResult
+    func reclaim(safeOnly: Bool = false, automatic: Bool = false) async -> (report: CleanupReport, plan: [Finding])? {
+        guard !isBusy else { return nil }
+        // One click never acts on a stale verdict: drop projects you've touched since the scan.
+        let plan = safeOnly
+            ? ProjectScanner.revalidated(safeFindings, staleDays: staleDays).filter { $0.safety == .safe }
+            : selectedFindings
+        guard !plan.isEmpty else { return nil }
         phase = .reclaiming("Reclaiming \(plan.reduce(0) { $0 + $1.reclaimable }.gb)…")
+        let guardrail = self.guardrail
         let report = await Task.detached(priority: .userInitiated) {
-            Cleaner().reclaim(plan)
+            Cleaner(guardrail: guardrail).reclaim(plan)
         }.value
         lastReport = report
+        for entry in ActivityLog.entries(for: plan, report: report, automatic: automatic) { activity.record(entry) }
         phase = .done(report.freedBytes)
         refreshVolume()
         history.record(volume: volume, safe: 0, freed: report.freedBytes)
@@ -103,6 +156,40 @@ final class AppModel: ObservableObject {
         phase = .idle
         await scan()
         if map != nil { await buildMap() }
+        return (report, plan)
+    }
+
+    // MARK: Growth, activity, never-touch
+
+    /// What grew (or shrank) since about `hours` ago, by folder.
+    func growthChanges(overHours hours: Double = 24) -> [GrowthHistory.Change] {
+        guard let map, let base = growth.baseline(hoursBefore: hours) else { return [] }
+        return GrowthHistory.changes(from: base, to: GrowthHistory.snapshot(of: map))
+    }
+
+    func putBack(_ entry: ActivityLog.Entry) -> String {
+        let result = ActivityLog.putBack(entry)
+        if let i = activity.entries.firstIndex(where: { $0.id == entry.id }), result.restored > 0 {
+            activity.entries[i].restored = true
+            activity.save()
+        }
+        refreshVolume()
+        Task { await scan() }
+        if let fail = result.failed.first { return "Put back \(result.restored); \(fail)" }
+        return "Put back \(entry.title)"
+    }
+
+    func exclude(_ urls: [URL]) {
+        let new = urls.map(\.path).filter { !excluded.contains($0) }
+        guard !new.isEmpty else { return }
+        excluded += new
+        findings = Exclusions.apply(findings, excluded: excluded)
+        selected = selected.filter { id in findings.contains { $0.id == id } }
+    }
+
+    func unexclude(_ path: String) {
+        excluded.removeAll { $0 == path }
+        Task { await scan() }
     }
 
     func uninstallSelectedApps() async -> AppInventory.UninstallReport {
@@ -110,6 +197,10 @@ final class AppModel: ObservableObject {
         let running = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
         for app in apps where selectedApps.contains(app.id) {
             let r = AppInventory.uninstall(app, isRunning: running.contains(app.bundleID))
+            if !r.trashed.isEmpty {
+                activity.record(.init(kind: .uninstalled, title: app.name, bytes: r.bytes,
+                                      items: r.trashed.map { .init(original: $0.path, inTrash: r.inTrash[$0]?.path) }))
+            }
             total.trashed += r.trashed
             total.failed += r.failed
             total.bytes += r.bytes
@@ -118,6 +209,153 @@ final class AppModel: ObservableObject {
         await scanApps()
         refreshVolume()
         return total
+    }
+
+    // MARK: Map actions
+
+    /// What you can do to something you found on the map. Destructive ones always confirm first.
+    enum MapAction: String, Identifiable {
+        case reclaim, trash, emptyContents, delete, uninstall
+        var id: String { rawValue }
+    }
+
+    struct MapOutcome {
+        var message: String
+        var failed: Bool
+        /// The node to update on the map, with what's left of it (0 = gone).
+        var nodeID: String
+        var remaining: Int64
+        var freedFromMap: Int64
+    }
+
+    /// The scan's verdict for this exact folder, if it is a known finding.
+    func knownFinding(for url: URL) -> Finding? {
+        findings.first { $0.paths.contains { $0.standardizedFileURL.path == url.standardizedFileURL.path } }
+    }
+
+    func isDirectory(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
+            && url.pathExtension.lowercased() != "app"
+    }
+
+    /// nil when `action` is possible on `node`; otherwise why not, in plain words.
+    func refusal(_ action: MapAction, for node: DiskNode) -> String? {
+        guard let url = node.url else { return "A summary tile, not a folder — look inside to act on what's in it" }
+        if action == .uninstall {
+            guard url.pathExtension == "app" else { return "Not an app" }
+            if let id = Bundle(url: url)?.bundleIdentifier, id.hasPrefix("com.apple.") { return "Apple apps are part of macOS" }
+            return nil
+        }
+        let known = knownFinding(for: url)
+        if known?.safety == .keep || safetyByPath[url.path] == .keep {
+            return "Your data — \(known?.detail ?? "manage it in the app that owns it.")"
+        }
+        let method: CleanupMethod
+        switch action {
+        case .reclaim:
+            guard let known, known.method != .none else { return "Not a known cache or build output" }
+            method = known.method
+        case .emptyContents:
+            guard isDirectory(url) else { return "Not a folder" }
+            method = .deleteContents
+        case .delete: method = .delete
+        default: method = .trash
+        }
+        let finding = action == .reclaim ? known! : .picked(url, bytes: node.bytes, method: method)
+        if case .refused(let why) = guardrail.check(url, for: finding) { return why.prefix(1).uppercased() + why.dropFirst() }
+        return nil
+    }
+
+    /// Carry out a confirmed map action through the Cleaner (or the uninstaller for apps).
+    func perform(_ action: MapAction, on node: DiskNode) async -> MapOutcome {
+        guard let url = node.url, refusal(action, for: node) == nil else {
+            return MapOutcome(message: refusal(action, for: node) ?? "Not possible", failed: true,
+                              nodeID: node.id, remaining: node.bytes, freedFromMap: 0)
+        }
+        if action == .uninstall { return await uninstall(appAt: url, node: node) }
+
+        var finding: Finding
+        switch action {
+        case .reclaim:
+            finding = knownFinding(for: url)!
+            finding.paths = [url]
+        case .emptyContents: finding = .picked(url, bytes: node.bytes, method: .deleteContents)
+        case .delete: finding = .picked(url, bytes: node.bytes, method: .delete)
+        default: finding = .picked(url, bytes: node.bytes, method: .trash)
+        }
+        let plan = finding
+        let guardrail = self.guardrail
+        let (report, remaining) = await Task.detached(priority: .userInitiated) { () -> (CleanupReport, Int64) in
+            let report = Cleaner(guardrail: guardrail).reclaim([plan])
+            let left = FileManager.default.fileExists(atPath: url.path) ? DiskWalker.measure(url).allocated : 0
+            return (report, left)
+        }.value
+        for entry in ActivityLog.entries(for: [plan], report: report) { activity.record(entry) }
+        refreshVolume()
+        if report.freedBytes > 0 { history.record(volume: volume, safe: safeReclaimable, freed: report.freedBytes) }
+        // The reclaim list must match the disk again; it rescans quietly in the background.
+        Task { await scan() }
+
+        let name = url.lastPathComponent
+        let freed = max(0, node.bytes - remaining)
+        if let skip = report.skipped.first {
+            return MapOutcome(message: "Couldn't finish \(name): \(skip.reason)", failed: true,
+                              nodeID: node.id, remaining: remaining, freedFromMap: freed)
+        }
+        let message: String
+        switch plan.method {
+        case .trash: message = "Moved \(name) to the Trash — \(node.bytes.gb) comes back when you empty it"
+        case .deleteContents: message = "Emptied \(name) — freed \(report.freedBytes.gb)"
+        default: message = "Removed \(name) — freed \(report.freedBytes.gb)"
+        }
+        return MapOutcome(message: message, failed: false, nodeID: node.id, remaining: remaining, freedFromMap: freed)
+    }
+
+    private func uninstall(appAt url: URL, node: DiskNode) async -> MapOutcome {
+        if apps.isEmpty { await scanApps() }
+        guard let app = apps.first(where: { $0.url.standardizedFileURL.path == url.standardizedFileURL.path }) else {
+            return MapOutcome(message: "Couldn't read \(url.lastPathComponent)", failed: true,
+                              nodeID: node.id, remaining: node.bytes, freedFromMap: 0)
+        }
+        let running = NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == app.bundleID }
+        let report = AppInventory.uninstall(app, isRunning: running)
+        if !report.trashed.isEmpty {
+            activity.record(.init(kind: .uninstalled, title: app.name, bytes: report.bytes,
+                                  items: report.trashed.map { .init(original: $0.path, inTrash: report.inTrash[$0]?.path) }))
+        }
+        await scanApps()
+        refreshVolume()
+        if let fail = report.failed.first {
+            return MapOutcome(message: "Couldn't uninstall \(app.name): \(fail.1)", failed: true,
+                              nodeID: node.id, remaining: report.trashed.contains(app.url) ? 0 : node.bytes,
+                              freedFromMap: report.trashed.contains(app.url) ? node.bytes : 0)
+        }
+        return MapOutcome(message: "Moved \(app.name) and its data (\(report.bytes.gb)) to the Trash", failed: false,
+                          nodeID: node.id, remaining: 0, freedFromMap: node.bytes)
+    }
+
+    /// Update the map in place after an action (rebuilding it walks the whole disk).
+    func reflect(_ outcome: MapOutcome, ancestors: Set<String>) {
+        map = map?.reflecting(removalOf: outcome.nodeID, remaining: outcome.remaining, freed: outcome.freedFromMap,
+                              ancestors: ancestors)
+    }
+
+    static func openFullDiskAccessSettings() {
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")!)
+    }
+
+    func open(_ url: URL) {
+        NSWorkspace.shared.open(url)
+    }
+
+    func openInTerminal(_ url: URL) {
+        guard let terminal = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal") else { return }
+        NSWorkspace.shared.open([url], withApplicationAt: terminal, configuration: NSWorkspace.OpenConfiguration())
+    }
+
+    func copyPath(_ url: URL) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url.path, forType: .string)
     }
 
     func reveal(_ urls: [URL]) {

@@ -286,24 +286,33 @@ struct FlowLayout: Layout {
 // flat. The live app always scrolls.
 
 private struct SnapshotModeKey: EnvironmentKey { static let defaultValue = false }
+private struct SnapshotScrollKey: EnvironmentKey { static let defaultValue: CGFloat = 0 }
 
 extension EnvironmentValues {
     var snapshotMode: Bool {
         get { self[SnapshotModeKey.self] }
         set { self[SnapshotModeKey.self] = newValue }
     }
+    /// How far a snapshot shows scrolling content scrolled down (the demo reel).
+    var snapshotScroll: CGFloat {
+        get { self[SnapshotScrollKey.self] }
+        set { self[SnapshotScrollKey.self] = newValue }
+    }
 }
 
 struct Scrolling<Content: View>: View {
     @Environment(\.snapshotMode) private var snapshot
+    @Environment(\.snapshotScroll) private var scroll
     @ViewBuilder var content: Content
 
     var body: some View {
         if snapshot {
             // Natural height, pinned to the top, cut at the frame — like a scroll view at rest.
+            // minHeight 0: take the space offered, never grow the window to fit the content.
             VStack(alignment: .leading, spacing: 0) { content }
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .offset(y: -scroll)
+                .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
                 .clipped()
         } else {
             ScrollView { content }.scrollIndicators(.never)

@@ -115,6 +115,19 @@ public struct Finding: Identifiable, Sendable, Hashable {
     }
 }
 
+extension Finding {
+    /// Something you picked on the disk map. Never `.safe` (it's your call, made after a
+    /// confirm) and never exempt: it goes through `Cleaner` and `SafetyGuard` like everything else.
+    public static func picked(_ url: URL, bytes: Int64, method: CleanupMethod) -> Finding {
+        var size = DirectorySize()
+        size.allocated = bytes
+        size.reclaimable = bytes
+        return Finding(id: "picked:" + url.path, title: url.lastPathComponent, subtitle: url.tildePath,
+                       detail: "Chosen on the map.", category: .userData, safety: .review, paths: [url], size: size,
+                       method: method, symbol: "folder.fill")
+    }
+}
+
 extension URL {
     /// "~/Desktop/x" for display.
     public var tildePath: String {

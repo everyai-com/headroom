@@ -4,9 +4,12 @@ import Foundation
 /// rules before it is touched; anything that fails a check is skipped and reported.
 public struct SafetyGuard: Sendable {
     public let home: URL
+    /// Your never-touch list: nothing at, inside or containing these paths is removed.
+    public let excluded: [String]
 
-    public init(home: URL = URL(fileURLWithPath: NSHomeDirectory())) {
+    public init(home: URL = URL(fileURLWithPath: NSHomeDirectory()), excluded: [String] = []) {
         self.home = home.resolvingSymlinksInPath().standardizedFileURL
+        self.excluded = excluded.map { URL(fileURLWithPath: $0).standardizedFileURL.path.lowercased() }
     }
 
     /// Folders that must never be removed themselves, whatever a rule says.
@@ -36,22 +39,50 @@ public struct SafetyGuard: Sendable {
     }
 
     public func check(_ url: URL, for finding: Finding) -> Verdict {
-        let resolved = url.resolvingSymlinksInPath().standardizedFileURL.path
+        let resolvedPath = url.resolvingSymlinksInPath().standardizedFileURL.path
         if finding.safety == .keep { return .refused("marked as your data") }
         if case .none = finding.method { return .refused("not reclaimable") }
-        if protectedExact.contains(resolved) { return .refused("protected folder") }
-        if protectedPrefixes.contains(where: { resolved == $0 || resolved.hasPrefix($0 + "/") }) {
+        // The startup disk is case-insensitive: ~/desktop IS ~/Desktop. Compare folded.
+        let resolved = resolvedPath.lowercased()
+        let home = self.home.path.lowercased()
+        if protectedExact.contains(where: { $0.lowercased() == resolved }) { return .refused("protected folder") }
+        if protectedPrefixes.map({ $0.lowercased() }).contains(where: { resolved == $0 || resolved.hasPrefix($0 + "/") }) {
             return .refused("protected location")
+        }
+        // Inside an app bundle: deleting part of an app breaks it — uninstall the whole app instead.
+        if let bundle = Self.enclosingAppBundle(resolvedPath) { return .refused("part of \(bundle) — uninstall the app instead") }
+        // Git history: one object pack can be a whole repo's past. Build output never lives here.
+        if resolved.hasSuffix("/.git") || resolved.contains("/.git/") { return .refused("git history — use git to slim a repo") }
+        // A live VM's disk (Colima, Lima, OrbStack…): removing it wipes every container inside.
+        let runsOwnTool: Bool = { if case .command = finding.method { return true }; return false }()
+        if !runsOwnTool, BigFileCollector.vmHomes.contains(where: { resolved.hasPrefix(home + "/" + $0 + "/") || resolved == home + "/" + $0 }) {
+            return .refused("a virtual machine's disk — clean it with its own tool (docker system prune)")
+        }
+        // A photo library under any name (they're often renamed or kept outside ~/Pictures).
+        if resolved.split(separator: "/").contains(where: { $0.hasSuffix(".photoslibrary") }) {
+            return .refused("photo library")
+        }
+        if excluded.contains(where: { resolved == $0 || resolved.hasPrefix($0 + "/") }) {
+            return .refused("on your never-touch list")
+        }
+        if excluded.contains(where: { $0.hasPrefix(resolved + "/") }) {
+            return .refused("contains something on your never-touch list")
         }
         // Below an allowed root — or, for "empty this folder", the root folder itself
         // (emptying /Library/Developer/CoreSimulator/Caches leaves the folder in place).
         let emptiesInPlace: Bool = { if case .deleteContents = finding.method { return true }; return false }()
-        let inside = allowedRoots.contains { root in
-            resolved.hasPrefix(root + "/") || (emptiesInPlace && resolved == root && root != home.path)
+        // Simulator runtimes live outside home, but only Xcode's own `simctl` ever removes them.
+        let simctl: Bool = {
+            if case .command(let exe, let args) = finding.method { return exe == "/usr/bin/xcrun" && args.first == "simctl" }
+            return false
+        }()
+        let roots = allowedRoots.map { $0.lowercased() } + (simctl ? ["/library/developer/coresimulator"] : [])
+        let inside = roots.contains { root in
+            resolved.hasPrefix(root + "/") || (emptiesInPlace && resolved == root && root != home)
         }
         guard inside else { return .refused("outside the folders Headroom may clean") }
         // A path given through a symlink resolves elsewhere: refuse rather than follow.
-        if resolved != url.standardizedFileURL.path { return .refused("path goes through a symbolic link") }
+        if resolvedPath != url.standardizedFileURL.path { return .refused("path goes through a symbolic link") }
         // Project artifacts must still look exactly like what was scanned.
         if finding.category == .projectArtifacts, ProjectScanner.byName[url.lastPathComponent] == nil {
             return .refused("not a recognised build artifact")
@@ -60,9 +91,25 @@ public struct SafetyGuard: Sendable {
     }
 }
 
+extension SafetyGuard {
+    /// "Slack.app" when the path is an app bundle or anything inside one. Only a real bundle
+    /// counts (has Contents/Info.plist): cache folders are often named like `com.vendor.app`.
+    static func enclosingAppBundle(_ path: String) -> String? {
+        var prefix = ""
+        for part in path.split(separator: "/") {
+            prefix += "/" + part
+            if part.lowercased().hasSuffix(".app"),
+               FileManager.default.fileExists(atPath: prefix + "/Contents/Info.plist") { return String(part) }
+        }
+        return nil
+    }
+}
+
 public struct CleanupReport: Sendable {
     public var freedBytes: Int64 = 0
     public var movedToTrashBytes: Int64 = 0
+    /// Where each trashed item went, so it can be put back.
+    public var trashed: [(original: URL, inTrash: URL)] = []
     public var reclaimed: [String] = []
     public var skipped: [(id: String, reason: String)] = []
     public var dryRun = false
@@ -86,6 +133,11 @@ public struct Cleaner: Sendable {
 
         for finding in findings {
             progress(finding)
+            // Every finding names what it touches; one that names nothing can't be checked.
+            if finding.paths.isEmpty {
+                report.skipped.append((finding.id, "nothing to check it against"))
+                continue
+            }
             let refusals = finding.paths.compactMap { url -> String? in
                 if case .refused(let why) = guardrail.check(url, for: finding) { return "\(url.tildePath): \(why)" }
                 return nil
@@ -113,12 +165,17 @@ public struct Cleaner: Sendable {
                     }
                 }
             case .trash:
+                var trashedAny = false
                 for url in finding.paths where fm.fileExists(atPath: url.path) {
                     do {
-                        try fm.trashItem(at: url, resultingItemURL: nil)
-                        report.movedToTrashBytes += finding.size.allocated
+                        var landed: NSURL?
+                        try fm.trashItem(at: url, resultingItemURL: &landed)
+                        if let landed = landed as URL? { report.trashed.append((url, landed)) }
+                        trashedAny = true
                     } catch { failed.append("\(url.lastPathComponent): \(error.localizedDescription)") }
                 }
+                // The size is measured for the finding as a whole: count it once, not per path.
+                if trashedAny { report.movedToTrashBytes += finding.size.allocated }
             case .command(let executable, let arguments):
                 if Shell.run(executable, arguments, timeout: 600) == nil { failed.append("\(executable) failed") }
             case .none:
