@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/icon.png" width="128" alt="Headroom icon"></p>
+
 # Headroom
 
 **Your Mac's storage, in the notch.** Headroom shows how much space you have left right
@@ -7,6 +9,12 @@ without losing anything you made.
 Built for Macs that fill up from agentic coding: every repo an agent touches grows its own
 `node_modules`, `.next`, `target` or virtualenv, and package caches, simulators and browser
 engines pile up behind them.
+
+![The notch, expanded](docs/screenshots/notch-expanded.png)
+
+![Overview](docs/screenshots/overview.png)
+
+![Every GB as a map](docs/screenshots/map.png)
 
 ## What it does
 
