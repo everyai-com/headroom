@@ -4,3 +4,6 @@
 build/
 dist/
 .DS_Store
+# Built into the folder root by scripts/bundle.sh (this folder lives in /Applications)
+/Headroom.app/
+/headroom-cli

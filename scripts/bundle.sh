@@ -44,3 +44,13 @@ PLIST
 
 codesign --force --deep --sign - "$APP" >/dev/null
 echo "built $APP ($(du -sh "$APP" | cut -f1))"
+
+# Install next to the source: the repo lives in /Applications/Headroom, so the app the user
+# launches is /Applications/Headroom/Headroom.app (Launchpad, Spotlight and login items find it).
+if [ "${1:-}" != "--no-install" ]; then
+  pkill -x Headroom 2>/dev/null || true
+  rm -rf Headroom.app
+  cp -R "$APP" Headroom.app
+  cp "$BIN/headroom-cli" headroom-cli
+  echo "installed $(pwd)/Headroom.app and $(pwd)/headroom-cli"
+fi
