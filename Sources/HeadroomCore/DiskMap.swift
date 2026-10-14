@@ -56,6 +56,12 @@ public enum DiskMap {
         public var done: Int
         public var total: Int
         public var current: String
+
+        public init(done: Int, total: Int, current: String) {
+            self.done = done
+            self.total = total
+            self.current = current
+        }
     }
 
     public static func build(home: URL = URL(fileURLWithPath: NSHomeDirectory()),
@@ -144,14 +150,24 @@ public enum DiskMap {
             groupNodes.append(DiskNode(id: "group:\(group.1)", name: group.1, bytes: sum, area: group.0, children: children))
         }
 
-        // macOS itself lives on the sealed system volume.
-        if volume.systemUsed > 0 {
+        // The volumes folders can't see: macOS itself, Preboot, swap, Recovery — named, not lumped.
+        let volumes = APFSVolume.startupContainer()
+        let systemVols = volumes.filter { $0.role != "Data" && $0.bytes > 100_000_000 }
+        var dataUsed = volume.used
+        if !systemVols.isEmpty {
+            let kids = systemVols.map { DiskNode(id: "vol:\($0.role)", name: $0.title, bytes: $0.bytes, area: .system) }
+                .sorted { $0.bytes > $1.bytes }
+            groupNodes.append(DiskNode(id: "group:system", name: "macOS & system", bytes: kids.reduce(0) { $0 + $1.bytes },
+                                       area: .system, children: kids))
+            if let data = volumes.first(where: { $0.role == "Data" }) { dataUsed = data.bytes }
+        } else if volume.systemUsed > 0 {
             groupNodes.append(DiskNode(id: "system", name: "macOS", bytes: volume.systemUsed, area: .system))
+            dataUsed = volume.used - volume.systemUsed
         }
-        // What the disk says is used but no readable folder accounts for: other users, root-only
-        // system folders, APFS snapshots and metadata. Shown, never silently dropped.
-        let accounted = groupNodes.reduce(0) { $0 + $1.bytes }
-        let other = volume.used - accounted
+        // What the Data volume says is used but no readable folder accounts for: other users,
+        // root-only folders, snapshots, metadata. Shown, never silently dropped.
+        let accountedData = groupNodes.filter { $0.area != .system }.reduce(0) { $0 + $1.bytes }
+        let other = dataUsed - accountedData
         if other > 500_000_000 {
             groupNodes.append(DiskNode(id: "other", name: unreadableFiles > 0 ? "Other (needs Full Disk Access to see inside)" : "Other system storage",
                                        bytes: other, area: .other))

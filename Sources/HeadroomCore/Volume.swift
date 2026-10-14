@@ -42,12 +42,60 @@ public struct VolumeStatus: Sendable, Hashable, Codable {
         let free = Int64(values?.volumeAvailableCapacity ?? 0)
         let important = values?.volumeAvailableCapacityForImportantUsage ?? free
 
-        var sys = statfs()
-        var systemUsed: Int64 = 0
-        if statfs("/", &sys) == 0 {
-            systemUsed = Int64(sys.f_blocks - sys.f_bfree) * Int64(sys.f_bsize)
+        return VolumeStatus(total: total, free: free, availableForImportantUsage: important, systemUsed: systemVolumeUsed)
+    }
+
+    /// Bytes on the sealed macOS system volume. On APFS every volume shares one container,
+    /// so `statfs("/")` reports the WHOLE container (it once made "macOS" look like 242 GB);
+    /// only diskutil's `CapacityInUse` is the system volume's own size. Read once: it only
+    /// changes with an OS update.
+    public static let systemVolumeUsed: Int64 = {
+        guard let xml = Shell.run("/usr/sbin/diskutil", ["info", "-plist", "/"], timeout: 10),
+              let data = xml.data(using: .utf8),
+              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+              let used = (plist["CapacityInUse"] as? NSNumber)?.int64Value else { return 0 }
+        return used
+    }()
+}
+
+/// The APFS volumes sharing the startup disk. Folders can't see most of them (Preboot,
+/// swap, Recovery), so without this a large slice of "used" would be unexplained.
+public struct APFSVolume: Sendable, Hashable {
+    public var name: String
+    public var role: String
+    public var bytes: Int64
+
+    /// Human name for a role.
+    public var title: String {
+        switch role {
+        case "System": "macOS"
+        case "Preboot": "Preboot (boot files & OS components)"
+        case "VM": "Swap (virtual memory)"
+        case "Recovery": "Recovery"
+        case "Update": "Software update staging"
+        case "Data": "Your data"
+        default: name
         }
-        return VolumeStatus(total: total, free: free, availableForImportantUsage: important, systemUsed: systemUsed)
+    }
+
+    /// Volumes in the container that holds the startup disk.
+    public static func startupContainer() -> [APFSVolume] {
+        guard let xml = Shell.run("/usr/sbin/diskutil", ["apfs", "list", "-plist"], timeout: 15),
+              let data = xml.data(using: .utf8),
+              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+              let containers = plist["Containers"] as? [[String: Any]] else { return [] }
+        for c in containers {
+            let vols = (c["Volumes"] as? [[String: Any]]) ?? []
+            let parsed = vols.map { v in
+                APFSVolume(name: v["Name"] as? String ?? "?",
+                           role: ((v["Roles"] as? [String]) ?? []).first ?? "",
+                           bytes: (v["CapacityInUse"] as? NSNumber)?.int64Value ?? 0)
+            }
+            if parsed.contains(where: { $0.role == "System" }), parsed.contains(where: { $0.role == "Data" }) {
+                return parsed
+            }
+        }
+        return []
     }
 }
 

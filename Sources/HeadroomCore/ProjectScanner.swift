@@ -87,6 +87,7 @@ public enum ProjectScanner {
                             isCancelled: @escaping @Sendable () -> Bool = { false }) async -> [Finding] {
         var hits: [(artifact: Artifact, url: URL, project: URL)] = []
         for root in roots { walk(root, depth: 0, maxDepth: maxDepth, hits: &hits, isCancelled: isCancelled) }
+        let rootPaths = Set(roots.map { $0.standardizedFileURL.path })
 
         // Measure in parallel, a few at a time (node_modules trees are millions of files).
         let measured: [(Int, DirectorySize)] = await withTaskGroup(of: (Int, DirectorySize).self) { group in
@@ -128,9 +129,17 @@ public enum ProjectScanner {
             return Finding(
                 id: "artifact:" + hit.url.path, title: hit.artifact.title, subtitle: hit.url.tildePath, detail: detail,
                 category: .projectArtifacts, safety: safety, paths: [hit.url], size: size, lastUsed: activity,
-                method: .delete, symbol: hit.artifact.symbol, rebuild: rebuild, project: hit.project.lastPathComponent
+                method: .delete, symbol: hit.artifact.symbol, rebuild: rebuild,
+                project: projectLabel(hit.project, roots: rootPaths)
             )
         }.sorted { $0.size.reclaimable > $1.size.reclaimable }
+    }
+
+    /// "realestate aios/platform" rather than a bare "platform": nested projects keep their parent.
+    static func projectLabel(_ project: URL, roots: Set<String>) -> String {
+        let parent = project.deletingLastPathComponent()
+        if roots.contains(parent.standardizedFileURL.path) { return project.lastPathComponent }
+        return parent.lastPathComponent + "/" + project.lastPathComponent
     }
 
     static func walk(_ dir: URL, depth: Int, maxDepth: Int, hits: inout [(artifact: Artifact, url: URL, project: URL)],

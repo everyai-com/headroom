@@ -19,6 +19,9 @@ public struct InstalledApp: Sendable, Hashable, Identifiable {
     public var appSize: DirectorySize
     public var leftovers: [Leftover]
     public var lastUsed: Date?
+    /// True when `lastUsed` comes from Spotlight; false when it is inferred from the app's own
+    /// data changing (Spotlight's index can be off or read-only — common on a full disk).
+    public var lastUsedIsExact: Bool = true
 
     public var dataSize: Int64 { leftovers.reduce(0) { $0 + $1.size.allocated } }
     /// What uninstalling frees: the app plus everything it left behind.
@@ -60,10 +63,16 @@ public enum AppInventory {
                     let leftovers = index.leftovers(bundleID: id, name: name).map {
                         Leftover(url: $0.url, kind: $0.kind, size: DiskWalker.measure($0.url, isCancelled: isCancelled))
                     }.filter { $0.size.allocated > 0 }
-                    return InstalledApp(name: name, bundleID: id, version: info["CFBundleShortVersionString"] as? String,
-                                        url: bundle, appSize: DiskWalker.measure(bundle, isCancelled: isCancelled),
-                                        leftovers: leftovers.sorted { $0.size.allocated > $1.size.allocated },
-                                        lastUsed: lastUsed(bundle))
+                    // Spotlight first; otherwise the newest change in the app's own data — apps
+                    // write preferences and window state every time they run.
+                    let spotlight = lastUsed(bundle)
+                    let inferred = leftovers.compactMap(\.size.newestModification).max()
+                    var app = InstalledApp(name: name, bundleID: id, version: info["CFBundleShortVersionString"] as? String,
+                                           url: bundle, appSize: DiskWalker.measure(bundle, isCancelled: isCancelled),
+                                           leftovers: leftovers.sorted { $0.size.allocated > $1.size.allocated },
+                                           lastUsed: spotlight ?? inferred)
+                    app.lastUsedIsExact = spotlight != nil
+                    return app
                 }
             }
             var out: [InstalledApp] = []
@@ -136,6 +145,8 @@ public enum AppInventory {
         public var trashed: [URL] = []
         public var failed: [(URL, String)] = []
         public var bytes: Int64 = 0
+
+        public init() {}
     }
 
     /// Move the app and its leftovers to the Trash. Apple's apps and running apps are refused.
