@@ -37,7 +37,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         monitor = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
         }
-        if CommandLine.arguments.contains("--open") || !UserDefaults.standard.bool(forKey: "launchedBefore") {
+        // Opened by hand (Finder, Spotlight, Launchpad): show the window. Started at login: stay quiet
+        // in the notch and menu bar.
+        if CommandLine.arguments.contains("--open") || !launchedAsLoginItem || !UserDefaults.standard.bool(forKey: "launchedBefore") {
             UserDefaults.standard.set(true, forKey: "launchedBefore")
             openWindow()
         }
@@ -191,6 +193,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         NSApp.setActivationPolicy(.regular)
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate()
+    }
+
+    /// macOS marks the launch event of a login item ('lgit'); there's no other signal.
+    private var launchedAsLoginItem: Bool {
+        guard let event = NSAppleEventManager.shared().currentAppleEvent else { return false }
+        return event.eventID == kAEOpenApplication
+            && event.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

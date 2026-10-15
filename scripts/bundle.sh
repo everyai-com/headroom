@@ -69,12 +69,13 @@ else
 fi
 echo "built $APP ($(du -sh "$APP" | cut -f1))"
 
-# Install next to the source: the repo lives in /Applications/Headroom, so the app the user
-# launches is /Applications/Headroom/Headroom.app (Launchpad, Spotlight and login items find it).
+# Install as /Applications/Headroom.app so Launchpad, Spotlight and Finder's Applications list find it
+# (the repo itself lives in /Applications/Headroom; HEADROOM_INSTALL_DIR overrides where it goes).
 if [ "${1:-}" != "--no-install" ]; then
+  DEST="${HEADROOM_INSTALL_DIR:-/Applications}"
   pkill -x Headroom 2>/dev/null || true
-  rm -rf Headroom.app
-  cp -R "$APP" Headroom.app
+  rm -rf "$DEST/Headroom.app" Headroom.app
+  cp -R "$APP" "$DEST/Headroom.app"
   cp "$BIN/headroom-cli" headroom-cli
-  echo "installed $(pwd)/Headroom.app and $(pwd)/headroom-cli"
+  echo "installed $DEST/Headroom.app and $(pwd)/headroom-cli"
 fi
