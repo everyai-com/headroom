@@ -35,6 +35,8 @@ public struct ActivityLog: Codable, Sendable {
         public var rebuild: String?
         public var automatic = false
         public var restored = false
+        /// When its trashed copies were deleted for good from inside Headroom (optional: older logs lack it).
+        public var purgedAt: Date?
 
         public init(kind: Kind, title: String, bytes: Int64, items: [Item], rebuild: String? = nil, automatic: Bool = false) {
             self.kind = kind
@@ -52,6 +54,16 @@ public struct ActivityLog: Codable, Sendable {
                 return FileManager.default.fileExists(atPath: t) && !FileManager.default.fileExists(atPath: item.original)
             }
         }
+
+        /// The trashed copies still sitting in the Trash.
+        public var stillInTrash: [URL] {
+            guard !restored else { return [] }
+            return items.compactMap { $0.inTrash }.filter { FileManager.default.fileExists(atPath: $0) }
+                .map { URL(fileURLWithPath: $0) }
+        }
+
+        /// Its trashed copies can be deleted for good, so the space actually comes back.
+        public var canDeleteFromTrash: Bool { !stillInTrash.isEmpty }
     }
 
     public var entries: [Entry] = []
@@ -96,6 +108,36 @@ public struct ActivityLog: Codable, Sendable {
             } catch { failed.append("\(original.lastPathComponent): \(error.localizedDescription)") }
         }
         return (restored, failed)
+    }
+
+    /// Only something inside a Trash folder (`~/.Trash/…`) can be finished off from Activity —
+    /// never wherever a stale log entry happens to point.
+    public static func isInTrash(_ url: URL, home: URL) -> Bool {
+        let path = url.standardizedFileURL.path.lowercased()
+        let trash = home.standardizedFileURL.path.lowercased() + "/.trash/"
+        return path.hasPrefix(trash) && path.count > trash.count
+    }
+
+    /// Delete an entry's trashed copies for good, through the Cleaner like every other removal.
+    /// Returns what came back and what couldn't be removed.
+    public static func deleteFromTrash(_ entry: Entry, guardrail: SafetyGuard) -> (freed: Int64, removed: Int, failed: [String]) {
+        var failed: [String] = []
+        var plan: [Finding] = []
+        var sizes: Int64 = 0
+        for url in entry.stillInTrash {
+            guard isInTrash(url, home: guardrail.home) else {
+                failed.append("\(url.lastPathComponent): not in the Trash any more"); continue
+            }
+            let bytes = DiskWalker.measure(url).allocated
+            sizes += bytes
+            plan.append(.picked(url, bytes: bytes, method: .delete))
+        }
+        guard !plan.isEmpty else { return (0, 0, failed) }
+        let report = Cleaner(guardrail: guardrail).reclaim(plan)
+        failed += report.skipped.map(\.reason)
+        // The volume delta is the truth, but other writes blur it; never report more than went.
+        let freed = report.freedBytes > 0 ? min(report.freedBytes, sizes) : sizes * Int64(report.reclaimed.count) / Int64(plan.count)
+        return (freed, report.reclaimed.count, failed)
     }
 
     /// Activity for a finished reclaim.

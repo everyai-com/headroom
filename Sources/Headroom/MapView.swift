@@ -216,9 +216,9 @@ struct MapView: View {
         path = updated
         if selected?.id == result.nodeID { selected = nil }
         working = false
-        withAnimation(.spring(response: 0.35)) { outcome = result }
-        try? await Task.sleep(for: .seconds(6))
-        if outcome?.message == result.message { withAnimation { outcome = nil } }
+        // Trashed and uninstalled things can be put back straight from the toast.
+        let undoable = !result.failed && (p.action == .trash || p.action == .uninstall)
+        model.show(result.message, failed: result.failed, undo: undoable ? model.activity.entries.first?.id : nil)
     }
 
     // MARK: Navigation

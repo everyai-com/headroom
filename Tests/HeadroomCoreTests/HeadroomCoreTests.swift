@@ -330,6 +330,25 @@ final class HeadroomCoreTests: XCTestCase {
         XCTAssertFalse(entry.canPutBack)
     }
 
+    func testTrashedCopiesCanBeDeletedForGoodButOnlyFromTheTrash() throws {
+        let inTrash = try write(".Trash/clip.mov")
+        let elsewhere = try write("Documents/notes.txt")
+        let guardrail = SafetyGuard(home: home)
+        let entry = ActivityLog.Entry(kind: .trashed, title: "clip.mov", bytes: 65_536, items: [
+            .init(original: home.appendingPathComponent("Movies/clip.mov").path, inTrash: inTrash.path),
+            // A log pointing outside the Trash must never delete what's there now.
+            .init(original: home.appendingPathComponent("x").path, inTrash: elsewhere.path),
+        ])
+        XCTAssertTrue(entry.canDeleteFromTrash)
+        let result = ActivityLog.deleteFromTrash(entry, guardrail: guardrail)
+        XCTAssertEqual(result.removed, 1)
+        XCTAssertFalse(fm.fileExists(atPath: inTrash.path), "gone for good")
+        XCTAssertTrue(fm.fileExists(atPath: elsewhere.path), "outside the Trash: untouched")
+        XCTAssertEqual(result.failed.count, 1)
+        XCTAssertEqual(guardrail.check(home.appendingPathComponent(".Trash"), for: .picked(home.appendingPathComponent(".Trash"), bytes: 1, method: .delete)),
+                       .refused("protected folder"), "the Trash folder itself is never removed")
+    }
+
     // MARK: - Growth & big files
 
     func testGrowthNamesTheFolderThatGrew() {

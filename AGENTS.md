@@ -63,8 +63,13 @@ repo (github.com/everyai-com/headroom, private) and the installed app.
 - Never-touch list (`SafetyGuard.excluded`, UserDefaults `neverTouch`): refused at, inside or
   containing an excluded path; `Exclusions.apply` hides them from scans.
 - Every removal is logged to `ActivityLog` (Application Support/Headroom/activity.json) with
-  where trashed items landed; Put Back never overwrites. Auto-reclaim (off by default) is the
+  where trashed items landed; Put Back never overwrites. "Delete for good" in Activity
+  (`ActivityLog.deleteFromTrash`) removes only an entry's own copies inside `~/.Trash`, via `Cleaner`
+  (`.delete` picked findings) — never anything else in the Trash, and `~/.Trash` itself is protected. Auto-reclaim (off by default) is the
   safe set only, at most every 6 h.
+- Bulk actions (Large files, Apps) always confirm first and land as one Activity entry; the
+  window toast offers Undo (= Put Back) for anything trashed. Shortcuts: ⌘1–8 screens, ⌘R rescan,
+  ⌘A select all, ⌘⌫ trash selection, ⌥⌘⌫ delete permanently, ⌘Z undo from the toast.
 - Large files come from the map walk (`BigFileCollector`): home only, never Library, `.git`,
   VM homes, apps or photo libraries.
 - System size comes from `diskutil` (`CapacityInUse`), never `statfs("/")` — on APFS that

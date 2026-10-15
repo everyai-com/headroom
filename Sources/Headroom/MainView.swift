@@ -48,6 +48,16 @@ struct MainView: View {
                 RadialGradient(colors: [Theme.safe.opacity(0.07), .clear], center: .topTrailing, startRadius: 10, endRadius: 600)
             }
         )
+        .overlay(alignment: .bottom) {
+            if let toast = model.toast {
+                ToastView(toast: toast, undo: { model.undo(toast) }, dismiss: { model.toast = nil })
+                    .padding(.bottom, 22).padding(.leading, 210)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .id(toast.id)
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: model.toast)
+        .background(shortcuts)
         .preferredColorScheme(.dark)
         .task(id: screen) {
             if screen == .apps, model.apps.isEmpty { await model.scanApps() }
@@ -71,6 +81,18 @@ struct MainView: View {
         }
     }
 
+    /// ⌘1…⌘8 jump between screens, ⌘R rescans.
+    var shortcuts: some View {
+        ZStack {
+            ForEach(Array(Screen.allCases.enumerated()), id: \.offset) { i, s in
+                Button("") { screen = s }.keyboardShortcut(KeyEquivalent(Character("\(i + 1)")), modifiers: .command)
+            }
+            Button("") { Task { await model.scan(); await model.buildMap() } }
+                .keyboardShortcut("r", modifiers: .command).disabled(model.isBusy)
+        }
+        .opacity(0).allowsHitTesting(false).accessibilityHidden(true)
+    }
+
     var statusLine: some View {
         HStack(spacing: 10) {
             switch model.phase {
@@ -88,6 +110,7 @@ struct MainView: View {
                     Task { await model.scan(); await model.buildMap() }
                 } label: { Label("Rescan", systemImage: "arrow.clockwise") }
                     .buttonStyle(GhostButtonStyle())
+                    .help("Rescan  ⌘R")
             }
         }
     }
@@ -126,6 +149,12 @@ struct MainView: View {
                 Image(systemName: s.symbol).font(.system(size: 13, weight: .semibold)).frame(width: 18)
                 Text(s.rawValue).font(.system(size: 13.5, weight: screen == s ? .semibold : .medium))
                 Spacer()
+                if s == .activity, model.waitingInTrash.bytes > 0 {
+                    Text(ByteFormat.compact(model.waitingInTrash.bytes)).font(Theme.number(11, weight: .bold))
+                        .foregroundStyle(.black).padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Capsule().fill(Theme.review))
+                        .help("In the Trash — empty it from Activity to get the space back")
+                }
                 if s == .reclaim, model.safeReclaimable > 0 {
                     Text(ByteFormat.compact(model.safeReclaimable)).font(Theme.number(11, weight: .bold))
                         .foregroundStyle(.black).padding(.horizontal, 6).padding(.vertical, 2)
@@ -138,5 +167,6 @@ struct MainView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .help("\(s.rawValue)  ⌘\((Screen.allCases.firstIndex(of: s) ?? 0) + 1)")
     }
 }

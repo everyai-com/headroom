@@ -8,17 +8,23 @@ struct AppsView: View {
     @EnvironmentObject var model: AppModel
     @State private var sort: Sort = .size
     @State private var expanded: String?
-    @State private var result: String?
+    @State private var query = ""
+    @State private var confirming = false
+    @State private var working = false
 
     enum Sort: String, CaseIterable { case size = "Size", unused = "Least used", name = "Name" }
 
     var sorted: [InstalledApp] {
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        let apps = q.isEmpty ? model.apps : model.apps.filter { $0.name.lowercased().contains(q) || $0.bundleID.lowercased().contains(q) }
         switch sort {
-        case .size: model.apps
-        case .unused: model.apps.sorted { ($0.lastUsed ?? .distantPast) < ($1.lastUsed ?? .distantPast) }
-        case .name: model.apps.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        case .size: return apps
+        case .unused: return apps.sorted { ($0.lastUsed ?? .distantPast) < ($1.lastUsed ?? .distantPast) }
+        case .name: return apps.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         }
     }
+
+    var chosen: [InstalledApp] { model.apps.filter { model.selectedApps.contains($0.id) } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -30,6 +36,7 @@ struct AppsView: View {
                     Text("\(data.gb) of that is data apps keep in your Library").font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
                 }
                 Spacer()
+                SearchField(text: $query, prompt: "Find an app").frame(width: 200)
                 HStack(spacing: 4) {
                     ForEach(Sort.allCases, id: \.self) { s in
                         Button(s.rawValue) { sort = s }
@@ -63,30 +70,41 @@ struct AppsView: View {
             }
         }
         .overlay(alignment: .bottom) { bar }
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: model.selectedApps.isEmpty)
+        .confirmationDialog(chosen.count == 1 ? "Uninstall \(chosen.first?.name ?? "")?" : "Uninstall \(chosen.count) apps?",
+                            isPresented: $confirming) {
+            Button("Move to Trash", role: .destructive) {
+                Task {
+                    working = true
+                    let r = await model.uninstallSelectedApps()
+                    working = false
+                    model.show("Moved \(r.trashed.count) items (\(r.bytes.gb)) to the Trash — put them back from Activity"
+                               + (r.failed.isEmpty ? "" : " · \(r.failed.count) skipped: \(r.failed[0].1)"),
+                               failed: r.trashed.isEmpty)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(chosen.map(\.name).prefix(6).joined(separator: ", ") + (chosen.count > 6 ? " and \(chosen.count - 6) more" : "")
+                 + " — \(chosen.reduce(0) { $0 + $1.totalSize }.gb) with their data, moved to the Trash. Quit them first; running apps are skipped.")
+        }
     }
 
     @ViewBuilder var bar: some View {
-        let chosen = model.apps.filter { model.selectedApps.contains($0.id) }
-        if !chosen.isEmpty || result != nil {
-            HStack(spacing: 16) {
+        let chosen = self.chosen
+        if !chosen.isEmpty {
+            HStack(spacing: 14) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(result == nil ? "Selected" : "Done").font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
-                    Text(result ?? "\(chosen.count) apps · \(chosen.reduce(0) { $0 + $1.totalSize }.gb)").font(Theme.number(15, weight: .semibold))
+                    Text("Selected").font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
+                    Text("\(chosen.count) \(chosen.count == 1 ? "app" : "apps") · \(chosen.reduce(0) { $0 + $1.totalSize }.gb)").font(Theme.number(15, weight: .semibold))
                 }
                 Spacer()
-                if result == nil {
-                    Text("Recoverable from the Trash until you empty it").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
-                    Button {
-                        Task {
-                            let r = await model.uninstallSelectedApps()
-                            result = "Moved \(r.trashed.count) items (\(r.bytes.gb)) to the Trash"
-                                + (r.failed.isEmpty ? "" : " · \(r.failed.count) skipped")
-                        }
-                    } label: { Label("Move to Trash", systemImage: "trash") }
-                        .buttonStyle(PrimaryButtonStyle(tint: Theme.critical))
-                } else {
-                    Button("OK") { result = nil }.buttonStyle(GhostButtonStyle())
-                }
+                Text("Recoverable from the Trash until you empty it").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                Button("Clear") { model.selectedApps = [] }.buttonStyle(GhostButtonStyle()).keyboardShortcut(.escape, modifiers: [])
+                Button { confirming = true } label: { Label(working ? "Uninstalling…" : "Uninstall…", systemImage: "trash") }
+                    .buttonStyle(PrimaryButtonStyle(tint: Theme.critical))
+                    .keyboardShortcut(.delete, modifiers: .command)
+                    .disabled(working)
             }
             .padding(.horizontal, 20).padding(.vertical, 14)
             .background(
@@ -164,8 +182,50 @@ struct SettingsView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.snapshotMode) private var snapshot
     var launchAtLogin: Binding<Bool>
+    @State private var clearing: Clearing?
+
+    enum Clearing: String, Identifiable {
+        case activity, history, neverTouch
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .activity: "Clear the activity list?"
+            case .history: "Clear space history?"
+            case .neverTouch: "Reset the never-touch list?"
+            }
+        }
+        var done: String {
+            switch self {
+            case .activity: "Activity list cleared"
+            case .history: "Space history cleared"
+            case .neverTouch: "Never-touch list reset"
+            }
+        }
+        var message: String {
+            switch self {
+            case .activity: "Headroom forgets what it removed. Trashed items stay in the Trash, but Put Back won't be offered for them any more."
+            case .history: "The free-space chart, the growth alerts and “what grew” start over from the next scan."
+            case .neverTouch: "Every folder on the list becomes eligible again. Nothing is deleted — scans just see them again."
+            }
+        }
+    }
 
     var body: some View {
+        settingsBody
+            .confirmationDialog(clearing?.title ?? "", isPresented: Binding(get: { clearing != nil }, set: { if !$0 { clearing = nil } }), presenting: clearing) { c in
+                Button("Clear", role: .destructive) {
+                    switch c {
+                    case .activity: model.clearActivityLog()
+                    case .history: model.clearHistory()
+                    case .neverTouch: model.clearNeverTouch()
+                    }
+                    model.show(c.done)
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { c in Text(c.message) }
+    }
+
+    var settingsBody: some View {
         Scrolling {
             VStack(alignment: .leading, spacing: 18) {
                 Card {
@@ -222,6 +282,22 @@ struct SettingsView: View {
                         if !model.hasFullDiskAccess {
                             Button("Open Privacy & Security") { AppModel.openFullDiskAccessSettings() }
                                 .buttonStyle(GhostButtonStyle())
+                        }
+                    }
+                }
+                Card {
+                    VStack(alignment: .leading, spacing: 12) {
+                        SectionTitle(title: "Headroom's data", trailing: model.ownDataBytes.gb)
+                        Text("What Headroom remembers on this Mac: the activity list, free-space history and folder growth. Clearing it never touches your files.")
+                            .font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
+                        HStack(spacing: 10) {
+                            Button("Clear activity list…") { clearing = .activity }.buttonStyle(GhostButtonStyle())
+                                .disabled(model.activity.entries.isEmpty)
+                            Button("Clear space history…") { clearing = .history }.buttonStyle(GhostButtonStyle())
+                            Button("Reset never-touch list…") { clearing = .neverTouch }.buttonStyle(GhostButtonStyle())
+                                .disabled(model.excluded.isEmpty)
+                            Spacer()
+                            Button("Show in Finder") { model.reveal([HeadroomPaths.support]) }.buttonStyle(GhostButtonStyle())
                         }
                     }
                 }

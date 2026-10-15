@@ -33,6 +33,30 @@ final class AppModel: ObservableObject {
     @AppStorage("notificationsEnabled") var notificationsEnabled = true
     @AppStorage("showNotch") var showNotch = true
     @AppStorage("autoReclaim") var autoReclaim = false
+    /// The banner at the bottom of the window after an action — with Undo when it can be put back.
+    struct Toast: Identifiable, Equatable {
+        let id = UUID()
+        var message: String
+        var failed = false
+        var undo: ActivityLog.Entry.ID?
+    }
+    @Published var toast: Toast?
+
+    func show(_ message: String, failed: Bool = false, undo: ActivityLog.Entry.ID? = nil) {
+        let t = Toast(message: message, failed: failed, undo: undo)
+        toast = t
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(undo == nil ? 4 : 8))
+            if self?.toast?.id == t.id { self?.toast = nil }
+        }
+    }
+
+    func undo(_ toast: Toast) {
+        self.toast = nil
+        guard let id = toast.undo, let entry = activity.entries.first(where: { $0.id == id }) else { return }
+        show(putBack(entry))
+    }
+
     /// A newer release from the update feed, when there is one.
     @Published var update: Updates.Release?
     @Published var updateStatus: String?
@@ -117,7 +141,7 @@ final class AppModel: ObservableObject {
         mapProgress = DiskMap.Progress(done: 0, total: 1, current: "")
         let safety = safetyByPath
         let volume = self.volume
-        let collector = BigFileCollector()
+        let collector = BigFileCollector(threshold: 100_000_000)
         let root = await DiskMap.build(volume: volume, safetyByPath: safety, bigFiles: collector, progress: { p in
             Task { @MainActor [weak self] in self?.mapProgress = p }
         })
@@ -180,6 +204,88 @@ final class AppModel: ObservableObject {
         Task { await scan() }
         if let fail = result.failed.first { return "Put back \(result.restored); \(fail)" }
         return "Put back \(entry.title)"
+    }
+
+    /// Space still held by things Headroom moved to the Trash.
+    var waitingInTrash: (entries: [ActivityLog.Entry], bytes: Int64) {
+        let list = activity.entries.filter(\.canDeleteFromTrash)
+        return (list, list.reduce(0) { $0 + $1.bytes })
+    }
+
+    /// Finish off what an entry moved to the Trash: deleted for good, so the space comes back.
+    func deleteFromTrash(_ entries: [ActivityLog.Entry]) async -> String {
+        let guardrail = self.guardrail
+        let results = await Task.detached(priority: .userInitiated) {
+            entries.map { ($0.id, ActivityLog.deleteFromTrash($0, guardrail: guardrail)) }
+        }.value
+        var freed: Int64 = 0
+        var failures: [String] = []
+        for (id, r) in results {
+            freed += r.freed
+            failures += r.failed
+            if r.removed > 0, let i = activity.entries.firstIndex(where: { $0.id == id }) { activity.entries[i].purgedAt = .now }
+        }
+        activity.save()
+        refreshVolume()
+        if freed > 0 { history.record(volume: volume, safe: safeReclaimable, freed: freed) }
+        if let fail = failures.first { return "Freed \(freed.gb) · couldn't remove \(failures.count): \(fail)" }
+        return entries.count == 1 ? "Deleted \(entries[0].title) for good — freed \(freed.gb)" : "Emptied \(entries.count) items from the Trash — freed \(freed.gb)"
+    }
+
+    /// Trash (or delete) several large files in one go, as one Activity entry you can put back.
+    func remove(_ files: [BigFile], permanently: Bool) async -> (message: String, removed: Set<String>, undo: ActivityLog.Entry.ID?) {
+        let plan = files.map { Finding.picked($0.url, bytes: $0.bytes, method: permanently ? .delete : .trash) }
+        guard !plan.isEmpty else { return ("Nothing selected", [], nil) }
+        let guardrail = self.guardrail
+        let report = await Task.detached(priority: .userInitiated) { Cleaner(guardrail: guardrail).reclaim(plan) }.value
+        let done = plan.filter { report.reclaimed.contains($0.id) }
+        let bytes = done.reduce(0) { $0 + $1.reclaimable }
+        var undo: ActivityLog.Entry.ID?
+        if !done.isEmpty {
+            let entry: ActivityLog.Entry
+            if done.count == 1, let one = ActivityLog.entries(for: done, report: report).first {
+                entry = one
+            } else {
+                let landed = Dictionary(report.trashed.map { ($0.original.path, $0.inTrash.path) }, uniquingKeysWith: { a, _ in a })
+                entry = .init(kind: permanently ? .deleted : .trashed, title: "\(done.count) large files", bytes: bytes,
+                              items: done.flatMap(\.paths).map { .init(original: $0.path, inTrash: landed[$0.path]) })
+            }
+            activity.record(entry)
+            if !permanently { undo = entry.id }
+        }
+        refreshVolume()
+        if permanently, report.freedBytes > 0 { history.record(volume: volume, safe: safeReclaimable, freed: report.freedBytes) }
+        let removed = Set(done.compactMap { $0.paths.first?.path })
+        let what = done.count == 1 ? "“\(done[0].title)”" : "\(done.count) files"
+        var message = permanently ? "Deleted \(what) — freed \(bytes.gb)" : "Moved \(what) to the Trash (\(bytes.gb))"
+        if let skip = report.skipped.first { message += " · \(report.skipped.count) skipped: \(skip.reason)" }
+        return (message, removed, undo)
+    }
+
+    // MARK: Headroom's own data
+
+    var ownDataBytes: Int64 {
+        let files = (try? FileManager.default.contentsOfDirectory(at: HeadroomPaths.support, includingPropertiesForKeys: [.fileSizeKey])) ?? []
+        return files.reduce(0) { $0 + Int64((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
+    }
+
+    /// Forget what Headroom removed. Nothing on disk changes; trashed items stay in the Trash.
+    func clearActivityLog() {
+        activity = ActivityLog()
+        activity.save()
+    }
+
+    /// Forget free-space history and folder growth snapshots.
+    func clearHistory() {
+        history = History()
+        try? FileManager.default.removeItem(at: History.url)
+        growth = GrowthHistory()
+        growth.save()
+    }
+
+    func clearNeverTouch() {
+        excluded = []
+        Task { await scan() }
     }
 
     func exclude(_ urls: [URL]) {

@@ -18,7 +18,7 @@ public struct SafetyGuard: Sendable {
         return Set(["/", "/Applications", "/Library", "/System", "/Users", "/private", "/usr", "/opt", "/bin", "/sbin", "/var",
                     h, h + "/Desktop", h + "/Documents", h + "/Downloads", h + "/Library", h + "/Pictures", h + "/Movies",
                     h + "/Music", h + "/Library/Caches", h + "/Library/Application Support", h + "/Library/Developer",
-                    h + "/Developer", h + "/Projects", h + "/Code", h + "/code", h + "/src"])
+                    h + "/.Trash", h + "/Developer", h + "/Projects", h + "/Code", h + "/code", h + "/src"])
     }
 
     /// Never inside these, whatever a rule says: credentials, iCloud, photo libraries.

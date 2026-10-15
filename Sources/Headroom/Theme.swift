@@ -323,3 +323,113 @@ struct Scrolling<Content: View>: View {
 extension Date {
     var ago: String { RelativeDateTimeFormatter().localizedString(for: self, relativeTo: .now) }
 }
+
+// MARK: - Controls
+
+/// A filter chip: white when on.
+struct Pill: View {
+    var title: String
+    var on: Bool
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title).font(.system(size: 12, weight: .medium))
+                .foregroundStyle(on ? Color.black : Theme.textPrimary)
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .background(Capsule().fill(on ? Color.white : Color.white.opacity(0.06)))
+                .overlay(Capsule().strokeBorder(Theme.hairline))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .animation(.easeOut(duration: 0.15), value: on)
+    }
+}
+
+/// A quiet search box that matches the dark surfaces.
+struct SearchField: View {
+    @Binding var text: String
+    var prompt: String
+    @Environment(\.snapshotMode) private var snapshot
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.textTertiary)
+            // ImageRenderer can't draw an NSTextField: snapshots show the prompt as text.
+            if snapshot {
+                Text(prompt).font(.system(size: 12.5)).foregroundStyle(Theme.textTertiary).lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                TextField("", text: $text, prompt: Text(prompt).foregroundStyle(Theme.textTertiary))
+                    .textFieldStyle(.plain).font(.system(size: 12.5))
+            }
+            if !text.isEmpty {
+                Button { text = "" } label: {
+                    Image(systemName: "xmark.circle.fill").font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 10).padding(.vertical, 6)
+        .background(Capsule().fill(Color.white.opacity(0.06)))
+        .overlay(Capsule().strokeBorder(Theme.hairline))
+    }
+}
+
+/// Nothing to show — said kindly, with what to try next.
+struct EmptyState: View {
+    var symbol: String
+    var title: String
+    var detail: String
+
+    var body: some View {
+        Card {
+            HStack(spacing: 16) {
+                Image(systemName: symbol).font(.system(size: 22, weight: .semibold)).foregroundStyle(Theme.safe)
+                    .frame(width: 44, height: 44)
+                    .background(Circle().fill(Theme.safe.opacity(0.12)))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title).font(.system(size: 15, weight: .semibold))
+                    Text(detail).font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+}
+
+/// The raised glass behind sticky action bars.
+struct FloatingBarBackground: View {
+    var body: some View {
+        RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.surfaceRaised.opacity(0.97))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.hairline))
+            .shadow(color: .black.opacity(0.5), radius: 24, y: 8)
+    }
+}
+
+/// What just happened, at the bottom of the window — with Undo for anything trashed.
+struct ToastView: View {
+    var toast: AppModel.Toast
+    var undo: () -> Void
+    var dismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: toast.failed ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                .foregroundStyle(toast.failed ? Theme.review : Theme.safe)
+            Text(toast.message).font(.system(size: 12.5, weight: .medium)).lineLimit(2)
+            if toast.undo != nil {
+                Button("Undo", action: undo).buttonStyle(GhostButtonStyle()).keyboardShortcut("z", modifiers: .command)
+            }
+            Button(action: dismiss) { Image(systemName: "xmark").font(.system(size: 10, weight: .bold)) }
+                .buttonStyle(.plain).foregroundStyle(Theme.textTertiary)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 11)
+        .background(
+            Capsule().fill(Theme.surfaceRaised)
+                .overlay(Capsule().strokeBorder((toast.failed ? Theme.review : Theme.safe).opacity(0.35)))
+                .shadow(color: .black.opacity(0.55), radius: 20, y: 8)
+        )
+        .frame(maxWidth: 640)
+    }
+}
