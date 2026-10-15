@@ -22,8 +22,14 @@ enum Snapshots {
         }
 
         let size = CGSize(width: 1180, height: 780)
+        let drives = DrivesModel()
+        let drivesDone = DispatchSemaphore(value: 0)
+        Task { @MainActor in await drives.refresh(); drivesDone.signal() }
+        while drivesDone.wait(timeout: .now()) == .timedOut { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
         for screen in Screen.allCases {
-            save(MainView(screen: screen).environmentObject(model), size: size, to: dir.appendingPathComponent("\(screen.rawValue.lowercased()).png"))
+            let override = screen == .drives ? AnyView(DrivesView(model: drives)) : nil
+            save(MainView(screen: screen, override: override).environmentObject(model), size: size,
+                 to: dir.appendingPathComponent("\(screen.rawValue.lowercased()).png"))
         }
         // The notch, collapsed and expanded, over a wallpaper-ish backdrop with the camera housing drawn in.
         let g = NotchController.geometry()

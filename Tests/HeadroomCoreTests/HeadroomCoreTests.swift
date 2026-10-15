@@ -450,4 +450,68 @@ final class HeadroomCoreTests: XCTestCase {
             "Saved Application State/com.vendor.Notes.savedState", "Preferences/com.vendor.Notes.plist",
         ], "exact bundle-ID matches and the app's own name only — never NotesSync or NotesPro")
     }
+
+    // MARK: - External drives
+
+    func testDriveParsingFindsTheDiskLinkAndMount() {
+        let ioreg = """
+        +-o Portable SSD@00100000  <class IOUSBHostDevice>
+          |   "USB Product Name" = "Portable SSD"
+          |   "USB Vendor Name" = "SanDisk"
+          |   "Device Speed" = 2
+          |           |   "BSD Name" = "disk4"
+          |           |   "Size" = 2000398934016
+          |           |   "BSD Name" = "disk4s1"
+          |           |   "Size" = 2000396836864
+        +-o USB Receiver@00200000  <class IOUSBHostDevice>
+          |   "USB Product Name" = "USB Receiver"
+          |   "Device Speed" = 1
+        """
+        let checking = ExternalDrive.parse(ioreg: ioreg, mounts: [:], checking: true)
+        XCTAssertEqual(checking.count, 1, "a keyboard receiver has no disk and is not a drive")
+        let d = checking[0]
+        XCTAssertEqual(d.title, "SanDisk Portable SSD")
+        XCTAssertEqual(d.disk, "disk4")
+        XCTAssertEqual(d.partition, "disk4s1")
+        XCTAssertEqual(d.bytes, 2000398934016)
+        XCTAssertEqual(d.link, .usb2)
+        XCTAssertTrue(d.link.isBottleneck)
+        XCTAssertTrue(d.macOSChecking)
+        XCTAssertNotNil(d.readOnlyMountScript)
+
+        let open = ExternalDrive.parse(ioreg: ioreg, mounts: ["disk4s1": (URL(fileURLWithPath: "/Volumes/SSD"), true)], checking: true)[0]
+        XCTAssertEqual(open.mountPoint?.path, "/Volumes/SSD")
+        XCTAssertTrue(open.readOnly)
+        XCTAssertFalse(open.macOSChecking, "once mounted it's no longer waiting on the check")
+    }
+
+    func testDriveCopyIsCompleteResumableAndNeverTouchesTheSource() throws {
+        try write("drive/Photos/a.jpg", bytes: 3_000_000)
+        try write("drive/Photos/trip/b.mov", bytes: 5_000_000)
+        try write("drive/Photos/._a.jpg", bytes: 4096)
+        let source = home.appendingPathComponent("drive/Photos")
+        let rescue = home.appendingPathComponent("rescue")
+        let before = try fm.attributesOfItem(atPath: source.appendingPathComponent("a.jpg").path)[.modificationDate] as? Date
+
+        var last: DriveCopier.Progress?
+        DriveCopier(source: source, into: rescue).run { last = $0 }
+        XCTAssertEqual(last?.finished, true)
+        XCTAssertEqual(last?.total, 8_000_000, "AppleDouble ._ files are skipped")
+        XCTAssertEqual(last?.failed, [])
+        XCTAssertEqual(try Data(contentsOf: rescue.appendingPathComponent("Photos/trip/b.mov")).count, 5_000_000)
+        XCTAssertFalse(fm.fileExists(atPath: rescue.appendingPathComponent("Photos/._a.jpg").path))
+        XCTAssertFalse(fm.fileExists(atPath: rescue.appendingPathComponent("Photos/a.jpg.partial").path))
+
+        // Interrupted earlier: one file cut short, plus a stale .partial. A re-run finishes the job.
+        try Data(repeating: 1, count: 1000).write(to: rescue.appendingPathComponent("Photos/trip/b.mov"))
+        try Data(repeating: 1, count: 10).write(to: rescue.appendingPathComponent("Photos/trip/b.mov.partial"))
+        DriveCopier(source: source, into: rescue).run { last = $0 }
+        XCTAssertEqual(last?.skipped, 1, "a.jpg was already whole")
+        XCTAssertEqual(try Data(contentsOf: rescue.appendingPathComponent("Photos/trip/b.mov")).count, 5_000_000)
+        XCTAssertFalse(fm.fileExists(atPath: rescue.appendingPathComponent("Photos/trip/b.mov.partial").path))
+
+        XCTAssertTrue(fm.fileExists(atPath: source.appendingPathComponent("._a.jpg").path), "the drive is only read")
+        let after = try fm.attributesOfItem(atPath: source.appendingPathComponent("a.jpg").path)[.modificationDate] as? Date
+        XCTAssertEqual(before, after)
+    }
 }

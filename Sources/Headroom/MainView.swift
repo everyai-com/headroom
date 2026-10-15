@@ -2,7 +2,7 @@ import SwiftUI
 import HeadroomCore
 
 enum Screen: String, CaseIterable, Identifiable {
-    case overview = "Overview", map = "Map", reclaim = "Reclaim", files = "Large files", apps = "Apps", activity = "Activity",
+    case overview = "Overview", map = "Map", reclaim = "Reclaim", files = "Large files", apps = "Apps", drives = "Drives", activity = "Activity",
          settings = "Settings"
     var id: String { rawValue }
     var symbol: String {
@@ -12,6 +12,7 @@ enum Screen: String, CaseIterable, Identifiable {
         case .reclaim: "sparkles"
         case .files: "doc.text.magnifyingglass"
         case .apps: "app.badge"
+        case .drives: "externaldrive"
         case .activity: "clock.arrow.circlepath"
         case .settings: "gearshape"
         }
@@ -64,6 +65,7 @@ struct MainView: View {
         case .reclaim: ReclaimView()
         case .files: FilesView()
         case .apps: AppsView()
+        case .drives: DrivesView()
         case .activity: ActivityView()
         case .settings: SettingsView(launchAtLogin: launchAtLogin)
         }

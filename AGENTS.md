@@ -27,9 +27,10 @@ repo (github.com/everyai-com/headroom, private) and the installed app.
 - `Sources/HeadroomCore` — engine, no UI: `DiskWalker` (fts, hard-link-aware), `Catalog`
   (known space hogs + verdicts), `ProjectScanner` (build artifacts, per-project staleness),
   `Cleaner`/`SafetyGuard`, `AppInventory` (apps + Library leftovers), `DiskMap` (every GB,
-  APFS volumes), `Treemap` (squarified layout)
+  APFS volumes), `Treemap` (squarified layout), `ExternalDrive` (USB drives from IOKit) +
+  `DriveCopier` (resumable drive → Mac copy)
 - `Sources/Headroom` — app: `Notch.swift` (NSPanel over the camera housing), `MainView`
-  (sidebar), `OverviewView`, `MapView` (treemap), `ReclaimView`, `AppsView` (+ Settings),
+  (sidebar), `OverviewView`, `MapView` (treemap), `ReclaimView`, `AppsView` (+ Settings), `DrivesView` (USB drives: open read-only, browse, copy off),
   `AppModel` (state + actions), `Theme` (design system), `main.swift` (delegate, menu bar,
   monitor, notifications)
 - `Sources/headroom-cli` — read-only reports
@@ -74,3 +75,7 @@ repo (github.com/everyai-com/headroom, private) and the installed app.
   app's own data (`lastUsedIsExact = false`) and says "usage unknown", never "never opened".
 - Notch geometry: `NSScreen.auxiliaryTopLeftArea/RightArea` + `safeAreaInsets.top`; panel at
   `.statusBar + 1`, all spaces, full-screen auxiliary. Non-notch screens get a centred pill.
+- Drives (`ExternalDrive`/`DrivesView`) read IOKit (`ioreg`) and the mount table, never `diskutil`:
+  while macOS checks a drive before mounting, diskutil and Disk Arbitration hang. A drive is only
+  ever read — "Open now" mounts it read-only (admin prompt via osascript) and `DriveCopier` copies
+  into `~/Drive Rescue` without deleting anything (it truncates/replaces only its own copies).
