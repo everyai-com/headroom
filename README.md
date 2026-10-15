@@ -26,6 +26,10 @@ engines pile up behind them.
   folders glow mint with hatching; review items get an amber dash. Click to drill in.
 - **Reclaim** — everything reclaimable, grouped by safety, with what rebuilds each item
   (`pnpm install`, `cargo build`…).
+- **Large files** — single big files anywhere in your folders, filtered by size and type.
+  Pick several and move them to the Trash in one go (or delete permanently), with Undo.
+- **Activity** — everything Headroom removed. Put Back anything still in the Trash, or delete
+  it for good from here so the space actually comes back.
 - **Apps** — every app with the data it keeps in your Library; uninstall moves the app
   *and* its leftovers to the Trash (recoverable until you empty it).
 - **Watching** — a notification when space drops below your threshold or falls fast, with
@@ -54,8 +58,8 @@ engines pile up behind them.
 Requires macOS 15+ and Xcode 16+ (Swift 6).
 
 ```bash
-./scripts/bundle.sh          # → dist/Headroom.app (release, icon, ad-hoc signed)
-open dist/Headroom.app
+./scripts/bundle.sh          # → dist/Headroom.app (release, icon, ad-hoc signed), installed as /Applications/Headroom.app
+open /Applications/Headroom.app
 swift test                   # engine tests (each runs in a throwaway temp folder)
 ```
 
@@ -85,3 +89,24 @@ Sources/HeadroomCore/   engine — no UI, fully tested
 Sources/Headroom/       the app: notch panel, menu bar, main window
 Sources/headroom-cli/   read-only reports
 ```
+
+## Keyboard
+
+⌘1–⌘8 switch screens · ⌘R rescan · ⌘A select all · ⌘⌫ move selection to Trash ·
+⌥⌘⌫ delete permanently · ⌘Z undo the last trash · Esc clear selection
+
+## Contributing
+
+Issues and pull requests are welcome. Before opening one:
+
+- `swift test` passes, and `./scripts/bundle.sh --no-install` builds.
+- Anything that removes files goes through `Cleaner` and `SafetyGuard` — never `FileManager`
+  directly — and a new rule comes with a guard test. The full list of invariants is in
+  [AGENTS.md](AGENTS.md).
+- Screenshots for the README come from `Headroom --render <dir> --demo`, so no personal
+  projects or files end up in the repo.
+
+## License
+
+[Apache License 2.0](LICENSE).
+

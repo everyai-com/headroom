@@ -1,13 +1,15 @@
 # Headroom — agent notes
 
 macOS-only notch app (Swift 6 / SwiftUI, macOS 15+): shows where every GB of the disk goes
-and reclaims space safely. Lives at `/Applications/Headroom` — this folder is both the git
-repo (github.com/everyai-com/headroom, private) and the installed app.
+and reclaims space safely. The git repo (github.com/everyai-com/headroom, public, Apache-2.0)
+lives at `/Applications/Headroom`; the built app installs as `/Applications/Headroom.app`.
+README screenshots are rendered with `--demo` so no personal projects or files are published.
 
 ## Commands
 
-- build + install: `./scripts/bundle.sh` → `dist/Headroom.app`, copied to `./Headroom.app`
-  (+ `./headroom-cli`); `--no-install` to skip the copy. Then `open Headroom.app`.
+- build + install: `./scripts/bundle.sh` → `dist/Headroom.app`, installed as `/Applications/Headroom.app`
+  (+ `./headroom-cli`); `--no-install` to skip the copy. Then `open /Applications/Headroom.app` — opening
+  it by hand shows the window; a login-item launch stays in the notch and menu bar.
 - tests: `swift test` (engine only; every test runs in a throwaway temp folder)
 - read-only reports: `./headroom-cli status|reclaim|projects|apps|map|files|growth|activity` (`--json`)
 - distribution signing: `HEADROOM_SIGN_ID="Developer ID Application: …" HEADROOM_NOTARY_PROFILE=<profile> ./scripts/bundle.sh`
