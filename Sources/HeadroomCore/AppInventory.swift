@@ -53,6 +53,7 @@ public enum AppInventory {
         }
         let library = home.appendingPathComponent("Library")
         let index = LibraryIndex(library: library)
+        let allIDs = Set(bundles.compactMap { Bundle(url: $0)?.bundleIdentifier?.lowercased() })
         return await withTaskGroup(of: InstalledApp?.self) { group in
             for bundle in bundles {
                 group.addTask {
@@ -60,7 +61,8 @@ public enum AppInventory {
                           let id = info["CFBundleIdentifier"] as? String else { return nil }
                     let name = (info["CFBundleDisplayName"] as? String) ?? (info["CFBundleName"] as? String)
                         ?? bundle.deletingPathExtension().lastPathComponent
-                    let leftovers = index.leftovers(bundleID: id, name: name).map {
+                    let leftovers = index.leftovers(bundleID: id, name: name, executable: info["CFBundleExecutable"] as? String,
+                                                    otherBundleIDs: allIDs).map {
                         Leftover(url: $0.url, kind: $0.kind, size: DiskWalker.measure($0.url, isCancelled: isCancelled))
                     }.filter { $0.size.allocated > 0 }
                     // Spotlight first; otherwise the newest change in the app's own data — apps
@@ -109,9 +111,25 @@ public enum AppInventory {
             self.listing = listing
         }
 
-        func leftovers(bundleID: String, name: String) -> [(url: URL, kind: String)] {
+        /// Executable names too generic to stand for one app.
+        static let genericNames: Set<String> = ["electron", "launcher", "app", "main", "helper", "runner", "stub", "run", "start"]
+
+        /// Everything in the Library that belongs to this app: its bundle ID exactly, or the ID with a
+        /// suffix (`com.vendor.app.ShipIt` updaters, `com.vendor.app.widget` extensions, helpers) —
+        /// unless that suffixed ID is another installed app (`com.google.Chrome.canary`). Folders named
+        /// after the app or its executable (VS Code keeps `Application Support/Code`) count only in
+        /// Application Support, Caches and Logs, and only by exact name.
+        func leftovers(bundleID: String, name: String, executable: String? = nil,
+                       otherBundleIDs: Set<String> = []) -> [(url: URL, kind: String)] {
             let id = bundleID.lowercased()
-            let appName = name.lowercased()
+            var names: Set<String> = [name.lowercased()]
+            if let exe = executable?.lowercased(), exe.count >= 4, !Self.genericNames.contains(exe) { names.insert(exe) }
+            // Longer IDs that start with ours belong to other apps.
+            let others = otherBundleIDs.filter { $0 != id && $0.hasPrefix(id + ".") }
+            func ownsID(_ stem: String) -> Bool {
+                guard stem == id || stem.hasPrefix(id + ".") else { return false }
+                return !others.contains { stem == $0 || stem.hasPrefix($0 + ".") }
+            }
             var out: [(URL, String)] = []
             for place in Self.places {
                 for entry in listing[place.folder] ?? [] {
@@ -125,15 +143,11 @@ public enum AppInventory {
                         // "group.net.whatsapp.WhatsApp.shared", "TEAMID.com.vendor.app" — the ID as
                         // whole dot-separated parts, so com.vendor.Notes never matches NotesPro's.
                         matches = ("." + e + ".").contains("." + id + ".")
-                    case "Application Support", "Logs":
-                        // Folders named after the app are common here, but only an exact name counts.
-                        matches = stem == id || e == appName
-                    case "Preferences/ByHost":
-                        matches = stem.hasPrefix(id + ".")
-                    case "LaunchAgents":
-                        matches = stem == id || stem.hasPrefix(id + ".")
+                            && !others.contains { ("." + e + ".").contains("." + $0 + ".") }
+                    case "Application Support", "Logs", "Caches":
+                        matches = ownsID(stem) || names.contains(e)
                     default:
-                        matches = stem == id
+                        matches = ownsID(stem)
                     }
                     if matches { out.append((library.appendingPathComponent(place.folder).appendingPathComponent(entry), place.kind)) }
                 }

@@ -359,6 +359,27 @@ final class HeadroomCoreTests: XCTestCase {
                        .refused("protected folder"), "the Trash folder itself is never removed")
     }
 
+    func testExplainerNamesWhatThingsAreAndWhoOwnsThem() throws {
+        let names = ["com.tinyspeck.slackmacgap": "Slack", "net.whatsapp.WhatsApp": "WhatsApp"]
+        let lookup: (String) -> String? = { names[$0] }
+        func explain(_ rel: String, dir: Bool = true) throws -> Explanation {
+            let url = home.appendingPathComponent(rel)
+            if dir { try fm.createDirectory(at: url, withIntermediateDirectories: true) } else { try write(rel) }
+            return Explainer.explain(url, home: home, appName: lookup)
+        }
+        let cache = try explain("Library/Caches/com.tinyspeck.slackmacgap.ShipIt")
+        XCTAssertEqual(cache.what, "Slack's cache")
+        XCTAssertEqual(cache.verdict, .safe)
+        XCTAssertEqual(cache.ownerBundleID, "com.tinyspeck.slackmacgap", "suffixed IDs resolve to the app")
+        let group = try explain("Library/Group Containers/group.net.whatsapp.WhatsApp.shared")
+        XCTAssertEqual(group.what, "WhatsApp's shared data")
+        XCTAssertEqual(group.verdict, .keep)
+        XCTAssertEqual(try explain("Desktop/site/node_modules").verdict, .safe)
+        XCTAssertEqual(try explain("Downloads/Figma.dmg", dir: false).what, "An installer")
+        XCTAssertEqual(try explain("Movies/talk.mov", dir: false).verdict, .keep, "your videos are never called safe")
+        XCTAssertTrue(try explain("Desktop/mystery.xyz", dir: false).isGuess)
+    }
+
     // MARK: - Growth & big files
 
     func testGrowthNamesTheFolderThatGrew() {
@@ -471,13 +492,26 @@ final class HeadroomCoreTests: XCTestCase {
         try Data().write(to: lib.appendingPathComponent("Preferences/com.vendor.Notes.plist"))
         try Data().write(to: lib.appendingPathComponent("Preferences/com.vendor.NotesPro.plist"))
 
-        let found = AppInventory.LibraryIndex(library: lib).leftovers(bundleID: "com.vendor.Notes", name: "Notes")
+        // Suffixed IDs are the app's own (updater cache, widget sandbox, helper prefs)…
+        for rel in ["Caches/com.vendor.Notes.ShipIt", "Containers/com.vendor.Notes.widget", "Application Support/NotesKit",
+                    "Caches/com.vendor.Notes.beta", "Application Support/Electron"] {
+            try fm.createDirectory(at: lib.appendingPathComponent(rel), withIntermediateDirectories: true)
+        }
+        try Data().write(to: lib.appendingPathComponent("Preferences/com.vendor.Notes.helper.plist"))
+
+        // …unless another installed app owns the longer ID (com.vendor.Notes.beta).
+        let found = AppInventory.LibraryIndex(library: lib).leftovers(bundleID: "com.vendor.Notes", name: "Notes", executable: "NotesKit",
+                                                                    otherBundleIDs: ["com.vendor.notes", "com.vendor.notes.beta"])
         let names = Set(found.map { $0.url.path.replacingOccurrences(of: lib.path + "/", with: "") })
         XCTAssertEqual(names, [
             "Application Support/com.vendor.Notes", "Application Support/Notes", "Caches/com.vendor.Notes",
             "Containers/com.vendor.Notes", "Group Containers/ABCDE.com.vendor.Notes.shared",
             "Saved Application State/com.vendor.Notes.savedState", "Preferences/com.vendor.Notes.plist",
-        ], "exact bundle-ID matches and the app's own name only — never NotesSync or NotesPro")
+            "Caches/com.vendor.Notes.ShipIt", "Containers/com.vendor.Notes.widget", "Application Support/NotesKit",
+            "Preferences/com.vendor.Notes.helper.plist",
+        ], "bundle ID (+ its own suffixes) and the app's exact names — never NotesSync, NotesPro, another app's .beta or a generic Electron")
+        XCTAssertTrue(AppInventory.LibraryIndex(library: lib).leftovers(bundleID: "x.y", name: "Y", executable: "Electron")
+            .allSatisfy { !$0.url.path.hasSuffix("/Electron") }, "generic executable names never match")
     }
 
     // MARK: - External drives
