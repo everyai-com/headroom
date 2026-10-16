@@ -367,8 +367,9 @@ final class AppModel: ObservableObject {
             return nil
         }
         let known = knownFinding(for: url)
-        if known?.safety == .keep || safetyByPath[url.path] == .keep {
-            return "Your data — \(known?.detail ?? "manage it in the app that owns it.")"
+        // Your data can go to the Trash (recoverable, after a warning) — never emptied or deleted for good here.
+        if action != .trash, known?.safety == .keep || safetyByPath[url.path] == .keep {
+            return "Your data — move it to the Trash instead, so it can come back"
         }
         let method: CleanupMethod
         switch action {

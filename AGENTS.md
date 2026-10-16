@@ -57,8 +57,15 @@ README screenshots are rendered with `--demo` so no personal projects or files a
 - `SafetyGuard` compares paths case-folded — the startup disk is case-insensitive.
 - Map actions (Trash / Empty / Delete / Reclaim on any square) build a `Finding.picked` and go
   through `Cleaner` like everything else — never `FileManager` directly. Every destructive one
-  confirms first; `.keep` folders, anything inside a real `.app` bundle and any
-  `.photoslibrary` are refused (apps are uninstalled whole, via `AppInventory`).
+  confirms first. `.keep` folders (your data) may only be moved to the Trash, with the explainer's
+  warning in the confirm — never emptied or deleted for good; anything inside a real `.app` bundle
+  and any `.photoslibrary` are refused (apps are uninstalled whole, via `AppInventory`).
+- `Explainer` (Core) says what any path is, what deleting it means and who owns it; the map's
+  `MapInspector` shows it beside the selection with every action as a button. An app's data folder
+  offers "Uninstall <App> completely" (app + all leftovers, one Activity entry, Undo).
+- Leftovers match the bundle ID exactly or with a `.suffix` (ShipIt updaters, extensions, helpers)
+  unless that suffixed ID is another installed app; exact app/executable names count only in
+  Application Support, Caches and Logs, never generic executables (Electron, launcher…).
 - The guard also refuses git history (`.git` and inside) and live VM disks (`~/.colima`,
   `~/.lima`, `~/.orbstack`…) — except for a `.command` finding (the tool's own prune). Only
   `xcrun simctl` may reach `/Library/Developer/CoreSimulator`. A finding with no paths never runs.

@@ -433,3 +433,24 @@ struct ToastView: View {
         .frame(maxWidth: 640)
     }
 }
+
+/// A full-width action button: filled for the main action, outlined for the rest.
+struct WideButtonStyle: ButtonStyle {
+    var tint: Color
+    var filled: Bool
+    @Environment(\.isEnabled) private var enabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12.5, weight: .semibold))
+            .foregroundStyle(filled ? Color.black.opacity(0.88) : tint)
+            .padding(.horizontal, 12).padding(.vertical, 9)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(filled ? AnyShapeStyle(tint.gradient) : AnyShapeStyle(tint.opacity(0.08)))
+            )
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(tint.opacity(filled ? 0 : 0.3)))
+            .opacity(enabled ? (configuration.isPressed ? 0.75 : 1) : 0.35)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+    }
+}

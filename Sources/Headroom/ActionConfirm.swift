@@ -45,6 +45,10 @@ enum ActionText {
         case .delete: text = "Frees \(size) right away. This can't be undone."
         case .uninstall: text = "The app and the data it keeps in your Library move to the Trash. Quit it first."
         }
+        if p.action == .trash, let url = p.node.url, known?.safety == .keep || model.safetyByPath[url.path] == .keep
+            || model.explanation(for: p.node)?.verdict == .keep {
+            text += "\n\nThis is your data: \(model.explanation(for: p.node)?.ifDeleted ?? known?.detail ?? "it won't come back on its own.")"
+        }
         if p.action != .reclaim, p.action != .uninstall {
             if let known, known.safety == .review { text += "\n\nHeadroom says review first: \(known.detail)" }
             if p.node.url?.path.contains("/Library/") == true {

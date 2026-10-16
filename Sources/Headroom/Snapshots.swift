@@ -31,6 +31,15 @@ enum Snapshots {
             save(MainView(screen: screen, override: override).environmentObject(model), size: size,
                  to: dir.appendingPathComponent("\(screen.rawValue.lowercased()).png"))
         }
+        // The map with something picked: the inspector beside it (an app's data, so every action shows).
+        if let map = model.map {
+            func all(_ n: DiskNode) -> [DiskNode] { [n] + n.children.flatMap(all) }
+            let owned = all(map).filter { model.owningApp(of: $0) != nil && $0.url?.pathExtension != "app" }
+            if let pick = owned.max(by: { $0.bytes < $1.bytes }) {
+                save(MainView(screen: .map, override: AnyView(MapView(selected: pick))).environmentObject(model), size: size,
+                     to: dir.appendingPathComponent("map-selected.png"))
+            }
+        }
         // The notch, collapsed and expanded, over a wallpaper-ish backdrop with the camera housing drawn in.
         let g = NotchController.geometry()
         let notchW = g.map { $0.notchWidth > 0 ? $0.notchWidth : 185 } ?? 185

@@ -14,6 +14,7 @@ struct MapView: View {
     @State private var pending: PendingAction?
     @State private var working = false
     @State private var outcome: AppModel.MapOutcome?
+    @State private var uninstalling: InstalledApp?
     @Environment(\.snapshotMode) private var snapshot
 
     init(path: [DiskNode] = [], selected: DiskNode? = nil) {
@@ -27,6 +28,7 @@ struct MapView: View {
         VStack(alignment: .leading, spacing: 14) {
             header
             if let node = current {
+                HStack(alignment: .top, spacing: 14) {
                 GeometryReader { geo in
                     TreemapTiles(node: node, size: geo.size, highlightSafe: highlightSafe, hovered: $hovered,
                                  selectedID: selected?.id,
@@ -42,6 +44,15 @@ struct MapView: View {
                     if loading || working { ProgressView().controlSize(.large).tint(.white) }
                 }
                 .overlay(alignment: .top) { toast }
+                    if let sel = selected {
+                        MapInspector(node: sel, working: working, canLookInside: canLookInside(sel),
+                                     ask: { ask($0, sel) }, uninstall: { uninstalling = $0 },
+                                     lookInside: { Task { await drill(into: sel) } }, close: { selected = nil })
+                            .frame(width: 320)
+                            .transition(.move(edge: .trailing).combined(with: .opacity))
+                    }
+                }
+                .animation(.spring(response: 0.35, dampingFraction: 0.86), value: selected?.id)
                 footer
             } else if let p = model.mapProgress {
                 Card {
@@ -57,6 +68,17 @@ struct MapView: View {
             }
         }
         .confirmingAction($pending) { p in await run(p) }
+        .confirmationDialog("Uninstall \(uninstalling?.name ?? "")?", isPresented: Binding(get: { uninstalling != nil }, set: { if !$0 { uninstalling = nil } }),
+                            presenting: uninstalling) { app in
+            Button("Uninstall \(app.totalSize.gb)", role: .destructive) { Task { await uninstallCompletely(app) } }
+            Button("Cancel", role: .cancel) {}
+        } message: { app in
+            Text("\(app.name) and everything it keeps move to the Trash: " +
+                 Dictionary(grouping: app.leftovers, by: \.kind).map { "\($0.key.lowercased()) \($0.value.reduce(0) { $0 + $1.size.allocated }.gb)" }
+                    .sorted().joined(separator: ", ") +
+                 ". Quit it first. Put it back from Activity until you empty the Trash.")
+        }
+        .task { if model.apps.isEmpty { await model.scanApps() } }
         .background {
             // ⌘⌫ moves the selection to the Trash, as in Finder (after the usual confirm).
             Button("") { if let s = selected { ask(.trash, s) } }
@@ -102,12 +124,15 @@ struct MapView: View {
                         .font(.system(size: 11)).foregroundStyle(Theme.textTertiary).lineLimit(1).truncationMode(.middle)
                 }
                 Spacer(minLength: 8)
-                if let s = selected { actions(for: s) }
+                if selected == nil, let e = model.explanation(for: h) {
+                    Text(e.what).font(.system(size: 12)).foregroundStyle(Theme.textSecondary).lineLimit(1)
+                    Text("· click for details & delete").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
+                }
             } else {
                 HStack(spacing: 14) {
                     LegendDot(color: Theme.safe, label: "Safe to reclaim")
                     LegendDot(color: Theme.review, label: "Review first")
-                    Text("Click a folder to select it · double-click to look inside · right-click for options")
+                    Text("Click anything to see what it is and delete it · double-click to look inside")
                         .font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                 }
                 Spacer()
@@ -115,29 +140,6 @@ struct MapView: View {
         }
         .frame(height: 34)
         .foregroundStyle(Theme.textPrimary)
-    }
-
-    @ViewBuilder func actions(for node: DiskNode) -> some View {
-        if canLookInside(node) {
-            Button("Look inside") { Task { await drill(into: node) } }.buttonStyle(GhostButtonStyle())
-        }
-        if let url = node.url {
-            Button("Reveal") { model.reveal([url]) }.buttonStyle(GhostButtonStyle())
-        }
-        // The one action that fits best, up front; everything else in the menu.
-        if let primary = primaryAction(for: node) {
-            Button(ActionText.label(primary) + (primary == .reclaim ? "" : "…")) { ask(primary, node) }
-                .buttonStyle(PrimaryButtonStyle(tint: primary == .reclaim ? Theme.safe : Theme.critical))
-                .disabled(working)
-        }
-        if snapshot {
-            Image(systemName: "ellipsis.circle").foregroundStyle(Theme.textSecondary)
-        } else {
-            Menu { menu(for: node) } label: { Image(systemName: "ellipsis.circle") }
-                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-        }
-        Button { selected = nil } label: { Image(systemName: "xmark").font(.system(size: 10, weight: .bold)) }
-            .buttonStyle(.plain).foregroundStyle(Theme.textTertiary).help("Deselect")
     }
 
     /// Every option for a square: the right-click menu and the ⋯ button.
@@ -219,6 +221,20 @@ struct MapView: View {
         // Trashed and uninstalled things can be put back straight from the toast.
         let undoable = !result.failed && (p.action == .trash || p.action == .uninstall)
         model.show(result.message, failed: result.failed, undo: undoable ? model.activity.entries.first?.id : nil)
+    }
+
+    /// Uninstall an app with all its data from wherever its square is on the map.
+    func uninstallCompletely(_ app: InstalledApp) async {
+        working = true
+        let r = await model.uninstallApp(app)
+        if let sel = selected, let url = sel.url, r.trashed.contains(where: { url.path == $0 || url.path.hasPrefix($0 + "/") }) {
+            let outcome = AppModel.MapOutcome(message: r.message, failed: r.failed, nodeID: sel.id, remaining: 0, freedFromMap: sel.bytes)
+            model.reflect(outcome, ancestors: Set(path.map(\.id) + [model.map?.id ?? "root"]))
+            path = path.compactMap { $0.reflecting(removalOf: sel.id, remaining: 0, freed: sel.bytes, ancestors: Set(path.map(\.id))) }
+            selected = nil
+        }
+        working = false
+        model.show(r.message, failed: r.failed, undo: r.trashed.isEmpty ? nil : model.activity.entries.first?.id)
     }
 
     // MARK: Navigation
