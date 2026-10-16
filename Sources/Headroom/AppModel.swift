@@ -178,6 +178,17 @@ final class AppModel: ObservableObject {
         phase = .done(report.freedBytes)
         refreshVolume()
         history.record(volume: volume, safe: 0, freed: report.freedBytes)
+        // Say what happened — a reclaim that skipped everything must not look like a no-op.
+        if !automatic {
+            let names = Dictionary(plan.map { ($0.id, $0.title) }, uniquingKeysWith: { a, _ in a })
+            if let skip = report.skipped.first {
+                let what = names[skip.id] ?? skip.id
+                show((report.reclaimed.isEmpty ? "Couldn't reclaim" : "Freed \(report.freedBytes.gb) · \(report.skipped.count) skipped")
+                     + " — \(what): \(skip.reason)", failed: report.reclaimed.isEmpty)
+            } else {
+                show("Freed \(report.freedBytes.gb) from \(report.reclaimed.count) item\(report.reclaimed.count == 1 ? "" : "s")")
+            }
+        }
         // Rescan quietly so the lists reflect reality.
         try? await Task.sleep(for: .seconds(1.5))
         phase = .idle
@@ -426,6 +437,14 @@ final class AppModel: ObservableObject {
             return MapOutcome(message: "Couldn't read \(url.lastPathComponent)", failed: true,
                               nodeID: node.id, remaining: node.bytes, freedFromMap: 0)
         }
+        let r = await uninstallApp(app)
+        return MapOutcome(message: r.message, failed: r.failed, nodeID: node.id,
+                          remaining: r.trashed.contains(app.url.path) ? 0 : node.bytes,
+                          freedFromMap: r.trashed.contains(app.url.path) ? node.bytes : 0)
+    }
+
+    /// Uninstall one app with every bit of data it keeps (to the Trash, one Activity entry).
+    func uninstallApp(_ app: InstalledApp) async -> (message: String, failed: Bool, trashed: Set<String>) {
         let running = NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == app.bundleID }
         let report = AppInventory.uninstall(app, isRunning: running)
         if !report.trashed.isEmpty {
@@ -434,13 +453,45 @@ final class AppModel: ObservableObject {
         }
         await scanApps()
         refreshVolume()
+        let trashed = Set(report.trashed.map(\.path))
         if let fail = report.failed.first {
-            return MapOutcome(message: "Couldn't uninstall \(app.name): \(fail.1)", failed: true,
-                              nodeID: node.id, remaining: report.trashed.contains(app.url) ? 0 : node.bytes,
-                              freedFromMap: report.trashed.contains(app.url) ? node.bytes : 0)
+            return ("Couldn't uninstall \(app.name): \(fail.1)", true, trashed)
         }
-        return MapOutcome(message: "Moved \(app.name) and its data (\(report.bytes.gb)) to the Trash", failed: false,
-                          nodeID: node.id, remaining: 0, freedFromMap: node.bytes)
+        return ("Moved \(app.name) and all its data (\(report.bytes.gb)) to the Trash", false, trashed)
+    }
+
+    // MARK: What is this?
+
+    func appName(forBundleID id: String) -> String? {
+        let lower = id.lowercased()
+        if let app = apps.first(where: { $0.bundleID.lowercased() == lower }) { return app.name }
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) else { return nil }
+        return url.deletingPathExtension().lastPathComponent
+    }
+
+    /// What a square on the map is and what deleting it means. The scan's own verdict wins when
+    /// it knows the exact folder.
+    func explanation(for node: DiskNode) -> Explanation? {
+        guard let url = node.url else { return nil }
+        var e = Explainer.explain(url, appName: { [weak self] in self?.appName(forBundleID: $0) })
+        if let known = knownFinding(for: url) {
+            e.detail = known.detail
+            e.verdict = known.safety
+            if let rebuild = known.rebuild { e.ifDeleted = "Comes back with `\(rebuild)` when you need it." }
+        }
+        return e
+    }
+
+    /// The installed app this square is, or whose data it is — so it can go with everything it keeps.
+    func owningApp(of node: DiskNode) -> InstalledApp? {
+        guard let url = node.url else { return nil }
+        let path = url.standardizedFileURL.path
+        if let app = apps.first(where: { $0.url.standardizedFileURL.path == path }) { return app }
+        if let app = apps.first(where: { app in
+            app.leftovers.contains { path == $0.url.path || path.hasPrefix($0.url.path + "/") }
+        }) { return app }
+        guard let id = explanation(for: node)?.ownerBundleID?.lowercased() else { return nil }
+        return apps.first { $0.bundleID.lowercased() == id }
     }
 
     /// Update the map in place after an action (rebuilding it walks the whole disk).

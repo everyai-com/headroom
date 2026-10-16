@@ -284,6 +284,16 @@ final class HeadroomCoreTests: XCTestCase {
         XCTAssertNotEqual(guardrail.check(runtime, for: finding(runtime, method: .command(executable: "/bin/rm", arguments: ["-rf"]))), .allowed)
     }
 
+    func testSharedSimulatorCachesGoThroughSimctlOnly() {
+        let guardrail = SafetyGuard(home: home)
+        let caches = URL(fileURLWithPath: "/Library/Developer/CoreSimulator/Caches")
+        let simctl = Finding(id: "sc", title: "", subtitle: "", detail: "", category: .developerTools, safety: .safe, paths: [caches],
+                             method: .command(executable: "/usr/bin/xcrun", arguments: ["simctl", "runtime", "dyld_shared_cache", "remove", "--all"]),
+                             symbol: "")
+        XCTAssertEqual(guardrail.check(caches, for: simctl), .allowed)
+        XCTAssertNotEqual(guardrail.check(caches, for: finding(caches, method: .delete)), .allowed)
+    }
+
     func testAFindingThatNamesNoPathsIsNeverRun() {
         let f = Finding(id: "x", title: "", subtitle: "", detail: "", category: .developerTools, safety: .safe, paths: [],
                         method: .command(executable: "/usr/bin/true", arguments: []), symbol: "")

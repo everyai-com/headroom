@@ -24,7 +24,7 @@ public enum Catalog {
              category: .developerTools, safety: .safe, method: .deleteContents,
              detail: "Copied again from a device the next time you plug it in.", symbol: "iphone"),
         Rule(id: "simulator-caches", title: "Simulator caches",
-             paths: ["Library/Developer/CoreSimulator/Caches", "/Library/Developer/CoreSimulator/Caches"],
+             paths: ["Library/Developer/CoreSimulator/Caches"],
              category: .developerTools, safety: .safe, method: .deleteContents,
              detail: "Shared simulator caches, rebuilt when a simulator next boots.", symbol: "iphone.gen3"),
         Rule(id: "xcode-archives", title: "Xcode archives", paths: ["Library/Developer/Xcode/Archives"],
@@ -135,6 +135,7 @@ public enum Catalog {
         findings.append(contentsOf: await scanVersionedCaches(home: home))
         if let f = await remainingAppCaches(home: home, isCancelled: isCancelled) { findings.append(f) }
         if let f = await unavailableSimulators(home: home) { findings.append(f) }
+        if let f = await simulatorSharedCaches() { findings.append(f) }
         if let f = pnpmStore(home: home) { findings.append(f) }
         findings.append(contentsOf: await DevTools.scan(home: home))
         return findings.sorted { $0.size.allocated > $1.size.allocated }
@@ -214,6 +215,19 @@ public enum Catalog {
                        category: .developerTools, safety: .safe, paths: urls, size: size,
                        method: .command(executable: "/usr/bin/xcrun", arguments: ["simctl", "delete", "unavailable"]),
                        symbol: "iphone.slash")
+    }
+
+    /// The system-wide simulator dyld caches are root-owned: only `simctl` can remove them.
+    static func simulatorSharedCaches() async -> Finding? {
+        let dir = URL(fileURLWithPath: "/Library/Developer/CoreSimulator/Caches")
+        guard FileManager.default.fileExists(atPath: dir.path) else { return nil }
+        let size = DiskWalker.measure([dir])
+        guard size.allocated > 0 else { return nil }
+        return Finding(id: "simulator-shared-caches", title: "Simulator shared caches", subtitle: dir.path,
+                       detail: "dyld caches for simulator runtimes, rebuilt when a simulator next boots. Removed with Xcode's own `simctl`.",
+                       category: .developerTools, safety: .safe, paths: [dir], size: size, lastUsed: size.newestModification,
+                       method: .command(executable: "/usr/bin/xcrun", arguments: ["simctl", "runtime", "dyld_shared_cache", "remove", "--all"]),
+                       symbol: "iphone.gen3")
     }
 
     /// The pnpm store: `pnpm store prune` removes only packages no project references.
