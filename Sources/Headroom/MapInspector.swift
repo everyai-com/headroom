@@ -119,7 +119,7 @@ struct MapInspector: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.04)))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.fill(0.04)))
     }
 
     func details(_ url: URL) -> some View {
@@ -136,7 +136,7 @@ struct MapInspector: View {
         VStack(spacing: 8) {
             if let url = node.url {
                 if let known = model.knownFinding(for: url), known.method != .none, known.safety != .keep {
-                    wide(.reclaim, "Reclaim \(node.bytes.gb) safely", symbol: "sparkles", tint: Theme.safe, filled: true)
+                    wide(.reclaim, "Free up \(node.bytes.gb) safely", symbol: "sparkles", tint: Theme.safe, filled: true)
                 }
                 if let owner, !owner.isApple {
                     Button { uninstall(owner) } label: {

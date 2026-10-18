@@ -30,7 +30,7 @@ struct OverviewView: View {
                 Image(systemName: "lock.shield.fill").font(.system(size: 22)).foregroundStyle(Theme.review)
                 VStack(alignment: .leading, spacing: 3) {
                     Text("See inside “Other”").font(.system(size: 14, weight: .semibold))
-                    Text("macOS hides Mail, Safari and some app containers until you give Headroom Full Disk Access. Turn on Headroom in the list — this banner goes away by itself. Reclaiming never needs it.")
+                    Text("macOS hides Mail, Safari and some app containers until you give Headroom Full Disk Access. Turn on Headroom in the list — this banner goes away by itself. Emptying the Trash and uninstalling apps need it too.")
                         .font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 12)
@@ -150,7 +150,7 @@ struct OverviewView: View {
 
     func healthLine(_ v: VolumeStatus) -> String {
         switch v.health {
-        case .critical: "macOS needs about 10 GB free for updates, swap and apps to run smoothly. Reclaim below — nothing you made is touched."
+        case .critical: "macOS needs about 10 GB free for updates and apps to run smoothly. Free some up below — nothing you made is touched."
         case .tight: "You're under 10 GB. Agentic coding refills this fast — every repo an agent touches grows its own dependencies."
         case .good: "Plenty of room. Headroom keeps watching and tells you before it gets tight."
         }
@@ -166,7 +166,7 @@ struct OverviewView: View {
         let total = model.safeReclaimable
         return Card {
             VStack(alignment: .leading, spacing: 16) {
-                SectionTitle(title: "Reclaim safely", trailing: model.lastScan.map { "scanned \($0.ago)" })
+                SectionTitle(title: "Free up space safely", trailing: model.lastScan.map { "scanned \($0.ago)" })
                 HStack(spacing: 18) {
                     ZStack {
                         Donut(slices: byCategory.map { (Double($0.bytes), Theme.color(for: $0.cat)) })
@@ -186,7 +186,7 @@ struct OverviewView: View {
                             }
                         }
                         if byCategory.isEmpty {
-                            Text(model.lastScan == nil ? "Scanning…" : "Nothing safe left to reclaim.")
+                            Text(model.lastScan == nil ? "Scanning…" : "Nothing left that's safe to remove.")
                                 .font(.system(size: 13)).foregroundStyle(Theme.textSecondary)
                         }
                     }
@@ -198,7 +198,7 @@ struct OverviewView: View {
                 }
                 .buttonStyle(PrimaryButtonStyle(large: true))
                 .disabled(total == 0 || model.isBusy)
-                Text("Only caches and build output your tools recreate on their own. Your files, chats, apps and projects stay exactly as they are.")
+                Text("Only temporary files your apps and tools make again on their own. Your files, chats, apps and projects stay exactly as they are.")
                     .font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary).fixedSize(horizontal: false, vertical: true)
                 if model.reviewReclaimable > 0 {
                     Button { openReclaim() } label: {
@@ -219,7 +219,7 @@ struct OverviewView: View {
         case .reclaiming: "Reclaiming…"
         case .done(let freed): "Freed \(freed.gb)"
         case .scanning: "Scanning…"
-        case .idle: total > 0 ? "Reclaim \(total.gb) safely" : "All clean"
+        case .idle: total > 0 ? "Free up \(total.gb) safely" : "All clean"
         }
     }
 
@@ -262,7 +262,7 @@ struct Donut: View {
     var body: some View {
         let total = max(slices.reduce(0) { $0 + $1.0 }, 1)
         ZStack {
-            Circle().stroke(Color.white.opacity(0.06), lineWidth: 16)
+            Circle().stroke(Theme.fill(0.06), lineWidth: 16)
             ForEach(Array(slices.enumerated()), id: \.offset) { i, s in
                 let start = slices.prefix(i).reduce(0) { $0 + $1.0 } / total
                 Circle()
@@ -293,7 +293,7 @@ struct ProgressLine: View {
         VStack(alignment: .leading, spacing: 8) {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.07))
+                    Capsule().fill(Theme.fill(0.07))
                     Capsule().fill(Theme.safe).frame(width: geo.size.width * Double(done) / Double(max(total, 1)))
                 }
             }

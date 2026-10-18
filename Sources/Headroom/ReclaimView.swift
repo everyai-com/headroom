@@ -70,9 +70,9 @@ struct ReclaimView: View {
                 Circle().fill(color).frame(width: 7, height: 7)
                 Text(title).font(.system(size: 12, weight: .medium))
             }
-            .foregroundStyle(on ? Color.black : Theme.textPrimary)
+            .foregroundStyle(on ? Theme.inverseText : Theme.textPrimary)
             .padding(.horizontal, 12).padding(.vertical, 7)
-            .background(Capsule().fill(on ? Color.white : Color.white.opacity(0.06)))
+            .background(Capsule().fill(on ? Theme.textPrimary : Theme.fill(0.06)))
             .overlay(Capsule().strokeBorder(Theme.hairline))
         }
         .buttonStyle(.plain)
@@ -220,9 +220,9 @@ struct ReclaimView: View {
 
     var barLabel: String {
         switch model.phase {
-        case .reclaiming: "Reclaiming…"
+        case .reclaiming: "Freeing up…"
         case .done(let freed): "Freed \(freed.gb)"
-        default: "Reclaim \(model.selectedBytes.gb)"
+        default: "Free up \(model.selectedBytes.gb)"
         }
     }
 }
@@ -255,7 +255,7 @@ struct FindingRow: View {
                     if let rebuild = finding.rebuild {
                         Text(rebuild).font(.system(size: 10.5, design: .monospaced)).foregroundStyle(Theme.textSecondary)
                             .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(RoundedRectangle(cornerRadius: 5).fill(Color.white.opacity(0.06)))
+                            .background(RoundedRectangle(cornerRadius: 5).fill(Theme.fill(0.06)))
                     }
                 }
                 Text(finding.subtitle).font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary).lineLimit(1).truncationMode(.middle)

@@ -36,19 +36,27 @@ struct AppsView: View {
                     Text("\(data.gb) of that is data apps keep in your Library").font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
                 }
                 Spacer()
+                let selectable = sorted.filter { !$0.isApple }
+                let allOn = !selectable.isEmpty && selectable.allSatisfy { model.selectedApps.contains($0.id) }
+                Button(allOn ? "Deselect all" : "Select all") {
+                    if allOn { model.selectedApps.subtract(selectable.map(\.id)) } else { model.selectedApps.formUnion(selectable.map(\.id)) }
+                }
+                .buttonStyle(GhostButtonStyle())
+                .keyboardShortcut("a", modifiers: .command)
+                .disabled(selectable.isEmpty)
                 SearchField(text: $query, prompt: "Find an app").frame(width: 200)
                 HStack(spacing: 4) {
                     ForEach(Sort.allCases, id: \.self) { s in
                         Button(s.rawValue) { sort = s }
                             .buttonStyle(.plain)
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(sort == s ? Color.black : Theme.textSecondary)
+                            .foregroundStyle(sort == s ? Theme.inverseText : Theme.textSecondary)
                             .padding(.horizontal, 10).padding(.vertical, 5)
-                            .background(Capsule().fill(sort == s ? Color.white : Color.clear))
+                            .background(Capsule().fill(sort == s ? Theme.textPrimary : Color.clear))
                     }
                 }
                 .padding(3)
-                .background(Capsule().fill(Color.white.opacity(0.06)))
+                .background(Capsule().fill(Theme.fill(0.06)))
             }
             if case .scanning(let label) = model.appsPhase, model.apps.isEmpty {
                 Card { Text(label).foregroundStyle(Theme.textSecondary) }
@@ -71,7 +79,7 @@ struct AppsView: View {
         }
         .overlay(alignment: .bottom) { bar }
         .animation(.spring(response: 0.3, dampingFraction: 0.85), value: model.selectedApps.isEmpty)
-        .confirmationDialog(chosen.count == 1 ? "Uninstall \(chosen.first?.name ?? "")?" : "Uninstall \(chosen.count) apps?",
+        .confirmSheet(chosen.count == 1 ? "Uninstall \(chosen.first?.name ?? "")?" : "Uninstall \(chosen.count) apps?",
                             isPresented: $confirming) {
             Button("Move to Trash", role: .destructive) {
                 Task {
@@ -158,6 +166,12 @@ struct AppRow: View {
                 .opacity(app.leftovers.isEmpty ? 0.2 : 1)
                 .disabled(app.leftovers.isEmpty)
             }
+            // A click anywhere on the row selects it, like a list — not only the little circle.
+            .contentShape(Rectangle())
+            .onTapGesture {
+                guard !app.isApple else { return }
+                if on { model.selectedApps.remove(app.id) } else { model.selectedApps.insert(app.id) }
+            }
             .padding(.horizontal, 18).padding(.vertical, 11)
             if expanded {
                 VStack(alignment: .leading, spacing: 6) {
@@ -180,9 +194,16 @@ struct AppRow: View {
 
 struct SettingsView: View {
     @EnvironmentObject var model: AppModel
+    @EnvironmentObject var library: LibraryModel
     @Environment(\.snapshotMode) private var snapshot
     var launchAtLogin: Binding<Bool>
     @State private var clearing: Clearing?
+    @AppStorage("look") private var look: Look = .playful
+    @AppStorage("appearance") private var appearance: Appearance = .system
+    @AppStorage("menuBarDownloads") private var menuBarDownloads = true
+    @AppStorage("readTextInImages") private var readText = true
+    @AppStorage("autoTrashInstallers") private var autoTrashInstallers = false
+    @AppStorage("autoFileScreenshots") private var autoFileScreenshots = false
 
     enum Clearing: String, Identifiable {
         case activity, history, neverTouch
@@ -212,7 +233,7 @@ struct SettingsView: View {
 
     var body: some View {
         settingsBody
-            .confirmationDialog(clearing?.title ?? "", isPresented: Binding(get: { clearing != nil }, set: { if !$0 { clearing = nil } }), presenting: clearing) { c in
+            .confirmSheet(clearing?.title ?? "", isPresented: Binding(get: { clearing != nil }, set: { if !$0 { clearing = nil } }), presenting: clearing) { c in
                 Button("Clear", role: .destructive) {
                     switch c {
                     case .activity: model.clearActivityLog()
@@ -230,14 +251,57 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 18) {
                 Card {
                     VStack(alignment: .leading, spacing: 16) {
+                        SectionTitle(title: "Look", trailing: "⌃⌘T switches")
+                        HStack(spacing: 12) {
+                            ForEach(Look.allCases) { l in lookChoice(l) }
+                        }
+                        HStack(spacing: 8) {
+                            Text("Appearance").font(.system(size: 13, weight: .medium))
+                            Spacer()
+                            ForEach(Appearance.allCases) { a in Pill(title: a.title, on: appearance == a) { appearance = a } }
+                        }
+                    }
+                }
+                Card {
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionTitle(title: "Your files")
+                        HStack(alignment: .top) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Quick Search").font(.system(size: 13, weight: .medium))
+                                Text("Files, apps, commands and sums in one panel over any app. ↩ opens, ⌘K shows every action, ⌘I the details, ⌘1–9 picks a row.")
+                                    .font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer()
+                            ShortcutRecorder()
+                        }
+                        toggleRow("Recent downloads in the menu bar", "The last ten files that landed in Downloads, with thumbnails — drag one straight into another app.",
+                                  on: $menuBarDownloads)
+                        toggleRow("Read the text in screenshots and photos",
+                                  "So you can search for the words in them (that Wi-Fi password, a tracking number). Done on this Mac with Apple's Vision — nothing is uploaded. \(library.recognized.count) read so far.",
+                                  on: $readText)
+                    }
+                }
+                Card {
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionTitle(title: "Automatic clean up", trailing: "off until you turn it on")
+                        toggleRow("Move old installers to the Trash",
+                                  "Disk images and packages in Downloads you haven't touched for 30 days. At most every 6 hours; each run is in Activity, with Put Back.",
+                                  on: $autoTrashInstallers)
+                        toggleRow("File screenshots into a folder per month",
+                                  "Screenshots older than a day move from \(AutoRules.screenshotFolder().tildePath) into Screenshots/2026-10 and so on. Nothing is deleted; Put Back moves them home.",
+                                  on: $autoFileScreenshots)
+                    }
+                }
+                Card {
+                    VStack(alignment: .leading, spacing: 16) {
                         SectionTitle(title: "Watching")
                         toggleRow("Tell me before space runs out", "A notification when free space drops below the threshold, or falls fast.",
                                   on: $model.notificationsEnabled)
                         sliderRow("Warn below", value: $model.lowSpaceThresholdGB, range: 5...60, unit: "GB")
                         toggleRow("Show in the notch", "The live readout around your camera notch. Hover it for details.", on: $model.showNotch)
                         toggleRow("Open at login", "Headroom runs quietly in the notch and menu bar.", on: launchAtLogin)
-                        toggleRow("Reclaim automatically when space is low",
-                                  "Below the threshold, Headroom reclaims the safe set on its own (at most every 6 hours) and tells you exactly what went. Never anything marked review.",
+                        toggleRow("Free up space automatically when it runs low",
+                                  "When free space drops below this, Headroom removes only the safe items on its own (at most every 6 hours) and tells you exactly what went. Never anything you should check first.",
                                   on: $model.autoReclaim)
                     }
                 }
@@ -248,7 +312,7 @@ struct SettingsView: View {
                             Spacer()
                             Button("Add folder…") { addExclusion() }.buttonStyle(GhostButtonStyle())
                         }
-                        Text("Headroom never suggests, reclaims or deletes anything at, inside or containing these — even from the map. Right-click any item to add it.")
+                        Text("Headroom never suggests, cleans or deletes anything at, inside or containing these — even from the map. Right-click any item to add it.")
                             .font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
                         if model.excluded.isEmpty {
                             Text("Nothing yet.").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
@@ -277,7 +341,7 @@ struct SettingsView: View {
                 Card {
                     VStack(alignment: .leading, spacing: 12) {
                         SectionTitle(title: "Full Disk Access", trailing: model.hasFullDiskAccess ? "granted" : "not granted")
-                        Text("Without it macOS hides a few folders (Mail, Safari, some app containers), shown as “Other” on the map. Headroom never needs it to reclaim safely.")
+                        Text("Without it macOS hides a few folders (Mail, Safari, some app data), shown as “Other” on the map, and blocks emptying the Trash and removing some app data.")
                             .font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
                         if !model.hasFullDiskAccess {
                             Button("Open Privacy & Security") { AppModel.openFullDiskAccessSettings() }
@@ -288,7 +352,7 @@ struct SettingsView: View {
                 Card {
                     VStack(alignment: .leading, spacing: 12) {
                         SectionTitle(title: "Headroom's data", trailing: model.ownDataBytes.gb)
-                        Text("What Headroom remembers on this Mac: the activity list, free-space history and folder growth. Clearing it never touches your files.")
+                        Text("What Headroom remembers on this Mac: the activity list, free-space history, folder growth, the file index, the text read from images and what you open from Quick Search. Clearing it never touches your files.")
                             .font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
                         HStack(spacing: 10) {
                             Button("Clear activity list…") { clearing = .activity }.buttonStyle(GhostButtonStyle())
@@ -296,6 +360,10 @@ struct SettingsView: View {
                             Button("Clear space history…") { clearing = .history }.buttonStyle(GhostButtonStyle())
                             Button("Reset never-touch list…") { clearing = .neverTouch }.buttonStyle(GhostButtonStyle())
                                 .disabled(model.excluded.isEmpty)
+                            Button("Forget text read from images") { library.text.clear(); library.recognized = [:]; model.show("Recognised text forgotten") }
+                                .buttonStyle(GhostButtonStyle()).disabled(library.recognized.isEmpty)
+                            Button("Reset Quick Search ranking") { library.forgetQuickHistory(); model.show("Quick Search forgot what you open") }
+                                .buttonStyle(GhostButtonStyle())
                             Spacer()
                             Button("Show in Finder") { model.reveal([HeadroomPaths.support]) }.buttonStyle(GhostButtonStyle())
                         }
@@ -324,12 +392,36 @@ struct SettingsView: View {
                     Card {
                         HStack {
                             Image(systemName: "sparkles").foregroundStyle(Theme.safe)
-                            Text("Headroom has reclaimed \(model.history.totalFreed.gb) for you so far.").font(.system(size: 13))
+                            Text("Headroom has freed up \(model.history.totalFreed.gb) for you so far.").font(.system(size: 13))
                         }
                     }
                 }
             }
         }
+    }
+
+    func lookChoice(_ l: Look) -> some View {
+        Button { look = l } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    ForEach([FileKind.image, .video, .audio, .document], id: \.self) { k in
+                        let saved = Theme.look
+                        let _ = { Theme.look = l }()
+                        let (top, bottom) = Theme.shelf(for: k)
+                        let _ = { Theme.look = saved }()
+                        FolderShape(tabHeight: 6, radius: 6).fill(LinearGradient(colors: [top, bottom], startPoint: .top, endPoint: .bottom))
+                            .frame(width: 34, height: 26)
+                    }
+                }
+                Text(l.title).font(.system(size: 13, weight: .semibold))
+                Text(l == .playful ? "Colourful and friendly" : "Quiet black, white and grey").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.fill(0.04)))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(look == l ? Theme.accent : Theme.hairline, lineWidth: look == l ? 2 : 1))
+        }
+        .buttonStyle(.plain)
     }
 
     func addExclusion() {
@@ -349,7 +441,7 @@ struct SettingsView: View {
                     Text(detail).font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
                 }
                 Spacer()
-                Capsule().fill(on.wrappedValue ? Theme.safe : Color.white.opacity(0.15))
+                Capsule().fill(on.wrappedValue ? Theme.safe : Theme.fill(0.15))
                     .frame(width: 38, height: 22)
                     .overlay(alignment: on.wrappedValue ? .trailing : .leading) {
                         Circle().fill(.white).padding(2.5)
@@ -368,7 +460,7 @@ struct SettingsView: View {
                 GeometryReader { geo in
                     let f = (value.wrappedValue - range.lowerBound) / (range.upperBound - range.lowerBound)
                     ZStack(alignment: .leading) {
-                        Capsule().fill(Color.white.opacity(0.12)).frame(height: 4)
+                        Capsule().fill(Theme.fill(0.12)).frame(height: 4)
                         Capsule().fill(Theme.safe).frame(width: geo.size.width * f, height: 4)
                         Circle().fill(.white).frame(width: 18, height: 18).shadow(radius: 2).offset(x: geo.size.width * f - 9)
                     }

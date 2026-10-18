@@ -38,8 +38,9 @@ enum Reel {
         let model = AppModel()
         model.excluded = []
         var shots: [Shot] = []
+        let library = LibraryModel(app: model)
         func shot<V: View>(_ name: String, _ seconds: Double, _ view: V) {
-            Snapshots.save(view.environmentObject(model), size: canvas, to: dir.appendingPathComponent(name + ".png"))
+            Snapshots.save(view.environmentObject(model).environmentObject(library), size: canvas, to: dir.appendingPathComponent(name + ".png"))
             shots.append(Shot(name: name, seconds: seconds))
             print("  ✓ \(name)")
         }

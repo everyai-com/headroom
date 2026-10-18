@@ -14,7 +14,7 @@ enum ActionText {
     static func title(_ p: PendingAction, model: AppModel) -> String {
         let name = p.node.name
         switch p.action {
-        case .reclaim: return "Reclaim \(name)?"
+        case .reclaim: return "Free up \(name)?"
         case .trash: return "Move “\(name)” to the Trash?"
         case .emptyContents: return "Empty “\(name)”?"
         case .delete: return "Delete “\(name)” permanently?"
@@ -24,7 +24,7 @@ enum ActionText {
 
     static func label(_ action: AppModel.MapAction) -> String {
         switch action {
-        case .reclaim: "Reclaim"
+        case .reclaim: "Free Up"
         case .trash: "Move to Trash"
         case .emptyContents: "Empty Folder"
         case .delete: "Delete Permanently"
@@ -73,7 +73,7 @@ private struct ConfirmAction: ViewModifier {
     var run: (PendingAction) async -> Void
 
     func body(content: Content) -> some View {
-        content.confirmationDialog(pending.map { ActionText.title($0, model: model) } ?? "", isPresented: Binding(
+        content.confirmSheet(pending.map { ActionText.title($0, model: model) } ?? "", isPresented: Binding(
             get: { pending != nil }, set: { if !$0 { pending = nil } }
         ), presenting: pending) { p in
             Button(ActionText.label(p.action), role: p.action == .reclaim ? nil : .destructive) {

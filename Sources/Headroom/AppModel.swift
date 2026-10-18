@@ -42,7 +42,25 @@ final class AppModel: ObservableObject {
     }
     @Published var toast: Toast?
 
+    /// Failures land in Application Support/Headroom/problems.log too — a toast is gone in seconds.
+    static func logProblem(_ message: String) {
+        let url = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support/Headroom/problems.log")
+        let line = "\(Date().formatted(.iso8601)) \(message)\n"
+        if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(Data(line.utf8)); try? h.close() }
+        else { try? Data(line.utf8).write(to: url) }
+    }
+
     func show(_ message: String, failed: Bool = false, undo: ActivityLog.Entry.ID? = nil) {
+        var message = message
+        // Without Full Disk Access macOS blocks the Trash and other apps' data — say so instead of a vague failure.
+        let blocked = ["permission", "not permitted", "skipped", "couldn't"].contains { message.lowercased().contains($0) }
+        if blocked || failed {
+            hasFullDiskAccess = Self.checkFullDiskAccess()
+            if !hasFullDiskAccess {
+                message += " — Headroom needs Full Disk Access for this: System Settings → Privacy & Security → Full Disk Access → turn on Headroom"
+            }
+        }
+        if blocked || failed { Self.logProblem(message) }
         let t = Toast(message: message, failed: failed, undo: undo)
         toast = t
         Task { [weak self] in
@@ -64,7 +82,8 @@ final class AppModel: ObservableObject {
     /// `--demo` (for recording): projects and personal files are limited to what
     /// scripts/demo-seed.sh made, so your real projects and documents never appear on camera.
     static let demoMode = CommandLine.arguments.contains("--demo")
-    static let demoRoot = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Desktop/headroom-demo")
+    static let demoRoot = ProcessInfo.processInfo.environment["HEADROOM_DEMO_ROOT"].map { URL(fileURLWithPath: $0) }
+        ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Desktop/headroom-demo")
 
     static func isDemoPath(_ url: URL) -> Bool {
         let p = url.path
@@ -168,7 +187,7 @@ final class AppModel: ObservableObject {
             ? ProjectScanner.revalidated(safeFindings, staleDays: staleDays).filter { $0.safety == .safe }
             : selectedFindings
         guard !plan.isEmpty else { return nil }
-        phase = .reclaiming("Reclaiming \(plan.reduce(0) { $0 + $1.reclaimable }.gb)…")
+        phase = .reclaiming("Freeing up \(plan.reduce(0) { $0 + $1.reclaimable }.gb)…")
         let guardrail = self.guardrail
         let report = await Task.detached(priority: .userInitiated) {
             Cleaner(guardrail: guardrail).reclaim(plan)
@@ -183,7 +202,7 @@ final class AppModel: ObservableObject {
             let names = Dictionary(plan.map { ($0.id, $0.title) }, uniquingKeysWith: { a, _ in a })
             if let skip = report.skipped.first {
                 let what = names[skip.id] ?? skip.id
-                show((report.reclaimed.isEmpty ? "Couldn't reclaim" : "Freed \(report.freedBytes.gb) · \(report.skipped.count) skipped")
+                show((report.reclaimed.isEmpty ? "Couldn't free up space" : "Freed \(report.freedBytes.gb) · \(report.skipped.count) skipped")
                      + " — \(what): \(skip.reason)", failed: report.reclaimed.isEmpty)
             } else {
                 show("Freed \(report.freedBytes.gb) from \(report.reclaimed.count) item\(report.reclaimed.count == 1 ? "" : "s")")
@@ -245,6 +264,16 @@ final class AppModel: ObservableObject {
 
     /// Trash (or delete) several large files in one go, as one Activity entry you can put back.
     func remove(_ files: [BigFile], permanently: Bool) async -> (message: String, removed: Set<String>, undo: ActivityLog.Entry.ID?) {
+        await removeFiles(files.map { ($0.url, $0.bytes) }, permanently: permanently, label: "large files")
+    }
+
+    /// Move files to the Trash as one Activity entry you can put back (the library, duplicates, clean-up cards).
+    func trashFiles(_ files: [(url: URL, bytes: Int64)], label: String? = nil) async -> (message: String, removed: Set<String>, undo: ActivityLog.Entry.ID?) {
+        await removeFiles(files, permanently: false, label: label ?? "files")
+    }
+
+    func removeFiles(_ files: [(url: URL, bytes: Int64)], permanently: Bool, label: String) async
+        -> (message: String, removed: Set<String>, undo: ActivityLog.Entry.ID?) {
         let plan = files.map { Finding.picked($0.url, bytes: $0.bytes, method: permanently ? .delete : .trash) }
         guard !plan.isEmpty else { return ("Nothing selected", [], nil) }
         let guardrail = self.guardrail
@@ -258,7 +287,7 @@ final class AppModel: ObservableObject {
                 entry = one
             } else {
                 let landed = Dictionary(report.trashed.map { ($0.original.path, $0.inTrash.path) }, uniquingKeysWith: { a, _ in a })
-                entry = .init(kind: permanently ? .deleted : .trashed, title: "\(done.count) large files", bytes: bytes,
+                entry = .init(kind: permanently ? .deleted : .trashed, title: "\(done.count) \(label)", bytes: bytes,
                               items: done.flatMap(\.paths).map { .init(original: $0.path, inTrash: landed[$0.path]) })
             }
             activity.record(entry)
@@ -267,10 +296,84 @@ final class AppModel: ObservableObject {
         refreshVolume()
         if permanently, report.freedBytes > 0 { history.record(volume: volume, safe: safeReclaimable, freed: report.freedBytes) }
         let removed = Set(done.compactMap { $0.paths.first?.path })
-        let what = done.count == 1 ? "“\(done[0].title)”" : "\(done.count) files"
-        var message = permanently ? "Deleted \(what) — freed \(bytes.gb)" : "Moved \(what) to the Trash (\(bytes.gb))"
+        let what = done.count == 1 ? "“\(done[0].title)”" : "\(done.count) \(label)"
+        var message = done.isEmpty ? "Couldn't move \(files.count == 1 ? "it" : "them") to the Trash"
+            : permanently ? "Deleted \(what) — freed \(bytes.gb)" : "Moved \(what) to the Trash (\(bytes.gb))"
         if let skip = report.skipped.first { message += " · \(report.skipped.count) skipped: \(skip.reason)" }
         return (message, removed, undo)
+    }
+
+    // MARK: Memory
+
+    @Published var memory = MemoryStatus.current()
+    @Published var memoryGroups: [MemoryGroup] = []
+
+    func refreshMemory() async {
+        let (status, groups) = await Task.detached(priority: .utility) {
+            (MemoryStatus.current(), ProcessScanner.groups(ProcessScanner.snapshot()))
+        }.value
+        memory = status
+        memoryGroups = groups
+    }
+
+    /// nil when the group can be quit; otherwise why not.
+    func quitRefusal(_ g: MemoryGroup) -> String? {
+        if g.kind == .system { return "Part of macOS — it manages its own memory" }
+        guard let main = g.processes.min(by: { $0.pid < $1.pid }) else { return "Not running" }
+        if case .refused(let why) = ProcessGuard.check(main) { return why.prefix(1).uppercased() + why.dropFirst() }
+        return nil
+    }
+
+    /// Quit apps the polite way (they can save), or force them; stop other processes with SIGTERM/SIGKILL.
+    func quit(_ groups: [MemoryGroup], force: Bool) async -> String {
+        let targets = groups.filter { quitRefusal($0) == nil }
+        guard !targets.isEmpty else { return "Nothing to quit" }
+        let before = targets.reduce(0) { $0 + $1.footprint }
+        var failed: [String] = []
+        for g in targets {
+            if let bundle = g.bundlePath,
+               let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleURL?.standardizedFileURL.path == bundle }) {
+                let ok = force ? app.forceTerminate() : app.terminate()
+                if !ok { failed.append(g.name) }
+            } else {
+                // Children first, then the parent, so nothing restarts what we just stopped.
+                for p in g.processes.sorted(by: { $0.pid > $1.pid }) {
+                    if case .refused(let why) = ProcessGuard.stop(p, force: force) { failed.append("\(g.name): \(why)"); break }
+                }
+            }
+        }
+        // Judge by the processes we asked to stop, not the group: a lingering helper or an app that
+        // relaunches itself keeps the group alive even though the quit worked. Apps can take seconds.
+        func alive(_ p: ProcessInfoSnapshot) -> Bool {
+            var bsd = proc_bsdinfo()
+            guard proc_pidinfo(p.pid, PROC_PIDTBSDINFO, 0, &bsd, Int32(MemoryLayout<proc_bsdinfo>.size)) > 0 else { return false }
+            let started = bsd.pbi_start_tvsec > 0 ? Date(timeIntervalSince1970: TimeInterval(bsd.pbi_start_tvsec)) : nil
+            return p.started == nil || started == p.started // same pid, same start: still the same process
+        }
+        func mainAlive(_ g: MemoryGroup) -> Bool { g.processes.first { $0.pid == g.mainPID }.map(alive) ?? false }
+        let deadline = Date().addingTimeInterval(force ? 2 : 8)
+        while Date() < deadline, targets.contains(where: mainAlive) {
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+        let waiting = targets.filter(mainAlive)
+        let freed = targets.flatMap(\.processes).filter { !alive($0) }.reduce(0) { $0 + $1.footprint }
+        await refreshMemory()
+        if !failed.isEmpty { return "Couldn't quit \(failed.joined(separator: ", "))" }
+        if !waiting.isEmpty {
+            // Usually a Save dialog: bring it to the front so it isn't hidden behind Headroom.
+            for g in waiting {
+                if let bundle = g.bundlePath,
+                   let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleURL?.standardizedFileURL.path == bundle }) {
+                    app.activate()
+                }
+            }
+            let quit = targets.count - waiting.count
+            let who = waiting.count == 1 ? waiting[0].name : "\(waiting.count) apps"
+            return (quit > 0 ? "Quit \(quit), freed \(freed.gb) · " : "")
+                + "\(who) didn't quit yet — check for a Save dialog, or use Force Quit"
+        }
+        let names = targets.count == 1 ? targets[0].name : "\(targets.count) apps"
+        return "Quit \(names) — freed about \(max(freed, before).gb) of memory"
     }
 
     // MARK: Headroom's own data
@@ -374,7 +477,7 @@ final class AppModel: ObservableObject {
         let method: CleanupMethod
         switch action {
         case .reclaim:
-            guard let known, known.method != .none else { return "Not a known cache or build output" }
+            guard let known, known.method != .none else { return "Not something Headroom knows is safe to remove" }
             method = known.method
         case .emptyContents:
             guard isDirectory(url) else { return "Not a folder" }

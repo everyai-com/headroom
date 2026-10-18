@@ -259,7 +259,7 @@ struct DrivesView: View {
                     }
                 }
                 .padding(.horizontal, 10).padding(.vertical, 6)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.06)))
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.fill(0.06)))
                 if let folder = model.folder, model.results == nil {
                     Button("Copy this folder to Mac") { model.copy(folder) }.buttonStyle(PrimaryButtonStyle())
                 }
@@ -398,7 +398,7 @@ struct DrivesView: View {
             Text(title).font(.system(size: 12, weight: on ? .semibold : .medium))
                 .foregroundStyle(on ? Color.black : Theme.textSecondary)
                 .padding(.horizontal, 10).padding(.vertical, 5)
-                .background(Capsule().fill(on ? Theme.safe : Color.white.opacity(0.06)))
+                .background(Capsule().fill(on ? Theme.safe : Theme.fill(0.06)))
         }
         .buttonStyle(.plain)
     }

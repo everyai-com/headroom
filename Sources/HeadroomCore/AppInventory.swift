@@ -94,8 +94,8 @@ public enum AppInventory {
         let library: URL
         /// (subfolder, matching rule): exact bundle-ID names, or contains for group containers.
         static let places: [(folder: String, kind: String)] = [
-            ("Application Support", "Application Support"), ("Caches", "Caches"), ("Containers", "Sandbox container"),
-            ("Group Containers", "Shared container"), ("Preferences", "Preferences"), ("Preferences/ByHost", "Preferences"),
+            ("Application Support", "Application Support"), ("Caches", "Caches"), ("Containers", "App data folder"),
+            ("Group Containers", "Shared data folder"), ("Preferences", "Preferences"), ("Preferences/ByHost", "Preferences"),
             ("Saved Application State", "Saved window state"), ("HTTPStorages", "Web storage"), ("WebKit", "Web data"),
             ("Cookies", "Cookies"), ("Logs", "Logs"), ("LaunchAgents", "Launch agent"), ("Application Scripts", "Scripts"),
         ]

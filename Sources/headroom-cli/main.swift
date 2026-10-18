@@ -12,6 +12,8 @@ import HeadroomCore
 //   headroom-cli files           single files over 500 MB in your folders
 //   headroom-cli growth [hours]  what grew since the app's map snapshot ~N hours ago (default 24)
 //   headroom-cli activity        what Headroom removed, and what can still be put back
+//   headroom-cli library         your files by kind (images, videos, music…) and where downloads came from
+//   headroom-cli search "<q>"    find files in plain English: "pdfs from last week over 5 mb"
 //
 // Add --json to any of them for machine-readable output (for scripts and coding agents —
 // e.g. check free space before a large install).
@@ -128,8 +130,45 @@ Task {
         if log.entries.isEmpty { say("Nothing removed yet.") }
         emit(log.entries.map { ["date": date($0.date), "kind": $0.kind.rawValue, "title": $0.title, "bytes": $0.bytes,
                                 "paths": $0.items.map(\.original), "canPutBack": $0.canPutBack, "automatic": $0.automatic] })
+    case "library":
+        let started = Date()
+        let index = await LibraryScanner.scan()
+        say("\(index.items.count) files in \(index.roots.count) folders (\(String(format: "%.1f", Date().timeIntervalSince(started)))s)\n")
+        for kind in FileKind.allCases {
+            let t = index.totals(kind)
+            say("  \(pad(kind.title, 12)) \(pad("\(t.count)", 8)) \(gb(t.bytes))")
+        }
+        let sources = Dictionary(grouping: index.items.compactMap { item in DownloadSources.source(of: item).map { ($0, item) } }, by: { $0.0 })
+        say("\nDownloaded from (\(sources.values.reduce(0) { $0 + $1.count }) files):")
+        for (source, list) in sources.sorted(by: { $0.value.count > $1.value.count }).prefix(20) {
+            say("  \(pad(source.name, 24)) \(pad("\(list.count)", 6)) \(gb(list.reduce(0) { $0 + $1.1.bytes }))")
+        }
+        say("\nScreenshots: \(index.screenshots.count)")
+        if args.contains("--ext") {
+            for kind in FileKind.allCases {
+                let byExt = Dictionary(grouping: index.items.filter { $0.kind == kind }, by: \.ext).map { ($0.key, $0.value.count) }
+                say("  \(kind.title): " + byExt.sorted { $0.1 > $1.1 }.prefix(12).map { "\($0.0)=\($0.1)" }.joined(separator: " "))
+            }
+        }
+        emit(["files": index.items.count, "kinds": Dictionary(uniqueKeysWithValues: FileKind.allCases.map { k in
+            (k.rawValue, ["count": index.totals(k).count, "bytes": index.totals(k).bytes]) })])
+    case "search":
+        let text = args.dropFirst().joined(separator: " ")
+        var cached = LibraryIndex.loadCache()
+        if cached == nil { cached = await LibraryScanner.scan() }
+        let index = cached ?? LibraryIndex()
+        let q = LibraryQuery.parse(text)
+        let context = LibraryQuery.MatchContext(recognizedText: TextIndex().all)
+        let found = index.items.filter { q.matches($0, in: context) }.sorted { $0.latest > $1.latest }
+        say("Looking for: " + (q.chips.isEmpty ? "everything" : q.chips.map(\.label).joined(separator: " · ")))
+        say("\(found.count) files · \(gb(found.reduce(0) { $0 + $1.bytes }))\n")
+        for item in found.prefix(30) {
+            say("  \(pad(gb(item.bytes), 10)) \(pad(iso.string(from: item.latest).prefix(10).description, 11)) \(item.url.tildePath)")
+        }
+        emit(found.prefix(500).map { ["path": $0.path, "kind": $0.kind.rawValue, "bytes": $0.bytes, "modified": date($0.modified),
+                                      "source": DownloadSources.source(of: $0)?.name as Any] })
     default:
-        print("usage: headroom-cli [status|reclaim|projects|apps|map|files|growth [hours]|activity] [--json]")
+        print("usage: headroom-cli [status|reclaim|projects|apps|map|files|growth [hours]|activity|library|search \"query\"] [--json]")
     }
 }
 semaphore.wait()

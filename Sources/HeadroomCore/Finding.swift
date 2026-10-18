@@ -14,7 +14,7 @@ public enum Safety: Int, Codable, Sendable, Comparable, CaseIterable {
     public var label: String {
         switch self {
         case .safe: "Safe to reclaim"
-        case .review: "Review first"
+        case .review: "Check first"
         case .keep: "Your data"
         }
     }

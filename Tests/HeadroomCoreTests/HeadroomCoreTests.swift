@@ -380,6 +380,61 @@ final class HeadroomCoreTests: XCTestCase {
         XCTAssertTrue(try explain("Desktop/mystery.xyz", dir: false).isGuess)
     }
 
+    // MARK: - Memory
+
+    func testMemoryStatusAddsUp() {
+        let m = MemoryStatus.current()
+        XCTAssertGreaterThan(m.total, 0)
+        XCTAssertGreaterThan(m.used, 0)
+        XCTAssertLessThanOrEqual(m.app + m.wired + m.compressed + m.cached + m.free, m.total + m.total / 10)
+    }
+
+    func testProcessGuardRefusesMacOSAndItself() throws {
+        let me = getuid()
+        func proc(_ name: String, path: String?, uid: uid_t = getuid(), pid: Int32 = 99_999) -> ProcessInfoSnapshot {
+            ProcessInfoSnapshot(pid: pid, parent: 1, name: name, path: path, uid: uid, footprint: 1, started: nil)
+        }
+        XCTAssertNotEqual(ProcessGuard.check(proc("launchd", path: "/sbin/launchd", pid: 1)), .allowed)
+        XCTAssertNotEqual(ProcessGuard.check(proc("Headroom", path: "/x/Headroom", pid: getpid())), .allowed)
+        XCTAssertNotEqual(ProcessGuard.check(proc("WindowServer", path: "/opt/WindowServer")), .allowed, "essential by name")
+        XCTAssertNotEqual(ProcessGuard.check(proc("cfprefsd", path: "/usr/sbin/cfprefsd")), .allowed)
+        XCTAssertNotEqual(ProcessGuard.check(proc("thing", path: home.path + "/thing", uid: me + 1)), .allowed, "other users")
+        XCTAssertEqual(ProcessGuard.check(proc("node", path: "/usr/local/bin/node")), .allowed, "Homebrew tools are yours")
+    }
+
+    func testStopEndsAProcessYouOwn() throws {
+        // A copy of sleep outside /bin, so it isn't a system binary.
+        let bin = home.appendingPathComponent("sleeper")
+        try fm.copyItem(at: URL(fileURLWithPath: "/bin/sleep"), to: bin)
+        let task = Process()
+        task.executableURL = bin
+        task.arguments = ["30"]
+        try task.run()
+        defer { if task.isRunning { task.terminate() } }
+        Thread.sleep(forTimeInterval: 0.2)
+        let p = try XCTUnwrap(ProcessScanner.snapshot().first { $0.pid == task.processIdentifier })
+        XCTAssertEqual(p.arguments.last, "30", "command line is read for your own processes")
+        XCTAssertEqual(ProcessGuard.stop(p, force: false), .allowed)
+        task.waitUntilExit()
+        XCTAssertFalse(task.isRunning)
+    }
+
+    func testHelpersCountAsTheirApp() {
+        let me = getuid()
+        let procs = [
+            ProcessInfoSnapshot(pid: 10, parent: 1, name: "Google Chrome", path: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", uid: me, footprint: 500),
+            ProcessInfoSnapshot(pid: 11, parent: 10, name: "Google Chrome Helper (Renderer)",
+                                path: "/Applications/Google Chrome.app/Contents/Frameworks/X.framework/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)", uid: me, footprint: 700),
+            ProcessInfoSnapshot(pid: 20, parent: 1, name: "node", path: "/usr/local/bin/node", uid: me, footprint: 300),
+            ProcessInfoSnapshot(pid: 30, parent: 1, name: "syslogd", path: "/usr/sbin/syslogd", uid: 0, footprint: 50),
+        ]
+        let g = ProcessScanner.groups(procs, me: me)
+        XCTAssertEqual(g.first?.name, "Google Chrome")
+        XCTAssertEqual(g.first?.footprint, 1200, "helpers add up under the outermost app")
+        XCTAssertEqual(g.first { $0.name == "node" }?.kind, .developer)
+        XCTAssertEqual(g.first { $0.name == "syslogd" }?.kind, .system)
+    }
+
     // MARK: - Growth & big files
 
     func testGrowthNamesTheFolderThatGrew() {
@@ -455,6 +510,40 @@ final class HeadroomCoreTests: XCTestCase {
         try Data(#"{"version": "9.0.0", "url": "https://example.com/x.zip", "minimumSystem": "99.0"}"#.utf8).write(to: feed)
         let tooNew = try await Updates.check(feed: feed, current: "0.2.0")
         XCTAssertNil(tooNew, "never offer a release this Mac can't run")
+    }
+
+    // MARK: - VM disk backups
+
+    func testVMDiskBackupGoesToTheTrashOnlyOnceDockerIsHealthy() throws {
+        let backup = try write(".colima/backups/datadisk-20261015-0204.img", bytes: 2_000_000)
+        let live = try write(".colima/_lima/_disks/colima/datadisk", bytes: 2_000_000)
+
+        // Unhealthy (or unknown): it's the only way back, so it's your data — never offered.
+        let held = try XCTUnwrap(DevTools.vmDiskBackups(home: home, health: { "its disk reported errors" }))
+        XCTAssertEqual(held.safety, .keep)
+        XCTAssertEqual(held.method, .none)
+        XCTAssertEqual(held.reclaimable, 0)
+
+        // Healthy: review first, and only to the Trash.
+        let offered = try XCTUnwrap(DevTools.vmDiskBackups(home: home, health: { nil }))
+        XCTAssertEqual(offered.safety, .review)
+        XCTAssertEqual(offered.method, .trash)
+        XCTAssertEqual(offered.paths.map(\.lastPathComponent), ["datadisk-20261015-0204.img"])
+
+        let guardrail = SafetyGuard(home: home)
+        XCTAssertEqual(guardrail.check(backup, for: offered), .allowed)
+        XCTAssertNotEqual(guardrail.check(backup, for: .picked(backup, bytes: 1, method: .delete)), .allowed,
+                          "a backup never skips the Trash")
+        XCTAssertNotEqual(guardrail.check(live, for: .picked(live, bytes: 1, method: .trash)), .allowed,
+                          "the live VM disk is never removable")
+        let folder = home.appendingPathComponent(".colima/backups")
+        XCTAssertNotEqual(guardrail.check(folder, for: .picked(folder, bytes: 1, method: .trash)), .allowed)
+
+        let report = Cleaner(guardrail: guardrail).reclaim([offered])
+        XCTAssertFalse(fm.fileExists(atPath: backup.path), "moved to the Trash")
+        XCTAssertTrue(fm.fileExists(atPath: live.path), "the live disk is untouched")
+        XCTAssertEqual(report.trashed.count, 1, "recorded, so it can be put back")
+        if let landed = report.trashed.first?.inTrash { try? fm.removeItem(at: landed) }
     }
 
     // MARK: - Treemap

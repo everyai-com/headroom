@@ -67,7 +67,7 @@ public enum Catalog {
              safety: .review, method: .none, detail: "Installed Rust compilers. Remove old ones with `rustup toolchain uninstall`.", symbol: "gearshape.2.fill"),
         Rule(id: "docker-disk", title: "Docker disk image", paths: ["Library/Containers/com.docker.docker/Data/vms"],
              category: .developerTools, safety: .review, method: .none,
-             detail: "Images, containers and volumes. Reclaim with `docker system prune` (it asks before deleting).", symbol: "shippingbox.circle.fill"),
+             detail: "Images, containers and volumes. Clean up with `docker system prune` (it asks before deleting).", symbol: "shippingbox.circle.fill"),
 
         // AI coding agents
         Rule(id: "claude-sessions", title: "Claude Code session history", paths: [".claude/projects"], category: .aiAgents,
@@ -96,9 +96,6 @@ public enum Catalog {
         // Your data — shown, never touched
         Rule(id: "downloads", title: "Downloads", paths: ["Downloads"], category: .userData, safety: .keep, method: .none,
              detail: "Installers and files you downloaded. Sort by size in Finder to find old ones.", symbol: "arrow.down.circle.fill"),
-        Rule(id: "ios-backups", title: "iPhone & iPad backups", paths: ["Library/Application Support/MobileSync/Backup"],
-             category: .userData, safety: .keep, method: .none,
-             detail: "Device backups. Manage them in Finder → your device → Manage Backups.", symbol: "iphone.and.arrow.forward"),
         Rule(id: "whatsapp", title: "WhatsApp media", paths: ["Library/Group Containers/group.net.whatsapp.WhatsApp.shared"],
              category: .userData, safety: .keep, method: .none,
              detail: "Chats and media. Clear per chat in WhatsApp → Settings → Storage and Data → Manage Storage.", symbol: "bubble.left.and.bubble.right.fill"),
@@ -136,6 +133,7 @@ public enum Catalog {
         if let f = await remainingAppCaches(home: home, isCancelled: isCancelled) { findings.append(f) }
         if let f = await unavailableSimulators(home: home) { findings.append(f) }
         if let f = await simulatorSharedCaches() { findings.append(f) }
+        findings.append(contentsOf: deviceBackups(home: home))
         if let f = pnpmStore(home: home) { findings.append(f) }
         findings.append(contentsOf: await DevTools.scan(home: home))
         return findings.sorted { $0.size.allocated > $1.size.allocated }
@@ -217,6 +215,30 @@ public enum Catalog {
                        symbol: "iphone.slash")
     }
 
+    /// iPhone and iPad backups, one per device, named and dated from the backup's own Info.plist.
+    /// Always `.review` and to the Trash: it may be the only copy of that phone.
+    static func deviceBackups(home: URL) -> [Finding] {
+        let root = home.appendingPathComponent("Library/Application Support/MobileSync/Backup")
+        let fm = FileManager.default
+        return ((try? fm.contentsOfDirectory(atPath: root.path)) ?? []).compactMap { name -> Finding? in
+            guard !name.hasPrefix(".") else { return nil }
+            let dir = root.appendingPathComponent(name)
+            let info = (try? Data(contentsOf: dir.appendingPathComponent("Info.plist")))
+                .flatMap { try? PropertyListSerialization.propertyList(from: $0, format: nil) as? [String: Any] } ?? [:]
+            let device = info["Device Name"] as? String ?? info["Display Name"] as? String ?? "Unknown device"
+            let product = info["Product Type"] as? String
+            let date = info["Last Backup Date"] as? Date
+            let size = DiskWalker.measure(dir)
+            guard size.allocated > 0 else { return nil }
+            let when = date.map { "backed up \($0.formatted(date: .abbreviated, time: .omitted))" } ?? "backup date unknown"
+            let old = date.map { $0 < Date().addingTimeInterval(-180 * 86_400) } ?? false
+            return Finding(id: "ios-backup:\(name)", title: "\(device) backup", subtitle: [product, when].compactMap { $0 }.joined(separator: " · "),
+                           detail: (old ? "Over six months old. " : "") + "Goes to the Trash. Keep it if this is the only backup of that device — check iCloud backups first.",
+                           category: .userData, safety: .review, paths: [dir], size: size, lastUsed: date ?? size.newestModification,
+                           method: .trash, symbol: "iphone.and.arrow.forward")
+        }
+    }
+
     /// The system-wide simulator dyld caches are root-owned: only `simctl` can remove them.
     static func simulatorSharedCaches() async -> Finding? {
         let dir = URL(fileURLWithPath: "/Library/Developer/CoreSimulator/Caches")
@@ -224,7 +246,7 @@ public enum Catalog {
         let size = DiskWalker.measure([dir])
         guard size.allocated > 0 else { return nil }
         return Finding(id: "simulator-shared-caches", title: "Simulator shared caches", subtitle: dir.path,
-                       detail: "dyld caches for simulator runtimes, rebuilt when a simulator next boots. Removed with Xcode's own `simctl`.",
+                       detail: "System files the iPhone simulator rebuilds the next time one starts. Removed with Xcode's own tool.",
                        category: .developerTools, safety: .safe, paths: [dir], size: size, lastUsed: size.newestModification,
                        method: .command(executable: "/usr/bin/xcrun", arguments: ["simctl", "runtime", "dyld_shared_cache", "remove", "--all"]),
                        symbol: "iphone.gen3")

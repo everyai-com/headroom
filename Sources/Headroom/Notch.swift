@@ -73,6 +73,17 @@ struct NotchView: View {
                         .font(.system(size: 11.5)).foregroundStyle(v.health == .good ? Theme.textTertiary : tint)
                 }
                 Spacer()
+                // Memory at a glance: how full RAM is, coloured by pressure.
+                let m = model.memory
+                let memTint = m.pressure == .critical ? Theme.critical : m.pressure == .warning ? Theme.review : Theme.textSecondary
+                HStack(spacing: 5) {
+                    Image(systemName: "memorychip").font(.system(size: 10, weight: .semibold))
+                    Text("RAM \(Int((m.usedFraction * 100).rounded()))%").font(Theme.number(11.5, weight: .semibold))
+                }
+                .foregroundStyle(memTint)
+                .padding(.horizontal, 8).padding(.vertical, 5)
+                .background(Capsule().fill(memTint.opacity(0.12)))
+                .help("\(m.used.gb) of \(m.total.gb) memory in use · \(m.pressure.label.lowercased())")
                 Button(action: openApp) {
                     Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 11, weight: .semibold))
                 }
@@ -89,7 +100,7 @@ struct NotchView: View {
                     }
                 }
                 if model.safeFindings.isEmpty {
-                    Text(model.lastScan == nil ? "Scanning…" : "Nothing safe to reclaim right now.")
+                    Text(model.lastScan == nil ? "Scanning…" : "Nothing safe to remove right now.")
                         .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
                 }
             }
@@ -113,7 +124,7 @@ struct NotchView: View {
         case .reclaiming: "Reclaiming…"
         case .done(let freed): "+\(freed.gb) back"
         case .scanning: "Scanning…"
-        case .idle: model.safeReclaimable > 0 ? "Reclaim \(model.safeReclaimable.gb) safely" : "All clean"
+        case .idle: model.safeReclaimable > 0 ? "Free up \(model.safeReclaimable.gb) safely" : "All clean"
         }
     }
 }
@@ -232,6 +243,8 @@ final class NotchController {
             self?.openApp()
         })
         .environmentObject(model)
+        // The notch is black whatever the window looks like.
+        .environment(\.colorScheme, .dark)
         if let hosting {
             hosting.rootView = AnyView(view)
         } else {

@@ -1,21 +1,68 @@
 import SwiftUI
 import HeadroomCore
 
-/// Headroom's design system. Dark-first: the notch is black, so the whole app is built
-/// around graphite surfaces, hairline borders, and one bright "safe" mint.
-enum Theme {
-    static let background = Color(hex: 0x0B0C10)
-    static let surface = Color(hex: 0x14161C)
-    static let surfaceRaised = Color(hex: 0x1B1E26)
-    static let hairline = Color.white.opacity(0.08)
-    static let textPrimary = Color.white
-    static let textSecondary = Color.white.opacity(0.62)
-    static let textTertiary = Color.white.opacity(0.38)
+/// The two looks: colourful and friendly, or quiet black, white and grey. ⌃⌘T switches.
+enum Look: String, CaseIterable, Identifiable {
+    case playful, minimal
+    var id: String { rawValue }
+    var title: String { self == .playful ? "Playful" : "Minimal" }
+}
 
-    static let safe = Color(hex: 0x3DF5A7)
-    static let review = Color(hex: 0xFFB547)
-    static let keep = Color(hex: 0x8A93A6)
-    static let critical = Color(hex: 0xFF5A5F)
+/// Light, dark, or whatever the Mac is set to.
+enum Appearance: String, CaseIterable, Identifiable {
+    case system, light, dark
+    var id: String { rawValue }
+    var title: String { self == .system ? "Match Mac" : rawValue.capitalized }
+    var scheme: ColorScheme? { self == .light ? .light : self == .dark ? .dark : nil }
+}
+
+/// Headroom's design system. Every colour has a light and a dark value (resolved by the view's
+/// colour scheme, so the notch stays dark in a light window), and the Minimal look trades the
+/// colours for greys.
+enum Theme {
+    /// The current look. The window rebuilds when it changes, so plain reads are enough.
+    nonisolated(unsafe) static var look: Look = Look(rawValue: UserDefaults.standard.string(forKey: "look") ?? "") ?? .playful
+    static var minimal: Bool { look == .minimal }
+
+    /// A colour with a value for light mode and one for dark mode.
+    static func dynamic(_ light: NSColor, _ dark: NSColor) -> Color {
+        Color(nsColor: dynamicNS(light, dark))
+    }
+
+    static func dynamic(light: UInt32, dark: UInt32, lightAlpha: Double = 1, darkAlpha: Double = 1) -> Color {
+        dynamic(NSColor(hex: light, alpha: lightAlpha), NSColor(hex: dark, alpha: darkAlpha))
+    }
+
+    static func dynamicNS(_ light: NSColor, _ dark: NSColor) -> NSColor {
+        NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light }
+    }
+
+    static var background: Color { dynamic(light: 0xF3F3F5, dark: 0x0B0C10) }
+    static var nsBackground: NSColor { dynamicNS(NSColor(hex: 0xF3F3F5), NSColor(hex: 0x0B0C10)) }
+    static var surface: Color { dynamic(light: 0xFFFFFF, dark: 0x14161C) }
+    static var surfaceRaised: Color { dynamic(light: 0xFFFFFF, dark: 0x1B1E26) }
+    static var sidebar: Color { dynamic(light: 0xEBEBEE, dark: 0x101217) }
+    static var hairline: Color { dynamic(NSColor.black.withAlphaComponent(0.08), NSColor.white.withAlphaComponent(0.08)) }
+    static var textPrimary: Color { dynamic(light: 0x17181C, dark: 0xFFFFFF) }
+    static var textSecondary: Color { dynamic(light: 0x17181C, dark: 0xFFFFFF, lightAlpha: 0.64, darkAlpha: 0.62) }
+    static var textTertiary: Color { dynamic(light: 0x17181C, dark: 0xFFFFFF, lightAlpha: 0.44, darkAlpha: 0.38) }
+    /// A quiet fill for controls and wells: white on dark, black on light.
+    static func fill(_ opacity: Double) -> Color {
+        dynamic(NSColor.black.withAlphaComponent(opacity * 0.75), NSColor.white.withAlphaComponent(opacity))
+    }
+    /// The soft shadow under cards in light mode (none in dark, where surfaces are lit instead).
+    static var shadow: Color { dynamic(NSColor.black.withAlphaComponent(0.07), NSColor.clear) }
+
+    static var safe: Color { dynamic(light: 0x0FB57E, dark: 0x3DF5A7) }
+    static var review: Color { dynamic(light: 0xE8900C, dark: 0xFFB547) }
+    static var keep: Color { dynamic(light: 0x6E7787, dark: 0x8A93A6) }
+    static var critical: Color { dynamic(light: 0xE5484D, dark: 0xFF5A5F) }
+    /// The main action colour: mint, or ink in the Minimal look.
+    static var accent: Color { minimal ? textPrimary : safe }
+    /// Text on a `textPrimary` fill (a selected pill).
+    static var inverseText: Color { dynamic(light: 0xFFFFFF, dark: 0x0B0C10) }
+    /// Text on an accent fill.
+    static var onAccent: Color { minimal ? dynamic(light: 0xFFFFFF, dark: 0x0B0C10) : Color.black.opacity(0.88) }
 
     static func color(for safety: Safety) -> Color {
         switch safety {
@@ -33,41 +80,89 @@ enum Theme {
         }
     }
 
+    /// Greys for the Minimal look, stepped so neighbours stay apart.
+    static func grey(_ step: Int) -> Color {
+        let light: [UInt32] = [0x2B2D33, 0x4A4D55, 0x6B6E77, 0x8C8F97, 0xA9ACB3, 0xC4C6CB]
+        let dark: [UInt32] = [0xF2F2F4, 0xC9CBD0, 0xA2A5AC, 0x7E828A, 0x60636B, 0x484B52]
+        let i = ((step % light.count) + light.count) % light.count
+        return dynamic(light: light[i], dark: dark[i])
+    }
+
     /// One colour per disk area — the map, the capacity bar and every legend agree.
     static func color(for area: DiskNode.Area) -> Color {
+        if minimal {
+            if area == .free { return fill(0.06) }
+            return grey(DiskNode.Area.allCases.firstIndex(of: area) ?? 0)
+        }
         switch area {
-        case .system: Color(hex: 0x5B6475)
-        case .apps: Color(hex: 0x6E7BFF)
-        case .developer: Color(hex: 0xFF8A3D)
-        case .projects: Color(hex: 0x2FD4C4)
-        case .agents: Color(hex: 0xB07CFF)
-        case .appData: Color(hex: 0x3EA6FF)
-        case .caches: Color(hex: 0xF5D33D)
-        case .media: Color(hex: 0xFF5FA2)
-        case .documents: Color(hex: 0x8FB8FF)
-        case .downloads: Color(hex: 0x9BE15D)
-        case .systemData: Color(hex: 0x7C8495)
-        case .other: Color(hex: 0x3A3F4B)
-        case .free: Color(hex: 0x1E2027)
+        case .system: return Color(hex: 0x5B6475)
+        case .apps: return Color(hex: 0x6E7BFF)
+        case .developer: return Color(hex: 0xFF8A3D)
+        case .projects: return Color(hex: 0x2FD4C4)
+        case .agents: return Color(hex: 0xB07CFF)
+        case .appData: return Color(hex: 0x3EA6FF)
+        case .caches: return Color(hex: 0xF5D33D)
+        case .media: return Color(hex: 0xFF5FA2)
+        case .documents: return Color(hex: 0x8FB8FF)
+        case .downloads: return Color(hex: 0x9BE15D)
+        case .systemData: return Color(hex: 0x7C8495)
+        case .other: return dynamic(light: 0xB9BDC6, dark: 0x3A3F4B)
+        case .free: return fill(0.06)
         }
     }
 
     static func color(for category: StorageCategory) -> Color {
+        if minimal { return grey(StorageCategory.allCases.firstIndex(of: category) ?? 0) }
         switch category {
-        case .projectArtifacts: color(for: .projects)
-        case .packageCaches: Color(hex: 0xF5D33D)
-        case .developerTools: color(for: .developer)
-        case .aiAgents: color(for: .agents)
-        case .appCaches: Color(hex: 0x3EA6FF)
-        case .browsers: Color(hex: 0x6E7BFF)
-        case .logs: Color(hex: 0x7C8495)
-        case .trash: Color(hex: 0xFF5FA2)
-        case .userData: keep
+        case .projectArtifacts: return color(for: .projects)
+        case .packageCaches: return Color(hex: 0xF5D33D)
+        case .developerTools: return color(for: .developer)
+        case .aiAgents: return color(for: .agents)
+        case .appCaches: return Color(hex: 0x3EA6FF)
+        case .browsers: return Color(hex: 0x6E7BFF)
+        case .logs: return Color(hex: 0x7C8495)
+        case .trash: return Color(hex: 0xFF5FA2)
+        case .userData: return keep
+        }
+    }
+
+    /// Each shelf's own colour (the icon and accents).
+    static func tint(for kind: FileKind) -> Color {
+        if minimal { return textPrimary }
+        switch kind {
+        case .image: return dynamic(light: 0x7B66F0, dark: 0xA595FF)
+        case .video: return dynamic(light: 0x2A86E6, dark: 0x5DB2FF)
+        case .audio: return dynamic(light: 0xEC6F24, dark: 0xFF9452)
+        case .document: return dynamic(light: 0x12A374, dark: 0x45D9A3)
+        case .archive: return dynamic(light: 0xC99A06, dark: 0xF2C94C)
+        case .app: return dynamic(light: 0xE5468A, dark: 0xFF73AE)
+        case .other: return keep
+        }
+    }
+
+    /// The pastel card behind a shelf (top, bottom of its gradient).
+    static func shelf(for kind: FileKind) -> (Color, Color) {
+        if minimal { return (dynamic(light: 0xF1F1F3, dark: 0x1F2127), dynamic(light: 0xE6E6E9, dark: 0x191B20)) }
+        switch kind {
+        case .image: return (dynamic(light: 0xEFEBFF, dark: 0x27223F), dynamic(light: 0xE1DAFF, dark: 0x1F1B33))
+        case .video: return (dynamic(light: 0xE6F2FF, dark: 0x1A2A3F), dynamic(light: 0xD3E7FF, dark: 0x152233))
+        case .audio: return (dynamic(light: 0xFFEFE5, dark: 0x3A261C), dynamic(light: 0xFFDFCC, dark: 0x2E1F17))
+        case .document: return (dynamic(light: 0xE4F8EF, dark: 0x183128), dynamic(light: 0xCFF0E0, dark: 0x132820))
+        case .archive: return (dynamic(light: 0xFFF7DC, dark: 0x352E17), dynamic(light: 0xFFEDB5, dark: 0x2A2513))
+        case .app: return (dynamic(light: 0xFFE9F1, dark: 0x3A1D2B), dynamic(light: 0xFFD6E6, dark: 0x2E1722))
+        case .other: return (fill(0.05), fill(0.08))
         }
     }
 
     static func number(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
         .system(size: size, weight: weight, design: .rounded).monospacedDigit()
+    }
+}
+
+extension NSColor {
+    convenience init(hex: UInt32, alpha: Double = 1) {
+        self.init(srgbRed: CGFloat((hex >> 16) & 0xFF) / 255, green: CGFloat((hex >> 8) & 0xFF) / 255,
+                  blue: CGFloat(hex & 0xFF) / 255, alpha: alpha)
     }
 }
 
@@ -92,6 +187,7 @@ struct Card<Content: View>: View {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .fill(Theme.surface)
                     .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Theme.hairline))
+                    .shadow(color: Theme.shadow, radius: 14, y: 4)
             )
     }
 }
@@ -113,13 +209,13 @@ struct SectionTitle: View {
 // MARK: - Buttons
 
 struct PrimaryButtonStyle: ButtonStyle {
-    var tint: Color = Theme.safe
+    var tint: Color = Theme.accent
     var large = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: large ? 16 : 13, weight: .semibold, design: .rounded))
-            .foregroundStyle(Color.black.opacity(0.88))
+            .foregroundStyle(Theme.minimal ? Theme.onAccent : Color.black.opacity(0.88))
             .padding(.horizontal, large ? 22 : 14)
             .padding(.vertical, large ? 14 : 8)
             .frame(maxWidth: large ? .infinity : nil)
@@ -140,7 +236,7 @@ struct GhostButtonStyle: ButtonStyle {
             .foregroundStyle(Theme.textPrimary.opacity(configuration.isPressed ? 0.6 : 0.9))
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.06)))
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.fill(0.06)))
             .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Theme.hairline))
     }
 }
@@ -155,7 +251,7 @@ struct GaugeRing: View {
 
     var body: some View {
         ZStack {
-            Circle().stroke(Color.white.opacity(0.07), lineWidth: lineWidth)
+            Circle().stroke(Theme.fill(0.07), lineWidth: lineWidth)
             Circle()
                 .trim(from: 0, to: max(0.002, min(1, fraction)))
                 .stroke(
@@ -194,7 +290,7 @@ struct SegmentedBar: View {
                 Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: height / 2).fill(Color.white.opacity(0.06)))
+            .background(RoundedRectangle(cornerRadius: height / 2).fill(Theme.fill(0.06)))
             .clipShape(RoundedRectangle(cornerRadius: height / 2, style: .continuous))
         }
         .frame(height: height)
@@ -232,19 +328,24 @@ struct Badge: View {
 /// A round checkbox (PlayStation storage pattern) — a custom control so it renders everywhere.
 struct CheckCircle: View {
     var on: Bool
-    var tint: Color = Theme.safe
+    var tint: Color = Theme.accent
     var disabled = false
 
     var body: some View {
         ZStack {
-            Circle().strokeBorder(on ? tint : Color.white.opacity(disabled ? 0.12 : 0.3), lineWidth: 1.5)
+            Circle().strokeBorder(on ? tint : Theme.fill(disabled ? 0.12 : 0.3), lineWidth: 1.5)
                 .background(Circle().fill(on ? tint : .clear))
             if on {
-                Image(systemName: "checkmark").font(.system(size: 9, weight: .heavy)).foregroundStyle(.black)
+                Image(systemName: "checkmark").font(.system(size: 9, weight: .heavy))
+                    .foregroundStyle(Theme.minimal ? Theme.onAccent : .black)
             }
         }
         .frame(width: 18, height: 18)
         .opacity(disabled ? 0.4 : 1)
+        // An empty circle is transparent: without this only its 1.5pt ring takes clicks.
+        .padding(6)
+        .contentShape(Rectangle())
+        .padding(-6)
     }
 }
 
@@ -334,10 +435,10 @@ struct Pill: View {
 
     var body: some View {
         Button(action: action) {
-            Text(title).font(.system(size: 12, weight: .medium))
-                .foregroundStyle(on ? Color.black : Theme.textPrimary)
+            Text(title).font(.system(size: 12, weight: .medium)).lineLimit(1).fixedSize()
+                .foregroundStyle(on ? Theme.inverseText : Theme.textPrimary)
                 .padding(.horizontal, 12).padding(.vertical, 6)
-                .background(Capsule().fill(on ? Color.white : Color.white.opacity(0.06)))
+                .background(Capsule().fill(on ? Theme.textPrimary : Theme.fill(0.06)))
                 .overlay(Capsule().strokeBorder(Theme.hairline))
                 .contentShape(Capsule())
         }
@@ -371,7 +472,7 @@ struct SearchField: View {
             }
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
-        .background(Capsule().fill(Color.white.opacity(0.06)))
+        .background(Capsule().fill(Theme.fill(0.06)))
         .overlay(Capsule().strokeBorder(Theme.hairline))
     }
 }
@@ -403,7 +504,7 @@ struct FloatingBarBackground: View {
     var body: some View {
         RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.surfaceRaised.opacity(0.97))
             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.hairline))
-            .shadow(color: .black.opacity(0.5), radius: 24, y: 8)
+            .shadow(color: .black.opacity(0.22), radius: 24, y: 8)
     }
 }
 
@@ -428,7 +529,7 @@ struct ToastView: View {
         .background(
             Capsule().fill(Theme.surfaceRaised)
                 .overlay(Capsule().strokeBorder((toast.failed ? Theme.review : Theme.safe).opacity(0.35)))
-                .shadow(color: .black.opacity(0.55), radius: 20, y: 8)
+                .shadow(color: .black.opacity(0.25), radius: 20, y: 8)
         )
         .frame(maxWidth: 640)
     }
@@ -443,7 +544,7 @@ struct WideButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 12.5, weight: .semibold))
-            .foregroundStyle(filled ? Color.black.opacity(0.88) : tint)
+            .foregroundStyle(filled ? (Theme.minimal ? Theme.onAccent : Color.black.opacity(0.88)) : tint)
             .padding(.horizontal, 12).padding(.vertical, 9)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
