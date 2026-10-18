@@ -56,6 +56,20 @@ final class QuickToolsTests: XCTestCase {
         XCTAssertTrue(apps[0].path.contains("/A/"), "the first root wins")
     }
 
+    /// /Applications/Safari.app is a link macOS flags hidden; it must still be found. Dot-files aren't.
+    func testHiddenFlaggedAppLinksAreListed() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("quickapps-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: root) }
+        let real = root.appendingPathComponent("Cryptex/Safari.app/Contents")
+        try fm.createDirectory(at: real, withIntermediateDirectories: true)
+        try fm.createDirectory(at: root.appendingPathComponent("Apps/.Secret.app/Contents"), withIntermediateDirectories: true)
+        let link = root.appendingPathComponent("Apps/Safari.app")
+        try fm.createSymbolicLink(at: link, withDestinationURL: real.deletingLastPathComponent())
+        XCTAssertEqual(lchflags(link.path, UInt32(UF_HIDDEN)), 0)
+        XCTAssertEqual(QuickApp.list(roots: [root.appendingPathComponent("Apps")]).map(\.name), ["Safari"])
+    }
+
     func testSettingsPagesComeFromTheirExtensions() throws {
         let fm = FileManager.default
         let dir = fm.temporaryDirectory.appendingPathComponent("panes-\(UUID().uuidString)")

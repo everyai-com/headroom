@@ -188,8 +188,11 @@ public struct QuickApp: Sendable, Hashable, Identifiable {
             names.insert(name.lowercased())
             out.append(QuickApp(name: name, path: url.path))
         }
+        // Not `.skipsHiddenFiles`: macOS flags /Applications/Safari.app (a link into the Safari cryptex)
+        // hidden, though Finder shows it. Only dot-files are skipped.
         for root in roots {
-            let children = (try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])) ?? []
+            let children = ((try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey])) ?? [])
+                .filter { !$0.lastPathComponent.hasPrefix(".") }
             for child in children {
                 if child.pathExtension == "app" { add(child); continue }
                 guard (try? child.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true,
@@ -198,6 +201,9 @@ public struct QuickApp: Sendable, Hashable, Identifiable {
                 inner.filter { $0.pathExtension == "app" }.forEach(add)
             }
         }
+        // Finder lives with macOS's own helpers in CoreServices; only it is worth opening from there.
+        let finder = URL(fileURLWithPath: "/System/Library/CoreServices/Finder.app")
+        if roots.contains(where: { $0.path == "/System/Applications" }), fm.fileExists(atPath: finder.path) { add(finder) }
         return out.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 }
