@@ -2,8 +2,12 @@
 # Build Headroom.app (release), with icon and an ad-hoc signature, into ./dist.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-swift build -c release --product Headroom
-swift build -c release --product headroom-cli
+# Const values let the App Intents metadata step see the Shortcuts actions (both products share the flags,
+# so the second build reuses the first one's HeadroomCore).
+INTENT_FLAGS=(-Xswiftc -emit-const-values -Xswiftc -Xfrontend -Xswiftc -const-gather-protocols-file
+              -Xswiftc -Xfrontend -Xswiftc "$(pwd)/scripts/appintents-protocols.json")
+swift build -c release --product Headroom "${INTENT_FLAGS[@]}"
+swift build -c release --product headroom-cli "${INTENT_FLAGS[@]}"
 BIN=.build/release
 APP=dist/Headroom.app
 rm -rf "$APP"
@@ -21,6 +25,19 @@ for s in 16 32 128 256 512; do
 done
 rm "$ICONSET/base.png"
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/Headroom.icns"
+
+# Shortcuts & Siri: what Xcode's App Intents step makes (Metadata.appintents). Skipped without Xcode.
+if xcrun --find appintentsmetadataprocessor >/dev/null 2>&1; then
+  LISTS=$(mktemp -d)
+  ls "$(pwd)"/Sources/Headroom/*.swift > "$LISTS/sources.txt"
+  ls "$(pwd)/$BIN"/Headroom.build/*.swiftconstvalues > "$LISTS/constvals.txt"
+  xcrun appintentsmetadataprocessor --output "$APP/Contents/Resources" \
+    --toolchain-dir "$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain" --module-name Headroom \
+    --sdk-root "$(xcrun --show-sdk-path --sdk macosx)" --xcode-version "$(xcodebuild -version | awk '/Build version/{print $3}')" \
+    --platform-family macOS --deployment-target 15.0 --target-triple "$(uname -m)-apple-macosx15.0" \
+    --binary-file "$APP/Contents/MacOS/Headroom" --source-file-list "$LISTS/sources.txt" \
+    --swift-const-vals-list "$LISTS/constvals.txt" --force --quiet-warnings >/dev/null
+fi
 
 VERSION=$(cat VERSION 2>/dev/null || echo 0.1.0)
 BUILD=$(git rev-list --count HEAD 2>/dev/null || echo 1)
@@ -43,6 +60,10 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSUIElement</key><true/>
   <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
   <key>NSHumanReadableCopyright</key><string>Headroom</string>
+  <key>CFBundleURLTypes</key><array><dict>
+    <key>CFBundleURLName</key><string>app.headroom.Headroom</string>
+    <key>CFBundleURLSchemes</key><array><string>headroom</string></array>
+  </dict></array>
 </dict></plist>
 PLIST
 
