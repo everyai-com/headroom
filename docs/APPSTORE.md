@@ -53,7 +53,7 @@ Creating an app needs a web session (`asc web auth login --apple-id …`, with y
 - **Category:** Utilities (secondary: Productivity) · **Price:** Free · **Age rating:** 4+
 - **Privacy:** Data Not Collected · policy: https://github.com/everyai-com/headroom/blob/release-1.0/docs/PRIVACY.md (main once merged)
 - **Support URL:** https://github.com/everyai-com/headroom/issues
-- **Keywords (100):** disk,space,storage,cleaner,duplicates,files,search,downloads,tidy,desktop,large files,workspace
+- **Keywords (100):** space,storage,cleaner,duplicates,search,downloads,tidy,desktop,large files,workspace,organizer
 - **Promotional text:** Your Mac's disk, explained — and your files, finally findable. Everything stays on your Mac.
 
 **Description**
