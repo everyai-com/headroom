@@ -41,7 +41,7 @@ outside the App Store; to try the sandbox locally, copy `dist/appstore/Headroom.
 
 ## The app record
 
-Created: app ID `6824259373`, SKU `HEADROOM-MAS` — https://appstoreconnect.apple.com/apps/6824259373
+Submitted 1.0.0 (build 22) for review on 18 Oct 2026, submission `b8a02fff-c9aa-49ef-bfd3-74479cce085d`. Review contact and notes are on the version (same contact as the team's other apps). Created: app ID `6824259373`, SKU `HEADROOM-MAS` — https://appstoreconnect.apple.com/apps/6824259373
 
 Creating an app needs a web session (`asc web auth login --apple-id …`, with your 2-factor code), then
 `asc web apps create --name "Headroom: Disk & Files" --bundle-id com.saphaare.headroom --sku HEADROOM-MAS`.
