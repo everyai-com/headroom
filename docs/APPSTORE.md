@@ -41,6 +41,8 @@ outside the App Store; to try the sandbox locally, copy `dist/appstore/Headroom.
 
 ## The app record
 
+Created: app ID `6824259373`, SKU `HEADROOM-MAS` — https://appstoreconnect.apple.com/apps/6824259373
+
 Creating an app needs a web session (`asc web auth login --apple-id …`, with your 2-factor code), then
 `asc web apps create --name "Headroom: Disk & Files" --bundle-id com.saphaare.headroom --sku HEADROOM-MAS`.
 
@@ -49,7 +51,7 @@ Creating an app needs a web session (`asc web auth login --apple-id …`, with y
 - **Name:** Headroom: Disk & Files
 - **Subtitle (30):** See where every GB goes
 - **Category:** Utilities (secondary: Productivity) · **Price:** Free · **Age rating:** 4+
-- **Privacy:** Data Not Collected · policy: https://github.com/everyai-com/headroom/blob/main/docs/PRIVACY.md
+- **Privacy:** Data Not Collected · policy: https://github.com/everyai-com/headroom/blob/release-1.0/docs/PRIVACY.md (main once merged)
 - **Support URL:** https://github.com/everyai-com/headroom/issues
 - **Keywords (100):** disk,space,storage,cleaner,duplicates,files,search,downloads,tidy,desktop,large files,workspace
 - **Promotional text:** Your Mac's disk, explained — and your files, finally findable. Everything stays on your Mac.
