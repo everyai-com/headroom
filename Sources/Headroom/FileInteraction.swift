@@ -166,6 +166,9 @@ enum FileMenu {
             menu.addItem(ActionMenuItem("Show in Headroom", symbol: "sidebar.left") { library.showInApp(item) })
         }
         menu.addItem(ActionMenuItem("Show in Finder", symbol: "folder", key: "r") { library.reveal(targets) })
+        if item.isFolder, !many {
+            DevOpen.menuItems(for: item.path, model: library.app).forEach(menu.addItem)
+        }
         menu.addItem(.separator())
         menu.addItem(ActionMenuItem(many ? "Copy \(targets.count) Items" : "Copy", symbol: "doc.on.doc", key: "c") { library.copyFiles(targets) })
         menu.addItem(ActionMenuItem("Copy Path", symbol: "link", key: "c", modifiers: [.command, .option]) { library.copyPaths(targets) })

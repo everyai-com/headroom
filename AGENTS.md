@@ -81,6 +81,16 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   touches a file. `Workspaces.summarize` reads like the scanner (same skips, never opens a dataless file —
   those are counted from metadata and listed as "In iCloud only"). Bookmarks resolve `.withoutMounting`.
   Renders skip `dropDestination` and text fields (`WorkspaceDrop`, snapshot mode): ImageRenderer can't draw them.
+- Folder sizes (`FolderSizes.measure`, cached per path in the app's `FolderInfoStore`) reuse
+  `Workspaces.summarize`'s read-only walk (`keep: 0`); "—" until measured. Grouping (`FolderGrouping`)
+  only changes what's drawn — nothing moves.
+- Git (`Git.swift`) is read-only: the branch from `.git/HEAD`, changes from `/usr/bin/git --no-optional-locks
+  status --porcelain`, run only when `xcode-select -p` has a real git (the stub would ask to install the
+  tools). Never fetch, pull or write. Home and `/` never count as a repo (dotfiles repos).
+- Open in Terminal/editor (`DevApps` + `DevOpen`) uses `NSWorkspace.open(_:withApplicationAt:)`, never a shell.
+- Mail's container (`~/Library/Containers/com.apple.mail`) is protected; only the contents of its
+  `Data/Library/Mail Downloads` (copies of attachments you opened) may go, to the Trash only (the
+  Clean up card). Never the mailboxes, never `.delete`. Reading it is `#if !APPSTORE`.
 - Text recognition and duplicate detection run on this Mac only (Vision). Network stays update-check only.
 - Updates notify and open the download — never self-install, even though other apps do.
 - `LibraryItem` clashes with SwiftUI's DeveloperToolsSupport type: the app target has a module typealias.
@@ -91,7 +101,7 @@ README screenshots are rendered with `--demo` so no personal projects or files a
 - Grid keys (⌘C, ⇧⌘C, ⌘A, ⌘⌫, Space, arrows) are `onKeyPress` on the focused grid, so they never steal
   copy/paste from a text field. Keys bubble up from children, so never put a text field inside a
   `FileGrid` header (Space would open Quick Look, Return the focused file) — put it above the grid. ⌘1–9 = Home, Recents, Images, Videos, Music, Documents, Archives, Apps,
-  Overview; ⌃1–9 workspaces, ⌥⌘N new workspace, ⌥⌘T tidy; ⌃⌘1/⌃⌘2 grid/list, ⌘I info, ⇧⌘D/⇧⌘K/⇧⌘J Duplicates/Clean up/Downloaded from, ⌃⌘T look,
+  Overview; ⌃1–9 workspaces, ⌥⌘N new workspace, ⌥⌘T tidy, ⌥⇧⌘T/⌥⇧⌘E folder in terminal/editor; ⌃⌘1/⌃⌘2 grid/list, ⌘I info, ⇧⌘D/⇧⌘K/⇧⌘J Duplicates/Clean up/Downloaded from, ⌃⌘T look,
   ⌃⌥Space Quick Search (system-wide; Settings records any keys and warns when macOS owns them — Carbon
   registers ⌘Space even while Spotlight has it, so the status comes from `SystemShortcuts`, not the
   registration). In Quick Search: ↩/⌘↩/⌥↩, ⌘K actions, ⌘I info, ⌘Y Quick Look, ⌘1–9 pick, ⌃N/⌃P, ⌘↑/⌘↓

@@ -9,6 +9,8 @@ struct FileGrid: View {
     var items: [LibraryItem]
     /// Shown above the files, inside the scroll view.
     var header: AnyView? = nil
+    /// Shown as headed sections (a folder grouped by kind or date added); `items` is the same files in this order.
+    var groups: [ItemGroup]? = nil
     var limit = 3000
     @FocusState private var focused: Bool
     @Environment(\.snapshotMode) private var snapshot
@@ -18,7 +20,13 @@ struct FileGrid: View {
         Scrolling {
             VStack(alignment: .leading, spacing: 14) {
                 if let header { header }
-                if library.viewMode == .grid { grid(shown) } else { list(shown) }
+                if let groups, groups.contains(where: { !$0.title.isEmpty }) {
+                    ForEach(Array(groups.enumerated()), id: \.element.id) { i, g in
+                        let part = Array(g.items.prefix(snapshot ? (library.viewMode == .grid ? 8 : 6) : limit))
+                        GroupHeader(group: g)
+                        if library.viewMode == .grid { grid(part) } else { list(part, columns: i == 0) }
+                    }
+                } else if library.viewMode == .grid { grid(shown) } else { list(shown) }
                 if items.count > shown.count, !snapshot {
                     Text("Showing the first \(shown.count) of \(items.count). Search to narrow it down.")
                         .font(.system(size: 12)).foregroundStyle(Theme.textTertiary).frame(maxWidth: .infinity)
@@ -87,16 +95,18 @@ struct FileGrid: View {
 
     // MARK: List
 
-    func list(_ shown: [LibraryItem]) -> some View {
+    func list(_ shown: [LibraryItem], columns: Bool = true) -> some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                sortHeader("Name", .name).frame(maxWidth: .infinity, alignment: .leading).padding(.leading, 44)
-                sortHeader("Kind", .kind).frame(width: 90, alignment: .leading)
-                sortHeader("Size", .size).frame(width: 80, alignment: .trailing)
-                sortHeader("Date", .date).frame(width: 130, alignment: .trailing)
+            if columns {
+                HStack(spacing: 12) {
+                    sortHeader("Name", .name).frame(maxWidth: .infinity, alignment: .leading).padding(.leading, 44)
+                    sortHeader("Kind", .kind).frame(width: 90, alignment: .leading)
+                    sortHeader("Size", .size).frame(width: 80, alignment: .trailing)
+                    sortHeader("Date", .date).frame(width: 130, alignment: .trailing)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                Divider().overlay(Theme.hairline)
             }
-            .padding(.horizontal, 12).padding(.vertical, 8)
-            Divider().overlay(Theme.hairline)
             LazyVStack(spacing: 0) {
                 ForEach(Array(shown.enumerated()), id: \.element.id) { i, item in
                     FileRow(item: item, striped: i % 2 == 1)
@@ -170,13 +180,13 @@ struct FileCard: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 HStack(spacing: 4) {
                     Circle().fill(Theme.tint(for: item.kind)).frame(width: 6, height: 6)
-                    Text(item.isFolder ? "Folder" : "\(item.typeLabel) · \(ByteFormat.compact(item.bytes))")
+                    // A folder says how many items and how big, once measured (in the background).
+                    if item.isFolder { FolderSizeText(path: item.path) } else { Text("\(item.typeLabel) · \(ByteFormat.compact(item.bytes))") }
                 }
                 .font(.system(size: 10, weight: .semibold)).foregroundStyle(Color.black.opacity(0.75))
                 .padding(.horizontal, 7).padding(.vertical, 3)
                 .background(Capsule().fill(.white.opacity(0.88)))
                 .padding(7)
-                .opacity(item.isFolder ? 0 : 1)
             }
             .frame(height: size * 0.78)
             .overlay(alignment: .bottomLeading) {
@@ -268,11 +278,14 @@ struct FileRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: 5) {
                 Circle().fill(Theme.tint(for: item.kind)).frame(width: 6, height: 6)
-                Text(item.typeLabel)
+                if item.isFolder { FolderSizeText(path: item.path, format: .items) } else { Text(item.typeLabel) }
             }
             .font(.system(size: 11.5)).foregroundStyle(Theme.textSecondary).frame(width: 90, alignment: .leading)
-            Text(item.isFolder ? "—" : ByteFormat.string(item.bytes)).font(Theme.number(11.5, weight: .medium))
-                .foregroundStyle(Theme.textSecondary).frame(width: 80, alignment: .trailing)
+            Group {
+                if item.isFolder { FolderSizeText(path: item.path, format: .bytes) } else { Text(ByteFormat.string(item.bytes)) }
+            }
+            .font(Theme.number(11.5, weight: .medium))
+            .foregroundStyle(Theme.textSecondary).frame(width: 80, alignment: .trailing)
             Text(item.latest.listDate).font(.system(size: 11.5)).lineLimit(1)
                 .foregroundStyle(Theme.textTertiary).frame(width: 130, alignment: .trailing)
         }

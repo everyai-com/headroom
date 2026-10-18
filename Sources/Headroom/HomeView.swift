@@ -235,7 +235,9 @@ struct SuggestionCard: View {
         case .oldInstallers: return Theme.tint(for: .archive)
         case .forgottenDownloads: return Theme.tint(for: .video)
         case .oldScreenshots: return Theme.tint(for: .image)
+        case .oldScreenRecordings: return Theme.tint(for: .video)
         case .bigOldVideos: return Theme.tint(for: .audio)
+        case .mailAttachments: return Theme.tint(for: .document)
         case .unusedApps: return Theme.tint(for: .document)
         }
     }

@@ -72,7 +72,10 @@ enum Snapshots {
             Thumbnails.shared.preload(items.map(\.url), size: 320)
             Thumbnails.shared.preload(items.map(\.url), size: 160)
         }
-        library.browsePath = NSHomeDirectory() + "/Downloads"
+        // The folder screen: the demo's git project (sizes on its folders, the branch in the path bar), else Downloads.
+        let repo = library.home + "/Documents/launch-site"
+        library.browsePath = AppModel.demoMode && FileManager.default.fileExists(atPath: repo) ? repo : library.home + "/Downloads"
+        for folder in [library.browsePath!, library.home, library.home + "/Downloads"] { FolderInfoStore.shared.prewarm(folder: folder) }
         if let first = library.saved.first { library.savedID = first.id }
         for scheme in [ColorScheme.dark, .light] {
             for screen in Screen.allCases where screen != .saved || library.savedID != nil {
@@ -120,6 +123,17 @@ enum Snapshots {
             }
             break
         }
+        // A folder grouped by kind, and by date added (nothing moves).
+        let browsed = library.browsePath
+        library.browsePath = library.home + "/Downloads"
+        let savedGrouping = UserDefaults.standard.string(forKey: "folderGrouping")
+        for (grouping, name) in [(FolderGrouping.kind, "folder-by-kind"), (.dateAdded, "folder-by-date")] {
+            UserDefaults.standard.set(grouping.rawValue, forKey: "folderGrouping")
+            save(MainView(screen: .folder).environmentObject(model).environmentObject(library), size: size,
+                 to: dir.appendingPathComponent("\(name).png"))
+        }
+        UserDefaults.standard.set(savedGrouping, forKey: "folderGrouping")
+        library.browsePath = browsed
         // Narrow: tiled into a third of the screen.
         save(MainView(screen: .images).environmentObject(model).environmentObject(library), size: CGSize(width: 700, height: 780),
              to: dir.appendingPathComponent("images-narrow.png"))

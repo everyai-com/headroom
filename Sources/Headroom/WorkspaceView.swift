@@ -237,7 +237,10 @@ struct WorkspaceFolderCard: View {
                     Text(Workspaces.place(of: path, home: library.home)).font(.system(size: 11)).foregroundStyle(Theme.textTertiary).lineLimit(1)
                     Text(detail).font(.system(size: 11.5, weight: .medium)).foregroundStyle(Theme.textSecondary).lineLimit(1).padding(.top, 3)
                     if present, let changed = summary?.changed {
-                        Text("Changed \(changed.ago)").font(.system(size: 11)).foregroundStyle(Theme.textTertiary).lineLimit(1)
+                        HStack(spacing: 6) {
+                            Text("Changed \(changed.ago)").font(.system(size: 11)).foregroundStyle(Theme.textTertiary).lineLimit(1)
+                            if summary?.isRepo == true { GitBadge(path: path, compact: true) }
+                        }
                     }
                 }
                 .padding(.horizontal, 14).padding(.bottom, 13).padding(.top, 30)
@@ -253,6 +256,8 @@ struct WorkspaceFolderCard: View {
             if present {
                 Button("Open") { library.browse(path) }
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)]) }
+                if let t = DevOpen.terminal { Button("Open in \(t.name)") { DevOpen.open(path, in: .terminal, model: library.app) } }
+                if let e = DevOpen.editor { Button("Open in \(e.name)") { DevOpen.open(path, in: .editor, model: library.app) } }
                 Divider()
             }
             Button("Remove from Workspace") { library.removeFromWorkspace(workspace.id, paths: [path]) }

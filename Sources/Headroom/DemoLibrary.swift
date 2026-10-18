@@ -98,7 +98,37 @@ enum DemoLibrary {
         _ = Shell.run("/usr/bin/zip", ["-jq", export.path, photos[4].path, photos[5].path, photos[6].path])
         stamp(export, days(40))
         from(export, ["https://github.com/demo/photos/archive/main.zip", "https://github.com/demo/photos"], agent: "Safari")
+        repo(home.appendingPathComponent("Documents/launch-site"))
         print("demo library in \(home.path)")
+    }
+
+    /// A small website project under git, with two uncommitted changes — for the folder screen's git badge.
+    static func repo(_ root: URL) {
+        let fm = FileManager.default
+        let files: [(String, String)] = [
+            ("README.md", "# Launch site\n"), ("package.json", "{ \"name\": \"launch-site\", \"private\": true }\n"),
+            ("src/index.html", "<h1>Launch</h1>\n"), ("src/app.ts", "export const ready = true\n"),
+            ("docs/press-kit.md", "Logos and copy\n"), ("assets/brand/colors.json", "{}\n"),
+        ]
+        for (rel, text) in files {
+            let url = root.appendingPathComponent(rel)
+            try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? text.write(to: url, atomically: true, encoding: .utf8)
+        }
+        let hero = root.appendingPathComponent("assets/hero.jpg")
+        write(image(landscape((0x7AD7F0, 0x3A7BD5, 0x1E3C72), seed: 11)), to: hero, type: .jpeg)
+        guard let git = Git.executable else {
+            // No developer tools: the branch still reads from HEAD.
+            try? fm.createDirectory(at: root.appendingPathComponent(".git"), withIntermediateDirectories: true)
+            try? "ref: refs/heads/launch\n".write(to: root.appendingPathComponent(".git/HEAD"), atomically: true, encoding: .utf8)
+            return
+        }
+        for args in [["init", "-q", "-b", "launch"], ["add", "."],
+                     ["-c", "user.name=Demo", "-c", "user.email=demo@example.com", "commit", "-qm", "First version"]] {
+            Shell.run(git, ["-C", root.path] + args)
+        }
+        try? "export const ready = false\n".write(to: root.appendingPathComponent("src/app.ts"), atomically: true, encoding: .utf8)
+        try? "Launch checklist\n".write(to: root.appendingPathComponent("docs/checklist.md"), atomically: true, encoding: .utf8)
     }
 
     // MARK: Drawing

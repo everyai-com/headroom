@@ -226,7 +226,7 @@ public enum Workspaces {
                     summary.bytes += Int64(v.totalFileAllocatedSize ?? v.fileSize ?? 0)
                 }
                 // Only the newest few are kept as items (they get thumbnails).
-                if newest.count < keep || modified > (newest.last?.modified ?? .distantPast) {
+                if keep > 0, newest.count < keep || modified > (newest.last?.modified ?? .distantPast) {
                     guard v.isDirectory != true || FileKind.of(extension: ext) != .other else { continue }
                     var kind = FileKind.of(extension: ext)
                     if ext == "key", v.isDirectory != true, (v.fileSize ?? 0) < 16_384 { kind = .other }
