@@ -115,6 +115,7 @@ enum Theme {
         if minimal { return grey(StorageCategory.allCases.firstIndex(of: category) ?? 0) }
         switch category {
         case .projectArtifacts: return color(for: .projects)
+        case .worktrees: return Color(hex: 0xFF8A3D)
         case .packageCaches: return Color(hex: 0xF5D33D)
         case .developerTools: return color(for: .developer)
         case .aiAgents: return color(for: .agents)

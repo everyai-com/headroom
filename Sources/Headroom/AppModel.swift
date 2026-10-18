@@ -10,6 +10,8 @@ final class AppModel: ObservableObject {
     @Published var volume = VolumeStatus.current()
     @Published var findings: [Finding] = []
     @Published var selected: Set<String> = []
+    /// The worktrees found by the last scan (the Coding screen groups them; nested ones count once).
+    @Published var worktrees: [Worktree] = []
     @Published var apps: [InstalledApp] = []
     @Published var selectedApps: Set<String> = []
     @Published var map: DiskNode?
@@ -134,7 +136,11 @@ final class AppModel: ObservableObject {
         let roots = Self.demoMode ? [Self.demoRoot] : ProjectScanner.defaultRoots()
         async let projects = ProjectScanner.scan(roots: roots, staleDays: stale)
         async let known = Catalog.scanKnownLocations()
-        let found = await projects + known
+        // Every agent's worktrees, wherever they live (removed through git, never one-click).
+        async let trees = Worktrees.scan(roots: Self.demoMode ? roots : roots + Worktrees.agentRoots())
+        let worktreeList = await trees
+        let git = Git.executable
+        let found = await projects + known + worktreeList.map { $0.finding(git: git) }
         var all = await Task.detached { Exclusions.apply(found, excluded: excluded) }.value
             .sorted { $0.size.allocated > $1.size.allocated }
         if Self.demoMode {
@@ -151,6 +157,7 @@ final class AppModel: ObservableObject {
         }
         // The App Store edition can't run other tools (simctl, docker, brew…): those findings stay out.
         if Edition.appStore { all.removeAll { if case .command = $0.method { true } else { false } } }
+        worktrees = worktreeList
         findings = all
         // Safe items are pre-selected; review items wait for you.
         selected = Set(all.filter { $0.safety == .safe && $0.reclaimable > 0 }.map(\.id))
@@ -185,12 +192,13 @@ final class AppModel: ObservableObject {
 
     /// Reclaim the selection. With `safeOnly`, exactly the safe set — the one-click path.
     @discardableResult
-    func reclaim(safeOnly: Bool = false, automatic: Bool = false) async -> (report: CleanupReport, plan: [Finding])? {
+    func reclaim(safeOnly: Bool = false, automatic: Bool = false, only: [Finding]? = nil) async -> (report: CleanupReport, plan: [Finding])? {
         guard !isBusy else { return nil }
         // One click never acts on a stale verdict: drop projects you've touched since the scan.
-        let plan = safeOnly
+        // `only`: exactly these (a Coding screen's selection), never anything kept.
+        let plan = only.map { $0.filter { $0.safety != .keep } } ?? (safeOnly
             ? ProjectScanner.revalidated(safeFindings, staleDays: staleDays).filter { $0.safety == .safe }
-            : selectedFindings
+            : selectedFindings)
         guard !plan.isEmpty else { return nil }
         phase = .reclaiming("Freeing up \(plan.reduce(0) { $0 + $1.reclaimable }.gb)…")
         let guardrail = self.guardrail

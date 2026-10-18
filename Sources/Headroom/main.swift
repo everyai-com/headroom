@@ -360,12 +360,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             && event.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
     }
 
-    /// headroom://search?q=pdfs%20from%20gmail — for Shortcuts, scripts and links.
+    /// headroom://search?q=pdfs%20from%20gmail and headroom://open?screen=worktrees — for Shortcuts, scripts and links.
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls where url.scheme == "headroom" {
             let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
             if url.host == "search", let q = items.first(where: { $0.name == "q" })?.value {
                 NotificationCenter.default.post(name: .headroomSearch, object: q)
+            } else if url.host == "open", let name = items.first(where: { $0.name == "screen" })?.value,
+                      let screen = Screen.allCases.first(where: { $0.rawValue.lowercased().replacingOccurrences(of: " ", with: "-") == name.lowercased() }),
+                      Edition.available(screen) {
+                // headroom://open?screen=worktrees (or build-output, dev-caches, duplicates…)
+                library.requestedScreen = screen
+                openWindow()
+                NotificationCenter.default.post(name: .headroomShowScreen, object: screen)
             } else {
                 openWindow()
             }

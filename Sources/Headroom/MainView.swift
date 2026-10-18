@@ -6,6 +6,7 @@ enum Screen: String, CaseIterable, Identifiable {
          images = "Images", videos = "Videos", music = "Music", documents = "Documents", archives = "Archives", apps = "Apps",
          overview = "Overview",
          files = "Large files", screenshots = "Screenshots", duplicates = "Duplicates", cleanUp = "Clean up", downloads = "Downloaded from",
+         worktrees = "Worktrees", buildOutput = "Build output", devCaches = "Dev caches",
          map = "Map", reclaim = "Reclaim", memory = "Memory", ai = "AI", drives = "Drives", activity = "Activity",
          search = "Search", saved = "Saved search", folder = "Folder", workspace = "Workspace",
          settings = "Settings"
@@ -27,6 +28,9 @@ enum Screen: String, CaseIterable, Identifiable {
         case .duplicates: "square.on.square"
         case .cleanUp: "wand.and.stars"
         case .downloads: "arrow.down.circle"
+        case .worktrees: "arrow.triangle.branch"
+        case .buildOutput: "shippingbox"
+        case .devCaches: "hammer"
         case .map: "square.grid.3x3.square"
         case .reclaim: "sparkles"
         case .memory: "memorychip"
@@ -255,6 +259,7 @@ struct MainView: View {
         case .downloads: DownloadedFromView()
         case .cleanUp: CleanUpView(openReclaim: { screen = .reclaim }, openDuplicates: { screen = .duplicates })
         case .overview: OverviewView(openReclaim: { screen = .reclaim }, openMap: { screen = .map })
+        case .worktrees, .buildOutput, .devCaches: CodingScreen(screen: screen).id(screen)
         case .map: MapView()
         case .reclaim: ReclaimView()
         case .files: FilesView()
@@ -300,6 +305,11 @@ struct MainView: View {
             if files > 0 { parts.append("\(files) \(files == 1 ? "file" : "files")") }
             if bytes > 0 { parts.append(ByteFormat.string(bytes)) }
             return parts.isEmpty ? nil : parts.joined(separator: " · ") + " · nothing moved"
+        case .worktrees, .buildOutput, .devCaches:
+            let items = CodingScreen.items(screen, model: model)
+            guard !items.isEmpty else { return nil }
+            let bytes = screen == .worktrees ? Worktrees.total(model.worktrees) : items.reduce(0) { $0 + $1.size.allocated }
+            return "\(items.count) \(screen == .worktrees ? "worktrees" : "items") · \(ByteFormat.string(bytes))"
         case .screenshots:
             let s = library.screenshots
             return "\(s.count.formatted()) screenshots · \(ByteFormat.string(s.reduce(0) { $0 + $1.bytes }))"
@@ -524,6 +534,10 @@ struct MainView: View {
                         group("Saved searches")
                         ForEach(library.saved) { s in savedItem(s) }
                     }
+                    group("Coding")
+                    navItem(.worktrees, badge: codingBadge(.worktrees))
+                    navItem(.buildOutput, badge: codingBadge(.buildOutput))
+                    navItem(.devCaches, badge: codingBadge(.devCaches))
                     group("Disk")
                     navItem(.overview)
                     navItem(.map)
@@ -553,6 +567,12 @@ struct MainView: View {
         .padding(.horizontal, 12).padding(.bottom, 12)
         .frame(width: 232)
         .background(Theme.sidebar)
+    }
+
+    func codingBadge(_ s: Screen) -> SidebarBadge? {
+        let items = CodingScreen.items(s, model: model)
+        let bytes = s == .worktrees ? Worktrees.total(model.worktrees) : items.reduce(0) { $0 + $1.size.allocated }
+        return bytes > 0 ? SidebarBadge(text: ByteFormat.compact(bytes), color: Theme.color(for: CodingScreen.category(s))) : nil
     }
 
     var cleanUpBytes: Int64 { library.suggestions.reduce(0) { $0 + $1.bytes } }

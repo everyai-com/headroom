@@ -21,11 +21,12 @@ public enum Safety: Int, Codable, Sendable, Comparable, CaseIterable {
 }
 
 public enum StorageCategory: String, CaseIterable, Codable, Sendable {
-    case projectArtifacts, packageCaches, developerTools, aiAgents, appCaches, browsers, logs, trash, userData
+    case projectArtifacts, worktrees, packageCaches, developerTools, aiAgents, appCaches, browsers, logs, trash, userData
 
     public var title: String {
         switch self {
         case .projectArtifacts: "Project build artifacts"
+        case .worktrees: "Worktrees"
         case .packageCaches: "Package manager caches"
         case .developerTools: "Xcode & simulators"
         case .aiAgents: "AI coding agents"
@@ -40,6 +41,7 @@ public enum StorageCategory: String, CaseIterable, Codable, Sendable {
     public var symbol: String {
         switch self {
         case .projectArtifacts: "shippingbox.fill"
+        case .worktrees: "arrow.triangle.branch"
         case .packageCaches: "archivebox.fill"
         case .developerTools: "hammer.fill"
         case .aiAgents: "sparkles"
