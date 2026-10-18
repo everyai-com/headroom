@@ -76,11 +76,12 @@ enum Snapshots {
         if let first = library.saved.first { library.savedID = first.id }
         // `--store`: the Mac App Store screenshots (2880×1800), the screens worth showing, then stop.
         if CommandLine.arguments.contains("--store") {
+            // Only screens drawn from the demo files: the map and overview would show this Mac's real disk.
             let shots: [(Screen, ColorScheme)] = [(.home, .light), (.search, .light), (.workspace, .dark), (.duplicates, .light),
-                                                  (.cleanUp, .dark), (.map, .dark), (.overview, .light)]
+                                                  (.cleanUp, .dark), (.images, .dark), (.recents, .light)]
             for (i, (screen, scheme)) in shots.enumerated() where Edition.available(screen) {
                 if screen == .search {
-                    library.searchText = AppModel.demoMode ? "screenshots with wifi password" : "pdfs from last month"
+                    library.searchText = "photos from the last 2 months"
                     library.scheduleSearch(delay: 0)
                     settle(library)
                 }

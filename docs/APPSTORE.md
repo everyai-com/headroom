@@ -99,5 +99,5 @@ No sign-in, no network access.
 
 ## Screenshots
 
-`Headroom --render <dir> --demo --store` (2880×1800, the App Store edition's screens on made-up demo files, so
+Saved in docs/appstore/screenshots. Remake with `Headroom --render <dir> --demo --store` from the App Store build (2880×1800, the App Store edition's screens on made-up demo files, so
 no real files appear) after `scripts/demo-seed.sh`.

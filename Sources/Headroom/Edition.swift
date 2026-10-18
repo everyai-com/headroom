@@ -88,9 +88,10 @@ struct HomeAccessCard: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var library: LibraryModel
     @ObservedObject var access = FolderAccess.shared
+    @Environment(\.snapshotMode) private var snapshot
 
     var body: some View {
-        if access.needsHome {
+        if access.needsHome, !snapshot {
             Card {
                 HStack(alignment: .top, spacing: 16) {
                     Image(systemName: "house.lodge").font(.system(size: 22, weight: .semibold)).foregroundStyle(Theme.accent)
