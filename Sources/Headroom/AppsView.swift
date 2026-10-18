@@ -274,6 +274,7 @@ struct SettingsView: View {
                             Spacer()
                             ShortcutRecorder()
                         }
+                        EditorSettingRow()
                         toggleRow("Recent downloads in the menu bar", "The last ten files that landed in Downloads, with thumbnails — drag one straight into another app.",
                                   on: $menuBarDownloads)
                         toggleRow("Read the text in screenshots and photos",

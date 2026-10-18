@@ -242,34 +242,44 @@ struct SavedSearchScreen: View {
 struct FolderScreen: View {
     @EnvironmentObject var library: LibraryModel
     @EnvironmentObject var model: AppModel
+    @Environment(\.snapshotMode) private var snapshot
+    @AppStorage("folderGrouping") private var grouping: FolderGrouping = .none
     @State private var items: [LibraryItem] = []
     @State private var loaded: String?
 
     var body: some View {
         let path = library.browsePath ?? library.home
+        // A render can't wait for the background listing: read the folder now.
+        let items = snapshot ? LibraryScanner.list(folder: URL(fileURLWithPath: path)) : self.items
         VStack(alignment: .leading, spacing: 12) {
             breadcrumb(path)
-            if loaded != path {
+            if loaded != path, !snapshot {
                 LoadingLibrary(text: "Opening \((path as NSString).lastPathComponent)…")
             } else if items.isEmpty {
                 EmptyState(symbol: "folder", title: "This folder is empty", detail: LibraryModel.display(path))
             } else {
-                FileGrid(items: items)
+                let groups = grouping.groups(items)
+                FileGrid(items: groups.flatMap(\.items), groups: grouping == .none ? nil : groups)
             }
         }
         .task(id: path) { await load(path) }
-        .onChange(of: library.index.scannedAt) { _, _ in Task { await load(path) } }
+        .onChange(of: library.index.scannedAt) { _, _ in Task { await load(path, changed: true) } }
         // Something here went to the Trash: show the folder as it is now.
-        .onChange(of: library.index.items.count) { _, _ in Task { await load(path) } }
+        .onChange(of: library.index.items.count) { _, _ in Task { await load(path, changed: true) } }
         // Undo from the toast (a tidy put back) changes the folder too.
-        .onChange(of: model.activity.entries.map(\.restored)) { _, _ in Task { await load(path) } }
+        .onChange(of: model.activity.entries.map(\.restored)) { _, _ in Task { await load(path, changed: true) } }
     }
 
-    func load(_ path: String) async {
+    /// List the folder; when something in it changed, its subfolders' sizes and git status are read again.
+    func load(_ path: String, changed: Bool = false) async {
         let url = URL(fileURLWithPath: path)
         let list = await Task.detached(priority: .userInitiated) { LibraryScanner.list(folder: url) }.value
         items = list
         loaded = path
+        if changed {
+            FolderInfoStore.shared.invalidate(list.filter(\.isFolder).map(\.path))
+            await FolderInfoStore.shared.refreshGit(path)
+        }
     }
 
     func breadcrumb(_ path: String) -> some View {
@@ -292,6 +302,7 @@ struct FolderScreen: View {
                     .font(.system(size: 12.5, weight: i == parts.count - 1 ? .semibold : .regular))
                     .foregroundStyle(i == parts.count - 1 ? Theme.textPrimary : Theme.textSecondary)
             }
+            GitBadge(path: path).padding(.leading, 6)
             Spacer()
             if library.canTidy(path) {
                 Button { Task { await library.planTidy(path) } } label: { Label("Tidy…", systemImage: "wand.and.stars") }
@@ -302,21 +313,28 @@ struct FolderScreen: View {
                 Label("Show in Finder", systemImage: "folder")
             }
             .buttonStyle(GhostButtonStyle())
+            OpenInMenu(path: path)
             if !library.pinned.contains(path) {
                 Button { library.pin(path) } label: { Label("Pin", systemImage: "pin") }.buttonStyle(GhostButtonStyle())
                     .help("Pin this folder to the sidebar")
             }
-            Menu {
-                ForEach(library.workspaces) { w in
-                    Button(w.name) { library.addToWorkspace(w.id, paths: [path]) }.disabled(w.contains(path))
-                }
-                if !library.workspaces.isEmpty { Divider() }
-                Button("New Workspace…") { library.workspacePrompt = .create(paths: [path]) }
-            } label: {
+            if snapshot {
+                // ImageRenderer can't draw a Menu.
                 Label("Add to Workspace", systemImage: "rectangle.stack.badge.plus").font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.textSecondary)
+            } else {
+                Menu {
+                    ForEach(library.workspaces) { w in
+                        Button(w.name) { library.addToWorkspace(w.id, paths: [path]) }.disabled(w.contains(path))
+                    }
+                    if !library.workspaces.isEmpty { Divider() }
+                    Button("New Workspace…") { library.workspacePrompt = .create(paths: [path]) }
+                } label: {
+                    Label("Add to Workspace", systemImage: "rectangle.stack.badge.plus").font(.system(size: 12, weight: .medium))
+                }
+                .menuStyle(.borderlessButton).fixedSize()
+                .help("Put this folder on a workspace page — it stays where it is")
             }
-            .menuStyle(.borderlessButton).fixedSize()
-            .help("Put this folder on a workspace page — it stays where it is")
         }
     }
 }

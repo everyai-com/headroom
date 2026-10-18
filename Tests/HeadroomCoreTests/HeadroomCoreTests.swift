@@ -301,6 +301,31 @@ final class HeadroomCoreTests: XCTestCase {
         XCTAssertEqual(report.skipped.map(\.id), ["x"])
     }
 
+    func testMailDataIsProtectedExceptOpenedAttachmentsToTheTrash() throws {
+        let guardrail = SafetyGuard(home: home)
+        func verdict(_ url: URL, _ method: CleanupMethod = .trash) -> SafetyGuard.Verdict {
+            guardrail.check(url, for: .picked(url, bytes: 1, method: method))
+        }
+        let container = "Library/Containers/com.apple.mail"
+        let attachment = try write(container + "/Data/Library/Mail Downloads/6F1A/Invoice.pdf")
+        XCTAssertEqual(verdict(attachment), .allowed, "an opened attachment's copy may go to the Trash")
+        XCTAssertEqual(verdict(attachment.deletingLastPathComponent()), .allowed, "with its folder")
+        XCTAssertNotEqual(verdict(attachment, .delete), .allowed, "never for good")
+        XCTAssertNotEqual(verdict(attachment, .deleteContents), .allowed)
+        XCTAssertNotEqual(verdict(home.appendingPathComponent(container + "/Data/Library/Mail Downloads")), .allowed, "not the folder itself")
+        let mailbox = try write(container + "/Data/Library/Mail/V10/INBOX.mbox/1.emlx")
+        XCTAssertNotEqual(verdict(mailbox), .allowed, "never a mailbox")
+        XCTAssertNotEqual(verdict(home.appendingPathComponent("library/containers/COM.APPLE.MAIL/Data/Library/Mail/V10")), .allowed,
+                          "any case")
+        XCTAssertNotEqual(verdict(home.appendingPathComponent(container)), .allowed, "never Mail's container")
+        XCTAssertNotEqual(verdict(home.appendingPathComponent("Library/Containers")), .allowed, "nor anything holding it")
+        XCTAssertNotEqual(verdict(home.appendingPathComponent(container + "/Data/Library/Caches/x")), .allowed)
+        XCTAssertNotEqual(verdict(try write("Library/Mail/V10/x.emlx")), .allowed, "the old Mail folder stays protected")
+        // A Mail Downloads look-alike in another app's container is not special.
+        let other = try write("Library/Containers/com.example.app/Data/Library/Mail Downloads/x.pdf")
+        XCTAssertEqual(verdict(other, .delete), .allowed)
+    }
+
     // MARK: - Never-touch list
 
     func testNeverTouchListIsEnforcedByTheGuardAndTheScan() throws {

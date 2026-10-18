@@ -54,7 +54,7 @@ struct CleanUpView: View {
                     EmptyState(symbol: "checkmark.seal", title: "Nothing to clean up",
                                detail: "No old installers, forgotten downloads, old screenshots or unused apps. Nice and tidy.")
                 }
-                Text("Example rules: installers untouched for 30 days or already installed · downloads not opened in 3 months · screenshots older than a month · videos over 500 MB untouched for 6 months · apps not opened in 3 months.")
+                Text("Example rules: installers untouched for 30 days or already installed · downloads not opened in 3 months · screenshots and screen recordings older than a month · videos over 500 MB untouched for 6 months · Mail attachments you opened over a week ago · apps not opened in 3 months.")
                     .font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary).fixedSize(horizontal: false, vertical: true)
             }
             .padding(.bottom, 24)

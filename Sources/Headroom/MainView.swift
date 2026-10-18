@@ -325,8 +325,10 @@ struct MainView: View {
             if snapshot {
                 Label("Sort: \(library.sort.rawValue)", systemImage: "arrow.up.arrow.down").font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Theme.textSecondary)
+                if screen == .folder { GroupMenu() }
             } else {
                 sortMenu
+                if screen == .folder { GroupMenu() }
                 if library.viewMode == .grid {
                     Slider(value: $library.cardSize, in: 110...320).frame(width: 90).controlSize(.mini).help("Card size  ⌘+  ⌘−")
                 }
@@ -458,6 +460,11 @@ struct MainView: View {
             // ⌥⌘T: tidy the folder on screen (Desktop from anywhere else).
             Button("") { Task { await library.planTidy(screen == .folder ? (library.browsePath ?? library.home + "/Desktop") : library.home + "/Desktop") } }
                 .keyboardShortcut("t", modifiers: [.option, .command])
+            // ⌥⇧⌘T / ⌥⇧⌘E: the folder on screen in your terminal / code editor.
+            Button("") { if screen == .folder { DevOpen.open(library.browsePath ?? library.home, in: .terminal, model: model) } }
+                .keyboardShortcut("t", modifiers: [.option, .shift, .command])
+            Button("") { if screen == .folder { DevOpen.open(library.browsePath ?? library.home, in: .editor, model: model) } }
+                .keyboardShortcut("e", modifiers: [.option, .shift, .command])
             Button("") { rescan() }.keyboardShortcut("r", modifiers: .command).disabled(model.isBusy)
             Button("") { library.focusSearch += 1 }.keyboardShortcut("f", modifiers: .command)
             Button("") { library.viewMode = .grid }.keyboardShortcut("1", modifiers: [.control, .command])

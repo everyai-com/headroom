@@ -41,6 +41,8 @@ final class LibraryModel: ObservableObject {
     @Published var suggestions: [CleanUpSuggestion] = []
     /// Spotlight's "last opened" for Downloads and videos (forgotten downloads, big old videos).
     var lastUsed: [String: Date] = [:]
+    /// Copies Mail kept of attachments you opened (not in the index: they live in Mail's container).
+    var mailAttachments: [LibraryItem] = []
 
     // MARK: Search
 
@@ -232,10 +234,14 @@ final class LibraryModel: ObservableObject {
         let downloads = home + "/Downloads/"
         let paths = index.items.filter { $0.path.hasPrefix(downloads) || $0.kind == .video && $0.bytes > 200_000_000 }.map(\.path)
         lastUsed = await Task.detached(priority: .utility) { Spotlight.lastUsed(paths) }.value
+        #if !APPSTORE
+        let home = self.home
+        mailAttachments = await Task.detached(priority: .utility) { CleanUp.mailAttachments(home: home) }.value
+        #endif
     }
 
     func refreshSuggestions() {
-        var cards = CleanUp.suggestions(index, apps: app.apps, home: home, lastUsed: lastUsed)
+        var cards = CleanUp.suggestions(index, apps: app.apps, home: home, lastUsed: lastUsed, mailAttachments: mailAttachments)
         let groups = duplicates + lookAlikes
         if !groups.isEmpty {
             cards.insert(CleanUpSuggestion(kind: .duplicates, items: groups.flatMap { Array($0.items.dropFirst()) }), at: 0)
@@ -599,6 +605,7 @@ final class LibraryModel: ObservableObject {
     func forget(_ paths: Set<String>) {
         guard !paths.isEmpty else { return }
         index.items.removeAll { paths.contains($0.path) }
+        mailAttachments.removeAll { paths.contains($0.path) }
         facetCache = [:]
         results.removeAll { paths.contains($0.path) }
         selection.subtract(paths)

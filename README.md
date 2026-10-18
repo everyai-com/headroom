@@ -46,14 +46,23 @@ engines pile up behind them.
 - **Duplicates** (⇧⌘D) — identical files by SHA-256 fingerprint and look-alike photos (bursts,
   edits, HEIC/JPEG pairs) by Vision feature prints. Headroom picks the copy to keep; click another
   to keep that one. The rest go to the Trash. Files that live only in iCloud are never read.
-- **Clean up** (⇧⌘K) — cards for old installers, forgotten downloads, old screenshots, big old
-  videos and apps you don't use, each with a review page: Trash All or Trash Selected. Everything
+- **Clean up** (⇧⌘K) — cards for old installers, forgotten downloads, old screenshots, old screen
+  recordings, big old videos, Mail attachments you've opened (Mail's own copies — the original stays
+  in the email) and apps you don't use, each with a review page: Trash All or Trash Selected. Everything
   goes to the Trash, with Undo.
 - **Finder, but nicer** — grid or list (⌃⌘1 / ⌃⌘2), ⌘+ / ⌘− card size, sort by name, date,
   size or kind; Space for the real Quick Look (arrows move, up and down jump a row); ⌘I inspector
   with a live preview, dimensions, duration, camera, download source and the text inside;
   right-click for Open With, Show in Finder, Copy, Copy Path, Pin to Sidebar, Move to Trash;
   drag several files out into Mail, Slack or Figma at once; browse any folder and pin it.
+- **Folders that say what's in them** — every folder card and list row shows how many items it holds
+  and how big it is, measured in the background (— until known). Group a folder by kind or by date
+  added (Today, Yesterday, This Week, Earlier) next to Sort; nothing moves on disk.
+- **For developers** — a git project shows its branch and uncommitted changes in the path bar (and on
+  its workspace card), read-only: the branch from `.git/HEAD`, changes from `git status`, never a
+  fetch or a write. ⌥⇧⌘T opens the folder on screen in your terminal (Ghostty, Warp, iTerm or
+  Terminal, whichever is installed first), ⌥⇧⌘E in your editor (VS Code, Cursor, Zed, Xcode, Sublime
+  Text, Nova, BBEdit or a JetBrains IDE — pick in Settings); both are in a folder's right-click menu.
 - **Quick Search** (⌃⌥Space, from any app) — a Raycast-style command bar: files, apps, System Settings
   pages ("wifi", "dark mode"), Headroom's screens and commands, and sums (`1920 * 1.25`) in one ranked
   list that learns what you open. ↩ opens,
@@ -174,6 +183,8 @@ Sources/HeadroomCore/   engine — no UI, fully tested
   Duplicates.swift      SHA-256 identical files + Vision look-alike photos
   TextRecognition.swift text in images and PDFs (Vision, on device)
   Workspace.swift       workspaces: folders + files by reference, folder summaries, changed lately
+  FolderInfo.swift      folder sizes and item counts, grouping by kind or date added
+  Git.swift             read-only branch + change count · DevApps.swift  terminals and editors
   CleanUp.swift         the clean-up cards · AutoRules.swift  optional tidy-up rules
 Sources/Headroom/       the app: notch panel, menu bar, main window, Quick Search
 Sources/headroom-cli/   read-only reports
@@ -182,7 +193,7 @@ Sources/headroom-cli/   read-only reports
 ## Keyboard
 
 ⌘1–⌘9 Home, Recents, Images, Videos, Music, Documents, Archives, Apps, Overview · ⌘F search ·
-⌃1–⌃9 workspaces · ⌥⌘N new workspace · ⌥⌘T tidy this folder (Desktop elsewhere) · ⌃⌥Space Quick Search (anywhere; ⌘K actions) · Space Quick Look · ⌘I info · ⌃⌘1 / ⌃⌘2 grid / list ·
+⌃1–⌃9 workspaces · ⌥⌘N new workspace · ⌥⌘T tidy this folder (Desktop elsewhere) · ⌥⇧⌘T / ⌥⇧⌘E open this folder in terminal / editor · ⌃⌥Space Quick Search (anywhere; ⌘K actions) · Space Quick Look · ⌘I info · ⌃⌘1 / ⌃⌘2 grid / list ·
 ⌘+ / ⌘− card size · ⇧⌘C copy text · ⇧⌘J downloaded from · ⇧⌘D duplicates · ⇧⌘K clean up ·
 ⌃⌘T switch look · ⌃⌘S sidebar · ⌥⌘P play / pause · ⌘R rescan · ⌘A select all ·
 ⌘⌫ move selection to Trash · ⌥⌘⌫ delete permanently (Large files) · ⌘Z undo the last trash ·

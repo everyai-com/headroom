@@ -58,6 +58,15 @@ public struct SafetyGuard: Sendable {
                 return .refused("an iPhone or iPad backup — it can only go to the Trash, a whole device at a time")
             }
         }
+        // Mail's data lives in its container too: only the copies Mail saved when you opened an attachment
+        // may go (the original stays in the email) — to the Trash, never for good, never the mailboxes.
+        let mailContainer = home + "/library/containers/com.apple.mail"
+        if mailContainer.hasPrefix(resolved + "/") { return .refused("holds Mail's data") }
+        if resolved == mailContainer || resolved.hasPrefix(mailContainer + "/") {
+            guard resolved.hasPrefix(CleanUp.mailDownloads(home: home).lowercased() + "/"), case .trash = finding.method else {
+                return .refused("Mail's data — only attachments Mail saved when you opened them may go, to the Trash")
+            }
+        }
         // Inside an app bundle: deleting part of an app breaks it — uninstall the whole app instead.
         // An app already uninstalled to the Trash may be deleted for good — the whole bundle, never a piece of it.
         let trashedApp: Bool = {

@@ -78,6 +78,49 @@ final class CleanUpTests: XCTestCase {
         XCTAssertFalse(cards.contains { $0.items.isEmpty && $0.apps.isEmpty })
     }
 
+    func testOldScreenRecordingsCardAndNotAlsoABigOldVideo() {
+        let index = LibraryIndex(items: [
+            item("Desktop/Screen Recording 2026-01-02 at 10.00.00.mov", bytes: 900_000_000, age: 300),
+            item("Desktop/Bildschirmaufnahme 2026-08-01.mov", age: 45),
+            item("Desktop/CleanShot 2026-10-01.mp4", age: 40),
+            item("Desktop/Screen Recording new.mov", age: 3),
+            item("Desktop/CleanShot 2026-01-01.png", age: 300, screenshot: true),
+            item("Movies/trip.mov", bytes: 2_000_000_000, age: 300),
+        ], scannedAt: now)
+        XCTAssertEqual(Set(CleanUp.oldScreenRecordings(index, now: now, days: 30).map(\.name)),
+                       ["Screen Recording 2026-01-02 at 10.00.00.mov", "Bildschirmaufnahme 2026-08-01.mov", "CleanShot 2026-10-01.mp4"],
+                       "videos only, older than a month")
+        let cards = CleanUp.suggestions(index, apps: [], home: home.path, now: now)
+        XCTAssertEqual(cards.first { $0.kind == .bigOldVideos }?.items.map(\.name), ["trip.mov"], "a recording is on one card, not two")
+        XCTAssertTrue(CleanUp.looksLikeScreenRecording("Screen Recording 2026-10-18 at 09.41.12.mov"))
+        XCTAssertFalse(CleanUp.looksLikeScreenRecording("Birthday.mov"))
+    }
+
+    func testMailAttachmentsCardListsOnlyMailDownloads() throws {
+        let downloads = URL(fileURLWithPath: CleanUp.mailDownloads(home: home.path))
+        func put(_ rel: String, age: Double) throws {
+            let url = downloads.appendingPathComponent(rel)
+            try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data(repeating: 1, count: 5_000).write(to: url)
+            let date = now.addingTimeInterval(-age * day)
+            try fm.setAttributes([.modificationDate: date, .creationDate: date], ofItemAtPath: url.path)
+        }
+        try put("6F1A-UUID/Invoice.pdf", age: 30)
+        try put("9B2C-UUID/Photo.jpg", age: 2)
+        try put("9B2C-UUID/.hidden", age: 30)
+        // Mail's mailboxes sit beside it and are never listed.
+        let mailbox = home.appendingPathComponent("Library/Containers/com.apple.mail/Data/Library/Mail/V10/INBOX.mbox/1.emlx")
+        try fm.createDirectory(at: mailbox.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(repeating: 1, count: 10).write(to: mailbox)
+
+        let all = CleanUp.mailAttachments(home: home.path)
+        XCTAssertEqual(Set(all.map(\.name)), ["Invoice.pdf", "Photo.jpg"])
+        let cards = CleanUp.suggestions(LibraryIndex(items: [], scannedAt: now), apps: [], home: home.path, mailAttachments: all, now: now)
+        let card = cards.first { $0.kind == .mailAttachments }
+        XCTAssertEqual(card?.items.map(\.name), ["Invoice.pdf"], "opened over a week ago")
+        XCTAssertTrue(CleanUp.mailAttachments(home: home.appendingPathComponent("nobody").path).isEmpty)
+    }
+
     func testNormalisedNamesMatchInstallersToApps() {
         XCTAssertEqual(CleanUp.normalized("Google Chrome"), "googlechrome")
         XCTAssertEqual(CleanUp.normalized("googlechrome-universal"), "googlechrome")
