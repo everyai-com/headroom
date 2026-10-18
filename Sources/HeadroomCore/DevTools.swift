@@ -3,7 +3,7 @@ import Foundation
 /// Space held by developer tools that need their own logic (not just "a folder"): Docker,
 /// simulator runtimes and devices, old toolchain versions, Time Machine snapshots, installers.
 public enum DevTools {
-    public static func scan(home: URL = URL(fileURLWithPath: NSHomeDirectory())) async -> [Finding] {
+    public static func scan(home: URL = URL(fileURLWithPath: HeadroomPaths.home)) async -> [Finding] {
         async let docker = dockerFindings(home: home)
         async let sims = simulatorFindings(home: home)
         var out = await docker + sims

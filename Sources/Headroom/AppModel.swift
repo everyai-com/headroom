@@ -44,7 +44,7 @@ final class AppModel: ObservableObject {
 
     /// Failures land in Application Support/Headroom/problems.log too — a toast is gone in seconds.
     static func logProblem(_ message: String) {
-        let url = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support/Headroom/problems.log")
+        let url = URL(fileURLWithPath: HeadroomPaths.home).appendingPathComponent("Library/Application Support/Headroom/problems.log")
         let line = "\(Date().formatted(.iso8601)) \(message)\n"
         if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(Data(line.utf8)); try? h.close() }
         else { try? Data(line.utf8).write(to: url) }
@@ -54,7 +54,10 @@ final class AppModel: ObservableObject {
         var message = message
         // Without Full Disk Access macOS blocks the Trash and other apps' data — say so instead of a vague failure.
         let blocked = ["permission", "not permitted", "skipped", "couldn't"].contains { message.lowercased().contains($0) }
-        if blocked || failed {
+        if blocked, Edition.appStore {
+            // Sandboxed: Full Disk Access doesn't apply; folders open when you choose them.
+            message += " — Headroom can only open folders you've given it. Choose your home folder on Home, or the folder when asked."
+        } else if blocked || failed {
             hasFullDiskAccess = Self.checkFullDiskAccess()
             if !hasFullDiskAccess {
                 message += " — Headroom needs Full Disk Access for this: System Settings → Privacy & Security → Full Disk Access → turn on Headroom"
@@ -83,7 +86,7 @@ final class AppModel: ObservableObject {
     /// scripts/demo-seed.sh made, so your real projects and documents never appear on camera.
     static let demoMode = CommandLine.arguments.contains("--demo")
     static let demoRoot = ProcessInfo.processInfo.environment["HEADROOM_DEMO_ROOT"].map { URL(fileURLWithPath: $0) }
-        ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Desktop/headroom-demo")
+        ?? URL(fileURLWithPath: HeadroomPaths.home).appendingPathComponent("Desktop/headroom-demo")
 
     static func isDemoPath(_ url: URL) -> Bool {
         let p = url.path
@@ -146,6 +149,8 @@ final class AppModel: ObservableObject {
                 return d
             }
         }
+        // The App Store edition can't run other tools (simctl, docker, brew…): those findings stay out.
+        if Edition.appStore { all.removeAll { if case .command = $0.method { true } else { false } } }
         findings = all
         // Safe items are pre-selected; review items wait for you.
         selected = Set(all.filter { $0.safety == .safe && $0.reclaimable > 0 }.map(\.id))

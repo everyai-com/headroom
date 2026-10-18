@@ -214,7 +214,7 @@ public struct LibraryIndex: Codable, Sendable {
 /// those would download them).
 public enum LibraryScanner {
     /// Your own folders. Library and Applications are never walked (apps come from `AppInventory`).
-    public static func defaultRoots(home: URL = URL(fileURLWithPath: NSHomeDirectory())) -> [URL] {
+    public static func defaultRoots(home: URL = URL(fileURLWithPath: HeadroomPaths.home)) -> [URL] {
         let fm = FileManager.default
         let skip: Set<String> = ["Library", "Applications", "Public", "Virtual Machines.localized"]
         var roots = ((try? fm.contentsOfDirectory(at: home, includingPropertiesForKeys: [.isDirectoryKey, .isPackageKey],

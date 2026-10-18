@@ -76,7 +76,7 @@ public enum CleanUp {
     }
 
     /// Every card that has something in it (duplicates come from `Duplicates` and are added by the caller).
-    public static func suggestions(_ index: LibraryIndex, apps: [InstalledApp], home: String = NSHomeDirectory(),
+    public static func suggestions(_ index: LibraryIndex, apps: [InstalledApp], home: String = HeadroomPaths.home,
                                    lastUsed: [String: Date] = [:], now: Date = .now, rules: Rules = Rules()) -> [CleanUpSuggestion] {
         var out: [CleanUpSuggestion] = []
         let installers = oldInstallers(index, apps: apps, home: home, now: now, days: rules.installerDays)

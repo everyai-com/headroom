@@ -32,7 +32,7 @@ final class DrivesModel: ObservableObject {
     @Published var message: String?
     @Published var mounting = false
 
-    static let rescueRoot = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Drive Rescue")
+    static let rescueRoot = URL(fileURLWithPath: HeadroomPaths.home).appendingPathComponent("Drive Rescue")
 
     var drive: ExternalDrive? { drives.first { $0.id == selected } ?? drives.first }
 

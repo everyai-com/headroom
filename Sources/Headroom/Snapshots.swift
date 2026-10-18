@@ -72,8 +72,26 @@ enum Snapshots {
             Thumbnails.shared.preload(items.map(\.url), size: 320)
             Thumbnails.shared.preload(items.map(\.url), size: 160)
         }
-        library.browsePath = NSHomeDirectory() + "/Downloads"
+        library.browsePath = HeadroomPaths.home + "/Downloads"
         if let first = library.saved.first { library.savedID = first.id }
+        // `--store`: the Mac App Store screenshots (2880×1800), the screens worth showing, then stop.
+        if CommandLine.arguments.contains("--store") {
+            let shots: [(Screen, ColorScheme)] = [(.home, .light), (.search, .light), (.workspace, .dark), (.duplicates, .light),
+                                                  (.cleanUp, .dark), (.map, .dark), (.overview, .light)]
+            for (i, (screen, scheme)) in shots.enumerated() where Edition.available(screen) {
+                if screen == .search {
+                    library.searchText = AppModel.demoMode ? "screenshots with wifi password" : "pdfs from last month"
+                    library.scheduleSearch(delay: 0)
+                    settle(library)
+                }
+                save(MainView(screen: screen).environmentObject(model).environmentObject(library), size: CGSize(width: 1440, height: 900),
+                     to: dir.appendingPathComponent("store-\(i + 1)-\(screen.rawValue.lowercased().replacingOccurrences(of: " ", with: "-")).png"),
+                     scheme: scheme)
+                if screen == .search { library.searchText = "" }
+            }
+            print("rendered App Store screenshots to \(dir.path)")
+            return
+        }
         for scheme in [ColorScheme.dark, .light] {
             for screen in Screen.allCases where screen != .saved || library.savedID != nil {
                 let override = screen == .drives ? AnyView(DrivesView(model: drives)) : screen == .ai ? AnyView(AIView(ai: ai)) : nil

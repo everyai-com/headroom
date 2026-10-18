@@ -20,6 +20,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var ticks = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // App Store edition: reopen the folders you granted before anything scans.
+        FolderAccess.shared.restore()
         // Lives in the notch & menu bar; a Dock icon only while the window is open.
         NSApp.setActivationPolicy(.accessory)
 
@@ -87,6 +89,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     /// Out of memory for a minute straight: say so, and name what's using it.
     private func checkMemory() {
+        // The App Store edition can't see other processes, so it can't name what to quit.
+        guard Edition.available(.memory) else { return }
         criticalTicks = model.memory.pressure == .critical ? criticalTicks + 1 : 0
         guard criticalTicks >= 2, model.notificationsEnabled,
               lastMemoryAlert.map({ Date().timeIntervalSince($0) > 3600 }) ?? true else { return }
@@ -161,7 +165,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         Task {
             var notes: [String] = []
             if trashInstallers {
-                let plan = AutoRules.oldInstallerPlan(index, home: NSHomeDirectory(), days: 30)
+                let plan = AutoRules.oldInstallerPlan(index, home: HeadroomPaths.home, days: 30)
                 if !plan.isEmpty {
                     let report = await Task.detached(priority: .utility) { Cleaner(guardrail: guardrail).reclaim(plan) }.value
                     let done = plan.filter { report.reclaimed.contains($0.id) }

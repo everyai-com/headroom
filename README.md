@@ -125,6 +125,13 @@ engines pile up behind them.
 - **Every GB accounted.** The map names the APFS volumes folders can't see — macOS,
   Preboot, swap, Recovery — and shows what's unreadable as such instead of hiding it.
 
+## Two editions
+
+The download (this repo, notarized) has everything. **Headroom: Disk & Files** on the Mac App Store is the
+same app in Apple's sandbox: your files, search, Quick Search, Workspaces, Tidy, Duplicates, Clean up, the
+disk map and Reclaim's caches — without the Memory, AI and Drives screens or the developer-tool cleanups,
+which the sandbox doesn't allow. See [docs/APPSTORE.md](docs/APPSTORE.md) and [docs/PRIVACY.md](docs/PRIVACY.md).
+
 ## Build & run
 
 Requires macOS 15+ and Xcode 16+ (Swift 6).

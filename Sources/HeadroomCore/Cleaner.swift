@@ -7,7 +7,7 @@ public struct SafetyGuard: Sendable {
     /// Your never-touch list: nothing at, inside or containing these paths is removed.
     public let excluded: [String]
 
-    public init(home: URL = URL(fileURLWithPath: NSHomeDirectory()), excluded: [String] = []) {
+    public init(home: URL = URL(fileURLWithPath: HeadroomPaths.home), excluded: [String] = []) {
         self.home = home.resolvingSymlinksInPath().standardizedFileURL
         self.excluded = excluded.map { URL(fileURLWithPath: $0).standardizedFileURL.path.lowercased() }
     }

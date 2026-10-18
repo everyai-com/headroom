@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Mac App Store edition (scripts/appstore.sh). Sandboxed; no network: the App Store edition never
+     checks for updates, and text recognition and duplicate detection run on this Mac. Folders open
+     only when you choose them (kept as security-scoped bookmarks). -->
+<plist version="1.0"><dict>
+  <key>com.apple.security.app-sandbox</key><true/>
+  <key>com.apple.security.files.user-selected.read-write</key><true/>
+  <key>com.apple.security.files.bookmarks.app-scope</key><true/>
+  <key>com.apple.security.files.downloads.read-write</key><true/>
+  <key>com.apple.security.assets.pictures.read-write</key><true/>
+  <key>com.apple.security.assets.movies.read-write</key><true/>
+  <key>com.apple.security.assets.music.read-write</key><true/>
+  <key>com.apple.application-identifier</key><string>M359MD8CXK.com.saphaare.headroom</string>
+  <key>com.apple.developer.team-identifier</key><string>M359MD8CXK</string>
+</dict></plist>

@@ -243,6 +243,7 @@ struct MainView: View {
     }
 
     @ViewBuilder var screenContent: some View {
+        if !Edition.available(screen) { FullVersionOnly(screen: screen) } else {
         switch screen {
         case .home: HomeView(go: { screen = $0 })
         case .recents, .images, .videos, .music, .documents, .archives, .screenshots: KindScreen(screen: screen).id(screen)
@@ -263,6 +264,7 @@ struct MainView: View {
         case .drives: DrivesView()
         case .activity: ActivityView()
         case .settings: SettingsView(launchAtLogin: launchAtLogin)
+        }
         }
     }
 
@@ -519,9 +521,9 @@ struct MainView: View {
                     navItem(.overview)
                     navItem(.map)
                     navItem(.reclaim, badge: model.safeReclaimable > 0 ? SidebarBadge(text: ByteFormat.compact(model.safeReclaimable), color: Theme.safe) : nil)
-                    navItem(.memory)
-                    navItem(.ai)
-                    navItem(.drives)
+                    if Edition.available(.memory) { navItem(.memory) }
+                    if Edition.available(.ai) { navItem(.ai) }
+                    if Edition.available(.drives) { navItem(.drives) }
                     navItem(.activity, badge: model.waitingInTrash.bytes > 0 ? SidebarBadge(text: ByteFormat.compact(model.waitingInTrash.bytes), color: Theme.review) : nil)
                     group("Locations")
                     ForEach(locations, id: \.path) { loc in locationItem(loc.name, loc.path, loc.symbol) }

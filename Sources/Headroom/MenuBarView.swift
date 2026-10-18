@@ -78,7 +78,7 @@ struct MenuBarView: View {
     }
 
     /// The newest arrivals in Downloads, by when they arrived (not when they last changed).
-    static func recentDownloads(home: String = NSHomeDirectory(), limit: Int = 10) async -> [LibraryItem] {
+    static func recentDownloads(home: String = HeadroomPaths.home, limit: Int = 10) async -> [LibraryItem] {
         let folder = URL(fileURLWithPath: home + "/Downloads")
         return await Task.detached(priority: .userInitiated) {
             Array(LibraryScanner.list(folder: folder)

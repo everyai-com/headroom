@@ -106,7 +106,7 @@ public struct LibraryQuery: Sendable, Hashable {
         /// Path → the camera or device that made it ("Apple iPhone 15 Pro").
         public var devices: [String: String]
 
-        public init(home: String = NSHomeDirectory(), recognizedText: [String: String] = [:], contentHits: Set<String> = [],
+        public init(home: String = HeadroomPaths.home, recognizedText: [String: String] = [:], contentHits: Set<String> = [],
                     devices: [String: String] = [:]) {
             self.home = home
             self.recognizedText = recognizedText

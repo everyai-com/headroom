@@ -110,7 +110,7 @@ public enum Catalog {
     }
 
     /// Measure every catalog rule that exists on this Mac.
-    public static func scanKnownLocations(home: URL = URL(fileURLWithPath: NSHomeDirectory()),
+    public static func scanKnownLocations(home: URL = URL(fileURLWithPath: HeadroomPaths.home),
                                           isCancelled: @escaping @Sendable () -> Bool = { false }) async -> [Finding] {
         let fm = FileManager.default
         var findings: [Finding] = await withTaskGroup(of: Finding?.self) { group in

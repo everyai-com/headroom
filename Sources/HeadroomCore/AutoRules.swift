@@ -18,7 +18,7 @@ public enum AutoRules {
     }
 
     /// Where screenshots are saved: the system setting, else the Desktop.
-    public static func screenshotFolder(home: URL = URL(fileURLWithPath: NSHomeDirectory())) -> URL {
+    public static func screenshotFolder(home: URL = URL(fileURLWithPath: HeadroomPaths.home)) -> URL {
         if let location = CFPreferencesCopyAppValue("location" as CFString, "com.apple.screencapture" as CFString) as? String,
            !location.isEmpty {
             let expanded = (location as NSString).expandingTildeInPath

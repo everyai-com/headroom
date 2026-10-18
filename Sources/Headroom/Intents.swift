@@ -33,7 +33,7 @@ struct LatestDownloadIntent: AppIntent {
     static let description = IntentDescription("The newest file in your Downloads folder, by when it arrived.")
 
     func perform() async throws -> some IntentResult & ReturnsValue<IntentFile?> {
-        let folder = URL(fileURLWithPath: NSHomeDirectory() + "/Downloads")
+        let folder = URL(fileURLWithPath: HeadroomPaths.home + "/Downloads")
         let newest = LibraryScanner.list(folder: folder).filter { !$0.isFolder }.max { $0.arrived < $1.arrived }
         return .result(value: newest.map { IntentFile(fileURL: $0.url, filename: $0.name) })
     }

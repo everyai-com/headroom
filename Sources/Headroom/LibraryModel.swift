@@ -187,7 +187,7 @@ final class LibraryModel: ObservableObject {
     }
 
     /// Your home folder — or, with `--demo`, the made-up one scripts/demo-seed.sh fills.
-    var home: String { AppModel.demoMode ? Self.demoHome.path : NSHomeDirectory() }
+    var home: String { AppModel.demoMode ? Self.demoHome.path : HeadroomPaths.home }
     static var demoHome: URL { AppModel.demoRoot.appendingPathComponent("Home", isDirectory: true) }
 
     /// "~/Downloads" for display (with `--demo`, the made-up home reads as "~" too).
@@ -672,6 +672,7 @@ final class LibraryModel: ObservableObject {
     @discardableResult
     func createWorkspace(name: String, paths: [String] = []) -> Workspace {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        FolderAccess.shared.remember(paths.map { URL(fileURLWithPath: $0) })
         var w = Workspace(name: trimmed.isEmpty ? "New Workspace" : trimmed)
         w.add(paths)
         workspaces.append(w)
@@ -703,6 +704,7 @@ final class LibraryModel: ObservableObject {
 
     func addToWorkspace(_ id: UUID, paths: [String]) {
         guard let i = workspaces.firstIndex(where: { $0.id == id }) else { return }
+        FolderAccess.shared.remember(paths.map { URL(fileURLWithPath: $0) })
         let n = workspaces[i].add(paths)
         if n > 0 {
             app.show("Added \(n == 1 ? "1 item" : "\(n) items") to “\(workspaces[i].name)”")

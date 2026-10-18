@@ -11,6 +11,7 @@ struct HomeView: View {
     var body: some View {
         Scrolling {
             VStack(alignment: .leading, spacing: 28) {
+                HomeAccessCard()
                 if !library.hasScanned {
                     LoadingLibrary()
                 } else {

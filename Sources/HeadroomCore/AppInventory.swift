@@ -32,11 +32,11 @@ public struct InstalledApp: Sendable, Hashable, Identifiable {
 /// Lists installed apps with the data they keep, and uninstalls them completely —
 /// to the Trash, so an uninstall is always recoverable until you empty it.
 public enum AppInventory {
-    public static func appDirectories(home: URL = URL(fileURLWithPath: NSHomeDirectory())) -> [URL] {
+    public static func appDirectories(home: URL = URL(fileURLWithPath: HeadroomPaths.home)) -> [URL] {
         [URL(fileURLWithPath: "/Applications"), home.appendingPathComponent("Applications")]
     }
 
-    public static func scan(home: URL = URL(fileURLWithPath: NSHomeDirectory()),
+    public static func scan(home: URL = URL(fileURLWithPath: HeadroomPaths.home),
                             isCancelled: @escaping @Sendable () -> Bool = { false }) async -> [InstalledApp] {
         let fm = FileManager.default
         var bundles: [URL] = []

@@ -89,7 +89,7 @@ public enum DiskMap {
         }
     }
 
-    public static func build(home: URL = URL(fileURLWithPath: NSHomeDirectory()),
+    public static func build(home: URL = URL(fileURLWithPath: HeadroomPaths.home),
                              volume: VolumeStatus = .current(),
                              safetyByPath: [String: Safety] = [:],
                              bigFiles: BigFileCollector? = nil,

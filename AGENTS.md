@@ -16,6 +16,9 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   `library --ext` lists extensions per kind)
 - distribution signing: `HEADROOM_SIGN_ID="Developer ID Application: …" HEADROOM_NOTARY_PROFILE=<profile> ./scripts/bundle.sh`
   (version from `VERSION`; Developer ID builds keep Full Disk Access across rebuilds, ad-hoc ones don't)
+- Mac App Store edition: `scripts/appstore.sh [--upload]` → sandboxed universal `dist/Headroom-AppStore.pkg`
+  (`-DAPPSTORE`, bundle ID `com.saphaare.headroom`, signing assets in `~/.headroom-signing`); store screenshots
+  with `Headroom --render <dir> --demo --store`. See docs/APPSTORE.md.
 - release: bump `VERSION`, then `HEADROOM_SIGN_ID=… HEADROOM_NOTARY_PROFILE=… HEADROOM_RELEASE_REPO=owner/public-repo
   ./scripts/release.sh "notes"` → notarized zip + `update.json` on a GitHub release. Builds with
   `HEADROOM_UPDATE_FEED` set check it daily (`Updates`); they notify and open the download, never self-install.
@@ -77,6 +80,11 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   files: loose files into kind folders inside the same folder, guard-checked, never overwriting, never a
   folder, one `.filed` Activity entry with Put Back. `tidyRefusal` blocks home itself, Library and anything
   inside a code project. Partial downloads, aliases/links and files changed in the last 5 minutes stay.
+- Two editions from one codebase (`Edition.appStore`, `-DAPPSTORE`): the App Store edition is sandboxed, so
+  it hides Memory, AI and Drives, drops `.command` findings, has no update check, no bundled CLI and no network,
+  and never points users to download anything elsewhere (App Review). Use `HeadroomPaths.home`, never
+  `NSHomeDirectory()` (the container inside the sandbox). Folders open through `FolderAccess`
+  (security-scoped bookmarks); anything a user adds from outside home must be `remember`ed.
 - Workspaces only remember paths: adding, removing or deleting a workspace never copies, moves or
   touches a file. `Workspaces.summarize` reads like the scanner (same skips, never opens a dataless file —
   those are counted from metadata and listed as "In iCloud only"). Bookmarks resolve `.withoutMounting`.

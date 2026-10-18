@@ -2,6 +2,16 @@ import Foundation
 
 /// Where Headroom keeps its own small state (history, activity log, map snapshots).
 public enum HeadroomPaths {
+    /// Your real home folder. Inside the App Store sandbox `NSHomeDirectory()` is the app's own
+    /// container (~/Library/Containers/…/Data), so this asks the user database instead; outside it the two agree.
+    public static let home: String = {
+        if let pw = getpwuid(getuid()), let dir = pw.pointee.pw_dir { return String(cString: dir) }
+        return NSHomeDirectory()
+    }()
+
+    /// Built for the Mac App Store: sandboxed, so some features are off (see `Edition`).
+    public static let isSandboxed = ProcessInfo.processInfo.environment["APP_SANDBOX_CONTAINER_ID"] != nil
+
     public static var support: URL {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Headroom", isDirectory: true)

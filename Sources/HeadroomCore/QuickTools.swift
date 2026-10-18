@@ -170,7 +170,7 @@ public struct QuickApp: Sendable, Hashable, Identifiable {
     }
 
     /// Where apps live, Apple's included.
-    public static func defaultRoots(home: URL = URL(fileURLWithPath: NSHomeDirectory())) -> [URL] {
+    public static func defaultRoots(home: URL = URL(fileURLWithPath: HeadroomPaths.home)) -> [URL] {
         ["/Applications", "/Applications/Utilities", "/System/Applications", "/System/Applications/Utilities",
          "/System/Library/CoreServices/Applications"].map { URL(fileURLWithPath: $0) }
             + [home.appendingPathComponent("Applications")]

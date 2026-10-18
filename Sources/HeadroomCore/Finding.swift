@@ -131,7 +131,7 @@ extension Finding {
 extension URL {
     /// "~/Desktop/x" for display.
     public var tildePath: String {
-        let home = NSHomeDirectory()
+        let home = HeadroomPaths.home
         return path.hasPrefix(home) ? "~" + path.dropFirst(home.count) : path
     }
 }

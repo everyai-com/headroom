@@ -4,8 +4,8 @@ import Foundation
 public enum Shell {
     /// GUI apps launch with a bare PATH; developer tools live in these places.
     static let searchPath = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin",
-                             NSHomeDirectory() + "/Library/pnpm", NSHomeDirectory() + "/.bun/bin",
-                             NSHomeDirectory() + "/.npm-global/bin", NSHomeDirectory() + "/.cargo/bin"]
+                             HeadroomPaths.home + "/Library/pnpm", HeadroomPaths.home + "/.bun/bin",
+                             HeadroomPaths.home + "/.npm-global/bin", HeadroomPaths.home + "/.cargo/bin"]
 
     public static func which(_ tool: String) -> String? {
         for dir in searchPath {

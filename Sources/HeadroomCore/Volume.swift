@@ -34,7 +34,7 @@ public struct VolumeStatus: Sendable, Hashable, Codable {
 
     /// Read the startup disk (the Data volume holds everything but macOS itself).
     public static func current() -> VolumeStatus {
-        let data = URL(fileURLWithPath: NSHomeDirectory())
+        let data = URL(fileURLWithPath: HeadroomPaths.home)
         let values = try? data.resourceValues(forKeys: [
             .volumeTotalCapacityKey, .volumeAvailableCapacityKey, .volumeAvailableCapacityForImportantUsageKey,
         ])

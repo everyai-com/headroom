@@ -76,7 +76,7 @@ public enum AIUsage {
     ]
 
     /// Scan disk, processes and listening ports. Tools with nothing on disk and nothing running are left out.
-    public static func scan(home: URL = URL(fileURLWithPath: NSHomeDirectory()),
+    public static func scan(home: URL = URL(fileURLWithPath: HeadroomPaths.home),
                             processes: [ProcessInfoSnapshot]? = nil,
                             servers: [AIServer]? = nil) async -> [AITool] {
         let procs = processes ?? ProcessScanner.snapshot(includeArguments: false)
