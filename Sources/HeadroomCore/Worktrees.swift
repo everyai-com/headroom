@@ -85,7 +85,7 @@ public enum Worktrees {
         if p.contains("/.cursor/") { return "Cursor" }
         if p.contains("/.t3/") || p.contains("/t3code/") { return "T3 Code" }
         if p.contains("/.ao/") { return "ao" }
-        return "git"
+        return "Git"
     }
 
     /// One spelling per folder (`/private/var/…` and `/var/…` are the same place), so a worktree found by

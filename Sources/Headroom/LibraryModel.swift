@@ -211,7 +211,9 @@ final class LibraryModel: ObservableObject {
     func scan() async {
         guard !scanning else { return }
         scanning = true
-        let roots = self.roots
+        let all = self.roots
+        // Never wait on a permission prompt: a folder macOS is still asking about is skipped until it's answered.
+        let roots = await Task.detached(priority: .utility) { Access.readable(all) }.value
         let fresh = await Task.detached(priority: .utility) { await LibraryScanner.scan(roots: roots) }.value
         index = fresh
         cache.removeAll()

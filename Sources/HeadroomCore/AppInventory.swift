@@ -62,7 +62,10 @@ public enum AppInventory {
                     let name = (info["CFBundleDisplayName"] as? String) ?? (info["CFBundleName"] as? String)
                         ?? bundle.deletingPathExtension().lastPathComponent
                     let leftovers = index.leftovers(bundleID: id, name: name, executable: info["CFBundleExecutable"] as? String,
-                                                    otherBundleIDs: allIDs).map {
+                                                    otherBundleIDs: allIDs)
+                        // Another app's container can sit behind a permission prompt: skip it rather than wait.
+                        .filter { Access.readable($0.url, home: home.path) }
+                        .map {
                         Leftover(url: $0.url, kind: $0.kind, size: DiskWalker.measure($0.url, isCancelled: isCancelled))
                     }.filter { $0.size.allocated > 0 }
                     // Spotlight first; otherwise the newest change in the app's own data — apps

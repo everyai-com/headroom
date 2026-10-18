@@ -12,6 +12,8 @@ final class AppModel: ObservableObject {
     @Published var selected: Set<String> = []
     /// The worktrees found by the last scan (the Coding screen groups them; nested ones count once).
     @Published var worktrees: [Worktree] = []
+    /// Folders macOS is still asking about (a permission prompt nobody has answered): skipped until it's answered.
+    @Published var waitingForAccess: [String] = []
     @Published var apps: [InstalledApp] = []
     @Published var selectedApps: Set<String> = []
     @Published var map: DiskNode?
@@ -133,7 +135,8 @@ final class AppModel: ObservableObject {
         phase = .scanning("Looking for space you can safely get back…")
         let stale = staleDays
         let excluded = self.excluded
-        let roots = Self.demoMode ? [Self.demoRoot] : ProjectScanner.defaultRoots()
+        // A folder still waiting on its permission prompt is skipped (and named), never waited on.
+        let roots = Self.demoMode ? [Self.demoRoot] : Access.readable(ProjectScanner.defaultRoots())
         async let projects = ProjectScanner.scan(roots: roots, staleDays: stale)
         async let known = Catalog.scanKnownLocations()
         // Every agent's worktrees, wherever they live (removed through git, never one-click).
@@ -158,6 +161,7 @@ final class AppModel: ObservableObject {
         // The App Store edition can't run other tools (simctl, docker, brew…): those findings stay out.
         if Edition.appStore { all.removeAll { if case .command = $0.method { true } else { false } } }
         worktrees = worktreeList
+        waitingForAccess = Access.waiting
         findings = all
         // Safe items are pre-selected; review items wait for you.
         selected = Set(all.filter { $0.safety == .safe && $0.reclaimable > 0 }.map(\.id))

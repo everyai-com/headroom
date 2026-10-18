@@ -115,7 +115,8 @@ public enum Catalog {
         let fm = FileManager.default
         var findings: [Finding] = await withTaskGroup(of: Finding?.self) { group in
             for rule in rules {
-                let urls = rule.paths.map { resolve($0, home: home) }.filter { fm.fileExists(atPath: $0.path) }
+                // Never wait on a permission prompt (another app's data, Mail…): skip it this scan instead.
+                let urls = Access.readable(rule.paths.map { resolve($0, home: home) }, home: home.path).filter { fm.fileExists(atPath: $0.path) }
                 guard !urls.isEmpty else { continue }
                 group.addTask {
                     let size = DiskWalker.measure(urls, isCancelled: isCancelled)

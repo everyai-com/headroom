@@ -436,6 +436,13 @@ struct MainView: View {
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.safe)
                 Text("Freed \(freed.gb)").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.safe)
             case .idle:
+                if !model.waitingForAccess.isEmpty {
+                    Label("Waiting for permission", systemImage: "hand.raised.fill").font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(Theme.review)
+                        .help("macOS is asking whether Headroom may look in "
+                              + model.waitingForAccess.map { LibraryModel.display($0) }.joined(separator: ", ")
+                              + ". Answer the prompt (or turn Headroom on in System Settings → Privacy & Security → Files and Folders), then rescan with ⌘R.")
+                }
                 if library.scanning {
                     ProgressView().controlSize(.small)
                     Text("Updating library…").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)

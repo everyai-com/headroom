@@ -13,6 +13,28 @@ enum Snapshots {
         let done = DispatchSemaphore(value: 0)
         // `--fast`: the file library only (no reclaim scan, map or app sizes) — for reviewing those screens quickly.
         let fast = CommandLine.arguments.contains("--fast")
+        // `--only worktrees,build-output`: just these screens, after only the reclaim scan (no map or app sizes).
+        let only: [Screen] = CommandLine.arguments.firstIndex(of: "--only").flatMap { i in
+            CommandLine.arguments.indices.contains(i + 1) ? CommandLine.arguments[i + 1] : nil
+        }.map { list in
+            list.split(separator: ",").compactMap { name in
+                Screen.allCases.first { $0.rawValue.lowercased().replacingOccurrences(of: " ", with: "-") == name.lowercased() }
+            }
+        } ?? []
+        if !only.isEmpty {
+            let ready = DispatchSemaphore(value: 0)
+            Task { @MainActor in await model.scan(); ready.signal() }
+            while ready.wait(timeout: .now()) == .timedOut { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
+            for scheme in [ColorScheme.dark, .light] {
+                for screen in only {
+                    save(MainView(screen: screen).environmentObject(model).environmentObject(library), size: CGSize(width: 1180, height: 780),
+                         to: dir.appendingPathComponent("\(screen.rawValue.lowercased().replacingOccurrences(of: " ", with: "-"))\(scheme == .light ? "-light" : "").png"),
+                         scheme: scheme)
+                }
+            }
+            print("rendered \(only.map(\.rawValue).joined(separator: ", ")) to \(dir.path)")
+            return
+        }
         Task { @MainActor in
             if !fast {
                 await model.scan()

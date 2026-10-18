@@ -22,7 +22,7 @@ README screenshots are rendered with `--demo` so no personal projects or files a
 - release: bump `VERSION`, then `HEADROOM_SIGN_ID=… HEADROOM_NOTARY_PROFILE=… HEADROOM_RELEASE_REPO=owner/public-repo
   ./scripts/release.sh "notes"` → notarized zip + `update.json` on a GitHub release. Builds with
   `HEADROOM_UPDATE_FEED` set check it daily (`Updates`); they notify and open the download, never self-install.
-- design review: `.build/release/Headroom --render <dir>` draws every screen + both notch
+- design review: `.build/release/Headroom --render <dir> [--only worktrees,build-output]` draws every screen + both notch
   states to PNG from real scans (ImageRenderer can't draw ScrollView — views use
   `Scrolling {}`, which lays out flat in snapshot mode)
 - demo video: `./scripts/make-reel.sh` → `dist/Headroom-demo.mp4` (`Headroom --reel <dir> --demo`
@@ -85,6 +85,13 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   and never points users to download anything elsewhere (App Review). Use `HeadroomPaths.home`, never
   `NSHomeDirectory()` (the container inside the sandbox). Folders open through `FolderAccess`
   (security-scoped bookmarks); anything a user adds from outside home must be `remember`ed.
+- Worktrees (`Worktrees`, Coding screens): found through repositories' `.git/worktrees` and `.git` files under the
+  project roots + agent homes; removed ONLY by `git worktree remove` (never `--force`) as a `.command` finding,
+  always `.review`. Uncommitted changes — in it or in a worktree nested inside it — make it `.keep`; an orphan
+  (repository gone) goes to the Trash. Paths are compared canonicalised (`/private/var` = `/var`).
+- Never wait on a permission prompt: guarded folders (Desktop, Documents, Downloads, other apps' containers,
+  Mail…) go through `Access.readable` first, which looks on its own thread and gives up after a few seconds;
+  a folder still waiting is skipped that scan and shown as "Waiting for permission".
 - Workspaces only remember paths: adding, removing or deleting a workspace never copies, moves or
   touches a file. `Workspaces.summarize` reads like the scanner (same skips, never opens a dataless file —
   those are counted from metadata and listed as "In iCloud only"). Bookmarks resolve `.withoutMounting`.

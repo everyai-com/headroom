@@ -32,6 +32,11 @@ engines pile up behind them.
   with each folder's size, file count and last change, and a “Changed lately” strip of the newest
   files across all of them. Nothing is copied or moved. Drag things onto the page or a sidebar row,
   or right-click › Add to Workspace; renamed or moved folders are followed.
+- **Coding** (sidebar) — where an agent-heavy Mac's space goes: **Worktrees** from every agent (Claude
+  Code's `.claude/worktrees`, Codex, Conductor, Cursor, T3 Code, `git worktree add`) grouped by repository
+  with branch, size and uncommitted changes; **Build output** (node_modules, Pods, venvs, .next…) by project;
+  **Dev caches**. Select everything removable or what's been idle two weeks, confirm, done. Worktrees go
+  with `git worktree remove`, which refuses uncommitted work; commits stay on their branches.
 - **Search that understands you** — type it the way you'd say it: “pdfs from last week over 5 mb”,
   “videos from my iphone in august”, “zips bigger than 1gb older than 6 months”, “pdfs from gmail”.
   Headroom shows how it read you as chips (type, date, size, source, folder, words) — take one off

@@ -29,6 +29,24 @@ struct CodingScreen: View {
     }
 
     var items: [Finding] { Self.items(screen, model: model) }
+
+    /// The folder you'd call the project: the first one under Desktop, Documents, Projects… ("connector saas"),
+    /// so many `deploy/worker`s from different repos don't land in one group.
+    static func topProject(_ f: Finding) -> String? {
+        guard let path = f.paths.first?.path, path.hasPrefix(HeadroomPaths.home + "/") else { return nil }
+        let parts = path.dropFirst(HeadroomPaths.home.count + 1).split(separator: "/").map(String.init)
+        guard parts.count > 2 else { return nil }
+        return parts[1]
+    }
+
+    /// What removing these frees, counting a worktree nested inside another chosen one once.
+    static func bytes(_ list: [Finding]) -> Int64 {
+        let paths = list.compactMap { $0.paths.first?.path }
+        return list.filter { f in
+            guard let p = f.paths.first?.path else { return true }
+            return !paths.contains { p.hasPrefix($0 + "/") }
+        }.reduce(0) { $0 + $1.reclaimable }
+    }
     var removable: [Finding] { items.filter { $0.safety != .keep && $0.reclaimable > 0 && $0.method != .none } }
     var chosen: [Finding] { removable.filter { model.selected.contains($0.id) } }
 
@@ -37,7 +55,7 @@ struct CodingScreen: View {
         Dictionary(grouping: items) { f -> String in
             switch screen {
             case .worktrees: (f.project ?? "Other").components(separatedBy: " · ").first ?? "Other"
-            case .buildOutput: f.project ?? "Other"
+            case .buildOutput: Self.topProject(f) ?? f.project ?? "Other"
             default: f.category.title
             }
         }
@@ -88,7 +106,7 @@ struct CodingScreen: View {
 
     var summary: some View {
         let total = screen == .worktrees ? Worktrees.total(model.worktrees) : items.reduce(0) { $0 + $1.size.allocated }
-        let free = removable.reduce(0) { $0 + $1.reclaimable }
+        let free = Self.bytes(removable)
         let idle = removable.filter { ($0.lastUsed ?? .distantPast) < Date().addingTimeInterval(-14 * 86_400) }
         return Card {
             HStack(alignment: .center, spacing: 18) {
@@ -169,7 +187,7 @@ struct CodingScreen: View {
             HStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Selected").font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
-                    Text("\(plan.count) \(noun(plan.count)) · \(ByteFormat.string(plan.reduce(0) { $0 + $1.reclaimable }))")
+                    Text("\(plan.count) \(noun(plan.count)) · \(ByteFormat.string(Self.bytes(plan)))")
                         .font(Theme.number(15, weight: .semibold))
                 }
                 Spacer()
@@ -200,7 +218,7 @@ struct CodingScreen: View {
 
     var confirmTitle: String {
         guard let plan = confirm else { return "" }
-        let size = ByteFormat.string(plan.reduce(0) { $0 + $1.reclaimable })
+        let size = ByteFormat.string(Self.bytes(plan))
         return screen == .worktrees ? "Remove \(plan.count) \(noun(plan.count)) (\(size))?" : "Delete \(plan.count) \(noun(plan.count)) (\(size))?"
     }
 
