@@ -42,6 +42,24 @@ for s in 16 32 128 256 512; do
 done
 rm "$ICONSET/base.png"
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/Headroom.icns"
+# The App Store also wants an asset catalog (Assets.car) with the icon in it (error 90546 without one).
+XCASSETS=$(mktemp -d)/Assets.xcassets
+ICONDIR="$XCASSETS/AppIcon.appiconset"
+mkdir -p "$ICONDIR"
+cp "$ICONSET"/icon_*.png "$ICONDIR/"
+python3 - "$ICONDIR" <<'PY'
+import json, sys
+images = []
+for s in (16, 32, 128, 256, 512):
+    for scale in (1, 2):
+        name = f"icon_{s}x{s}{'@2x' if scale == 2 else ''}.png"
+        images.append({"idiom": "mac", "size": f"{s}x{s}", "scale": f"{scale}x", "filename": name})
+json.dump({"images": images, "info": {"version": 1, "author": "xcode"}}, open(sys.argv[1] + "/Contents.json", "w"))
+PY
+echo '{"info":{"version":1,"author":"xcode"}}' > "$XCASSETS/Contents.json"
+xcrun actool "$XCASSETS" --compile "$APP/Contents/Resources" --platform macosx --minimum-deployment-target 15.0 \
+  --app-icon AppIcon --output-partial-info-plist "$(mktemp -d)/assets.plist" --output-format human-readable-text --notices --warnings >/dev/null
+[ -f "$APP/Contents/Resources/Assets.car" ] || { echo "actool made no Assets.car"; exit 1; }
 
 # Shortcuts & Siri metadata, as in bundle.sh.
 if xcrun --find appintentsmetadataprocessor >/dev/null 2>&1; then
@@ -68,7 +86,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleIdentifier</key><string>${BUNDLE_ID}</string>
   <key>CFBundleExecutable</key><string>Headroom</string>
   <key>CFBundleIconFile</key><string>Headroom</string>
-  <key>CFBundleIconName</key><string>Headroom</string>
+  <key>CFBundleIconName</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>${VERSION}</string>
   <key>CFBundleVersion</key><string>${BUILD}</string>
