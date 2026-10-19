@@ -360,12 +360,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             && event.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
     }
 
-    /// headroom://search?q=pdfs%20from%20gmail and headroom://open?screen=worktrees — for Shortcuts, scripts and links.
+    /// headroom://search?q=pdfs%20from%20gmail, headroom://open?screen=worktrees and headroom://login?on=1 — for Shortcuts, scripts and links.
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls where url.scheme == "headroom" {
             let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
             if url.host == "search", let q = items.first(where: { $0.name == "q" })?.value {
                 NotificationCenter.default.post(name: .headroomSearch, object: q)
+            } else if url.host == "login", let on = items.first(where: { $0.name == "on" })?.value {
+                // headroom://login?on=1 — Open at Login, exactly as Settings' toggle does it.
+                do {
+                    if on == "1" { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+                    model.show(on == "1" ? "Headroom opens at login — Quick Search is always a keypress away" : "Headroom won't open at login")
+                } catch {
+                    model.show("Couldn't change Open at Login: \(error.localizedDescription)", failed: true)
+                }
             } else if url.host == "open", let name = items.first(where: { $0.name == "screen" })?.value,
                       let screen = Screen.allCases.first(where: { $0.rawValue.lowercased().replacingOccurrences(of: " ", with: "-") == name.lowercased() }),
                       Edition.available(screen) {
