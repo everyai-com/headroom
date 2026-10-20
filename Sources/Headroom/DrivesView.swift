@@ -39,6 +39,8 @@ final class DrivesModel: ObservableObject {
     private var lastRead: [String: (bytes: Int64, at: Date)] = [:]
     /// Drives seen being checked, so the moment one opens we can say so.
     private var sawChecking: Set<String> = []
+    /// When we first saw macOS checking each drive.
+    @Published var checkingSince: [String: Date] = [:]
 
     static let rescueRoot = URL(fileURLWithPath: HeadroomPaths.home).appendingPathComponent("Drive Rescue")
 
@@ -53,7 +55,11 @@ final class DrivesModel: ObservableObject {
                 readRate[d.id] = max(0, Double(d.bytesRead - last.bytes) / now.timeIntervalSince(last.at))
             }
             lastRead[d.id] = (d.bytesRead, now)
-            if !d.mounted, isChecking(d) { sawChecking.insert(d.id) }
+            if !d.mounted, isChecking(d) {
+                sawChecking.insert(d.id)
+                if checkingSince[d.id] == nil { checkingSince[d.id] = now }
+            }
+            if d.mounted { checkingSince[d.id] = nil }
             if d.mounted, sawChecking.remove(d.id) != nil, !d.readOnly {
                 message = "\(d.title) passed the check and is open — use it normally."
             }
@@ -263,13 +269,13 @@ struct DrivesView: View {
                 // A symbol, not ProgressView: renders (ImageRenderer) can't draw a spinner.
                 Image(systemName: "checkmark.shield").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.review)
                     .symbolEffect(.pulse, isActive: !snapshot)
-                Text("Checked \(d.bytesRead.gb) so far · \(Int((model.readRate[d.id] ?? 0) / 1_000_000)) MB/s")
+                Text(checkLine(d))
                     .font(Theme.number(12.5, weight: .semibold))
             }
             if d.canSkipCheck {
                 note("macOS is checking the drive before it shows in Finder. Over a slow link that can take a long time. Open it read-only now to skip the wait — nothing on the drive can be changed that way.")
             } else {
-                note("It was unplugged without Eject, so macOS checks the whole drive before opening it — this macOS won't open it before that, not even read-only. When the check ends it opens by itself, ready to use normally. Keep it plugged in: unplugging starts the check over.")
+                note("It was unplugged without Eject, so macOS checks the whole drive before opening it — this macOS won't open it before that, not even read-only. The fuller the drive, the longer it takes. When the check ends it opens by itself, ready to use normally. Keep it plugged in: unplugging starts the check over.")
             }
             if d.link.isBottleneck {
                 note("The check is slow because the cable or port runs at USB 2.0. With the drive's own USB-C cable straight into the Mac it runs about 10× faster — swapping restarts the check, so it's worth doing early.")
@@ -279,6 +285,19 @@ struct DrivesView: View {
         } else if d.partition != nil {
             note("Not open. Check & open lets macOS check it and open it normally — read-write, in Finder.")
         }
+    }
+
+    func checkLine(_ d: ExternalDrive) -> String {
+        var line = "Checked \(d.bytesRead.gb) so far · \(Int((model.readRate[d.id] ?? 0) / 1_000_000)) MB/s"
+        if let since = model.checkingSince[d.id], Date().timeIntervalSince(since) >= 60 {
+            line += " · for \(Self.duration(since: since))"
+        }
+        return line
+    }
+
+    static func duration(since start: Date) -> String {
+        let s = max(0, Int(Date().timeIntervalSince(start)))
+        return s >= 3600 ? "\(s / 3600) h \(s % 3600 / 60) min" : "\(s / 60) min"
     }
 
     func note(_ text: String) -> some View {

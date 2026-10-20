@@ -191,3 +191,6 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   without deleting anything (it truncates/replaces only its own copies). Never offer to skip the check
   for exFAT/FAT under FSKit (`fsKitOwnsWindowsFormats`, macOS 26+): the kext can't load and FSKit won't
   mount an unchecked volume even read-only, so killing the check only leaves the drive unopened.
+  Don't run `fsck_exfat` from the app either: a root shell from an admin prompt (osascript/authtrampoline)
+  doesn't inherit the app's Full Disk Access, so raw `/dev/rdisk*` reads fail with EPERM — and the classic
+  check isn't clearly faster on a full drive (tried on a 1.7 TB SSD: FSKit's check took 30 min over USB 2.0).
