@@ -184,6 +184,10 @@ README screenshots are rendered with `--demo` so no personal projects or files a
 - Notch geometry: `NSScreen.auxiliaryTopLeftArea/RightArea` + `safeAreaInsets.top`; panel at
   `.statusBar + 1`, all spaces, full-screen auxiliary. Non-notch screens get a centred pill.
 - Drives (`ExternalDrive`/`DrivesView`) read IOKit (`ioreg`) and the mount table, never `diskutil`:
-  while macOS checks a drive before mounting, diskutil and Disk Arbitration hang. A drive is only
-  ever read — "Open now" mounts it read-only (admin prompt via osascript) and `DriveCopier` copies
-  into `~/Drive Rescue` without deleting anything (it truncates/replaces only its own copies).
+  while macOS checks a drive before mounting, diskutil and Disk Arbitration hang. The check's progress
+  is the disk's IOKit "Bytes (Read)" sampled over time. Headroom only ever reads a drive: "Check & open"
+  is `diskutil mount` (macOS checks, then mounts it normally — run detached, it waits for the check);
+  "Open now" mounts read-only (admin prompt via osascript) and `DriveCopier` copies into `~/Drive Rescue`
+  without deleting anything (it truncates/replaces only its own copies). Never offer to skip the check
+  for exFAT/FAT under FSKit (`fsKitOwnsWindowsFormats`, macOS 26+): the kext can't load and FSKit won't
+  mount an unchecked volume even read-only, so killing the check only leaves the drive unopened.

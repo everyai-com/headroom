@@ -25,9 +25,11 @@ enum Snapshots {
             let ready = DispatchSemaphore(value: 0)
             Task { @MainActor in await model.scan(); ready.signal() }
             while ready.wait(timeout: .now()) == .timedOut { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
+            let drives = DrivesModel()
+            if only.contains(.drives) { Self.fill(drives) }
             for scheme in [ColorScheme.dark, .light] {
                 for screen in only {
-                    save(MainView(screen: screen).environmentObject(model).environmentObject(library), size: CGSize(width: 1180, height: 780),
+                    save(MainView(screen: screen, override: screen == .drives ? AnyView(DrivesView(model: drives)) : nil).environmentObject(model).environmentObject(library), size: CGSize(width: 1180, height: 780),
                          to: dir.appendingPathComponent("\(screen.rawValue.lowercased().replacingOccurrences(of: " ", with: "-"))\(scheme == .light ? "-light" : "").png"),
                          scheme: scheme)
                 }
@@ -59,9 +61,7 @@ enum Snapshots {
 
         let size = CGSize(width: 1180, height: 780)
         let drives = DrivesModel()
-        let drivesDone = DispatchSemaphore(value: 0)
-        Task { @MainActor in await drives.refresh(); drivesDone.signal() }
-        while drivesDone.wait(timeout: .now()) == .timedOut { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
+        Self.fill(drives)
         let ai = AIModel()
         let aiDone = DispatchSemaphore(value: 0)
         Task { @MainActor in await ai.refresh(); aiDone.signal() }
@@ -256,6 +256,13 @@ enum Snapshots {
     }
 
     /// Let queued async work (a search) finish before drawing.
+    /// Real drives, sampled twice a moment apart so a drive macOS is checking shows its read speed.
+    static func fill(_ drives: DrivesModel) {
+        let done = DispatchSemaphore(value: 0)
+        Task { @MainActor in await drives.refresh(); try? await Task.sleep(for: .seconds(2)); await drives.refresh(); done.signal() }
+        while done.wait(timeout: .now()) == .timedOut { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
+    }
+
     static func settle(_ library: LibraryModel) {
         let deadline = Date().addingTimeInterval(8)
         RunLoop.main.run(until: Date().addingTimeInterval(0.3))

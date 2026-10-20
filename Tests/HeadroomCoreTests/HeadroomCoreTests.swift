@@ -662,6 +662,38 @@ final class HeadroomCoreTests: XCTestCase {
         XCTAssertFalse(open.macOSChecking, "once mounted it's no longer waiting on the check")
     }
 
+    func testDriveFormatAndCheckProgressComeFromIOKit() {
+        let ioreg = """
+        +-o Portable SSD@00100000  <class IOUSBHostDevice>
+          |   "USB Product Name" = "Portable SSD"
+          |   "USB Vendor Name" = "SanDisk"
+          |   "Device Speed" = 2
+          |             +-o IOBlockStorageDriver  <class IOBlockStorageDriver>
+          |               |   "Statistics" = {"Operations (Read)"=25000,"Bytes (Read)"=25728460800,"Bytes (Write)"=0}
+          |               +-o SanDisk Portable SSD Media  <class IOMedia>
+          |                 |   "Content" = "GUID_partition_scheme"
+          |                 |   "BSD Name" = "disk8"
+          |                 |   "Size" = 2000398934016
+          |                 +-o PortableSSD@1  <class IOMedia>
+          |                   |   "Content" = "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7"
+          |                   |   "BSD Name" = "disk8s1"
+          |                   |   "Size" = 2000396836864
+        """
+        let d = ExternalDrive.parse(ioreg: ioreg, mounts: [:], checking: true)[0]
+        XCTAssertEqual(d.partition, "disk8s1")
+        XCTAssertEqual(d.format, .windows, "the partition's type, not the whole disk's partition scheme")
+        XCTAssertEqual(d.bytesRead, 25728460800)
+        XCTAssertEqual(d.canSkipCheck, !ExternalDrive.fsKitOwnsWindowsFormats,
+                       "under FSKit an exFAT drive can't be opened until macOS's check ends — never offer to skip it")
+
+        let apfs = ExternalDrive.parse(ioreg: ioreg.replacingOccurrences(of: "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7",
+                                                                       with: "7C3457EF-0000-11AA-AA11-00306543ECAC"),
+                                       mounts: [:], checking: true)[0]
+        XCTAssertEqual(apfs.format, .apfs)
+        XCTAssertTrue(apfs.canSkipCheck)
+        XCTAssertEqual(ExternalDrive.Format(content: "Windows_NTFS"), .windows, "MBR drives name their type")
+    }
+
     func testDriveCopyIsCompleteResumableAndNeverTouchesTheSource() throws {
         try write("drive/Photos/a.jpg", bytes: 3_000_000)
         try write("drive/Photos/trip/b.mov", bytes: 5_000_000)

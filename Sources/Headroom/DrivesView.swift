@@ -1,8 +1,9 @@
 import SwiftUI
 import HeadroomCore
 
-/// USB drives: see one even while macOS is still checking it, open it read-only, browse it,
-/// and copy what matters to the Mac. The drive is only ever read.
+/// USB drives: see one even while macOS is still checking it (with the check's live progress),
+/// let macOS check and open it normally, browse it, and copy what matters to the Mac.
+/// Headroom itself only ever reads the drive.
 @MainActor
 final class DrivesModel: ObservableObject {
     struct Entry: Identifiable, Hashable {
@@ -31,6 +32,13 @@ final class DrivesModel: ObservableObject {
     @Published var jobs: [Job] = []
     @Published var message: String?
     @Published var mounting = false
+    /// Drives whose check + normal mount we started (`diskutil mount`, which waits for the check).
+    @Published var opening: Set<String> = []
+    /// Bytes per second read from each unmounted drive — macOS's check at work.
+    @Published var readRate: [String: Double] = [:]
+    private var lastRead: [String: (bytes: Int64, at: Date)] = [:]
+    /// Drives seen being checked, so the moment one opens we can say so.
+    private var sawChecking: Set<String> = []
 
     static let rescueRoot = URL(fileURLWithPath: HeadroomPaths.home).appendingPathComponent("Drive Rescue")
 
@@ -39,6 +47,17 @@ final class DrivesModel: ObservableObject {
     func refresh() async {
         let found = await Task.detached { ExternalDrive.current() }.value
         let wasMounted = drive?.mountPoint
+        let now = Date()
+        for d in found {
+            if let last = lastRead[d.id], now.timeIntervalSince(last.at) > 0.5 {
+                readRate[d.id] = max(0, Double(d.bytesRead - last.bytes) / now.timeIntervalSince(last.at))
+            }
+            lastRead[d.id] = (d.bytesRead, now)
+            if !d.mounted, isChecking(d) { sawChecking.insert(d.id) }
+            if d.mounted, sawChecking.remove(d.id) != nil, !d.readOnly {
+                message = "\(d.title) passed the check and is open — use it normally."
+            }
+        }
         drives = found
         if selected == nil || !found.contains(where: { $0.id == selected }) { selected = found.first?.id }
         // Just mounted (or switched drive): start at its root.
@@ -46,6 +65,31 @@ final class DrivesModel: ObservableObject {
             await open(root)
         } else if drive?.mountPoint == nil {
             folder = nil; entries = []
+        }
+    }
+
+    /// Reading steadily while unmounted: that's macOS checking it.
+    func isChecking(_ d: ExternalDrive) -> Bool {
+        !d.mounted && (readRate[d.id] ?? 0) > 200_000
+    }
+
+    /// Let macOS check the drive and mount it the normal way (read-write, in Finder). `diskutil
+    /// mount` returns once the check is done, however long that takes; the drive itself is
+    /// only touched by macOS's own checker.
+    func checkAndOpen() {
+        guard let d = drive, let partition = d.partition, partition.allSatisfy({ $0.isLetter || $0.isNumber }) else { return }
+        opening.insert(d.id)
+        sawChecking.insert(d.id)
+        message = nil
+        Task {
+            let ok = await Task.detached {
+                Shell.run("/usr/sbin/diskutil", ["mount", partition], timeout: 24 * 3600) != nil
+            }.value
+            opening.remove(d.id)
+            await refresh()
+            if !ok, self.drives.first(where: { $0.id == d.id })?.mounted != true {
+                message = "macOS couldn't open it. Unplug it, plug it straight into the Mac (no hub), and try again."
+            }
         }
     }
 
@@ -199,22 +243,52 @@ struct DrivesView: View {
                     Spacer()
                     actions(d)
                 }
-                if d.link.isBottleneck {
+                if d.link.isBottleneck, !model.isChecking(d) {
                     Text("Connected at USB 2.0 speed — about 30 MB/s, roughly 2 minutes per GB. This drive can do far more: try a 10 Gb/s USB-C cable, the other port, or clean the drive's USB-C socket.")
                         .font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
                 }
-                if !d.mounted, d.macOSChecking {
-                    Text("macOS is checking the drive before it shows in Finder. Over a slow link that can take a long time. Open it read-only now to skip the wait — nothing on the drive can be changed that way.")
-                        .font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
+                if !d.mounted { checkStatus(d) }
+                if d.mounted, !d.readOnly, d.format == .windows {
+                    note("Eject before unplugging. exFAT keeps no journal, so a drive pulled out without Eject gets checked in full next time — that's the long wait. Used only with Macs? APFS recovers in seconds: copy your files off, then reformat it in Disk Utility.")
                 }
             }
         }
     }
 
+    /// Not open yet: what macOS is doing, how far it got, and what helps.
+    @ViewBuilder func checkStatus(_ d: ExternalDrive) -> some View {
+        let checking = model.isChecking(d)
+        if checking {
+            HStack(spacing: 8) {
+                // A symbol, not ProgressView: renders (ImageRenderer) can't draw a spinner.
+                Image(systemName: "checkmark.shield").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.review)
+                    .symbolEffect(.pulse, isActive: !snapshot)
+                Text("Checked \(d.bytesRead.gb) so far · \(Int((model.readRate[d.id] ?? 0) / 1_000_000)) MB/s")
+                    .font(Theme.number(12.5, weight: .semibold))
+            }
+            if d.canSkipCheck {
+                note("macOS is checking the drive before it shows in Finder. Over a slow link that can take a long time. Open it read-only now to skip the wait — nothing on the drive can be changed that way.")
+            } else {
+                note("It was unplugged without Eject, so macOS checks the whole drive before opening it — this macOS won't open it before that, not even read-only. When the check ends it opens by itself, ready to use normally. Keep it plugged in: unplugging starts the check over.")
+            }
+            if d.link.isBottleneck {
+                note("The check is slow because the cable or port runs at USB 2.0. With the drive's own USB-C cable straight into the Mac it runs about 10× faster — swapping restarts the check, so it's worth doing early.")
+            }
+        } else if model.opening.contains(d.id) {
+            note("Asking macOS to check and open it…")
+        } else if d.partition != nil {
+            note("Not open. Check & open lets macOS check it and open it normally — read-write, in Finder.")
+        }
+    }
+
+    func note(_ text: String) -> some View {
+        Text(text).font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
+    }
+
     @ViewBuilder func stateBadge(_ d: ExternalDrive) -> some View {
         if d.mounted {
             Badge(text: d.readOnly ? "Open · read-only" : "Open", color: Theme.safe)
-        } else if d.macOSChecking {
+        } else if model.isChecking(d) || (d.macOSChecking && model.readRate[d.id] == nil) {
             Badge(text: "macOS is checking it…", color: Theme.review)
         } else {
             Badge(text: "Not open", color: Theme.keep)
@@ -228,16 +302,32 @@ struct DrivesView: View {
                 Button("Eject") { model.eject() }.buttonStyle(GhostButtonStyle())
             }
         } else {
-            Button {
-                Task { await model.mountReadOnly() }
-            } label: {
-                HStack(spacing: 6) {
-                    if model.mounting { ProgressView().controlSize(.small) }
-                    Text(model.mounting ? "Opening…" : "Open now (read-only)")
+            HStack(spacing: 8) {
+                if d.canSkipCheck, model.isChecking(d) || d.macOSChecking {
+                    Button {
+                        Task { await model.mountReadOnly() }
+                    } label: {
+                        HStack(spacing: 6) {
+                            if model.mounting { ProgressView().controlSize(.small) }
+                            Text(model.mounting ? "Opening…" : "Open now (read-only)")
+                        }
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .disabled(model.mounting)
+                }
+                if !model.isChecking(d), d.partition != nil {
+                    Button {
+                        model.checkAndOpen()
+                    } label: {
+                        HStack(spacing: 6) {
+                            if model.opening.contains(d.id) { ProgressView().controlSize(.small) }
+                            Text(model.opening.contains(d.id) ? "Opening…" : "Check & open")
+                        }
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .disabled(model.opening.contains(d.id))
                 }
             }
-            .buttonStyle(PrimaryButtonStyle())
-            .disabled(model.mounting || d.readOnlyMountScript == nil)
         }
     }
 
