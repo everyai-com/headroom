@@ -20,7 +20,9 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   (`-DAPPSTORE`, bundle ID `com.saphaare.headroom`, signing assets in `~/.headroom-signing`); store screenshots
   with `Headroom --render <dir> --demo --store`. See docs/APPSTORE.md.
 - release: bump `VERSION`, then `HEADROOM_SIGN_ID=… HEADROOM_NOTARY_PROFILE=… HEADROOM_RELEASE_REPO=owner/public-repo
-  ./scripts/release.sh "notes"` → notarized zip + `update.json` on a GitHub release. Builds with
+  ./scripts/release.sh "notes"` → notarized universal `Headroom.dmg` (the README's Download link,
+  `releases/latest/download/Headroom.dmg`) + zip + `update.json` on a GitHub release (Developer ID builds are
+  arm64 + x86_64 in `.build/universal`; ad-hoc ones build this Mac's arch only). Builds with
   `HEADROOM_UPDATE_FEED` set check it daily (`Updates`); they notify and open the download, never self-install.
 - design review: `.build/release/Headroom --render <dir> [--only worktrees,build-output]` draws every screen + both notch
   states to PNG from real scans (ImageRenderer can't draw ScrollView — views use
@@ -58,7 +60,7 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   (Finder mouse: click/⌘/⇧, drag-out of many files, NSMenu), `QuickLook` (+ `HeadroomWindow`),
   `InspectorView`, `DuplicatesView` (+ Downloaded From), `CleanUpView`, `QuickSearch` (Carbon hotkey +
   panel + state; files searched off the main thread), `QuickSearchView` (sections, ⌘K actions, ⌘I info, footer),
-  `QuickCommands` (commands, rows, sections, every row's actions and keys), `QuickShortcut` (the recorder), `MenuBarView` (popover), `MusicPlayer`, `Thumbnails`, `Intents` (App Intents)
+  `QuickCommands` (commands, rows, sections, every row's actions and keys), `QuickShortcut` (the recorder), `MenuBarView` (popover; Eject for every external volume, from the mount table), `MusicPlayer`, `Thumbnails`, `Intents` (App Intents)
 - `Sources/headroom-cli` — read-only reports
 
 ## Invariants (do not break)

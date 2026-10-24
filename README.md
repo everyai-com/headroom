@@ -20,6 +20,13 @@ engines pile up behind them.
 
 ![Every GB as a map](docs/screenshots/map.png)
 
+## Download
+
+**[Download Headroom for Mac](https://github.com/everyai-com/headroom/releases/latest/download/Headroom.dmg)**
+(macOS 15 or later, Apple silicon and Intel). Open the disk image and drag Headroom onto Applications.
+Apple notarizes it, so it opens with no security warning. It checks once a day for updates and tells you
+when one is out. It never installs anything by itself.
+
 ## What it does
 
 ### Your files

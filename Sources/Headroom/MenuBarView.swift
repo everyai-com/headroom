@@ -3,12 +3,15 @@ import AppKit
 import HeadroomCore
 
 /// The menu bar popover: free space, the safe one-click reclaim, and the last ten files that
-/// landed in Downloads — drag one straight into Mail, Slack or Figma, or click to open it.
+/// landed in Downloads — drag one straight into Mail, Slack or Figma, or click to open it — and
+/// an Eject for every external drive: one ejected first mounts at once next time, with no full check.
 struct MenuBarView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var library: LibraryModel
     @AppStorage("menuBarDownloads") private var showDownloads = true
     @State private var downloads: [LibraryItem] = []
+    @State private var drives = MountedDrive.current()
+    @State private var ejectMessage: String?
     /// Renders can't run `.task`: they pass the list in.
     var preloaded: [LibraryItem]? = nil
     var openWindow: () -> Void
@@ -57,6 +60,29 @@ struct MenuBarView: View {
                     }
                 }
             }
+            #if !APPSTORE
+            if !drives.isEmpty {
+                Divider().overlay(Theme.hairline)
+                Text("Drives").font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.textTertiary)
+                VStack(spacing: 2) {
+                    ForEach(drives) { drive in
+                        HStack(spacing: 10) {
+                            Image(systemName: "externaldrive.fill").foregroundStyle(Theme.textSecondary).frame(width: 20)
+                            Text(drive.name).font(.system(size: 12.5, weight: .medium)).lineLimit(1).truncationMode(.middle)
+                            Spacer(minLength: 4)
+                            Button { NSWorkspace.shared.open(drive.url) } label: { Image(systemName: "folder") }.help("Show in Finder")
+                            Button { eject(drive) } label: { Label("Eject", systemImage: "eject.fill") }
+                                .help("Eject before unplugging, so it opens straight away next time")
+                        }
+                        .buttonStyle(GhostButtonStyle())
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                    }
+                }
+                if let ejectMessage {
+                    Text(ejectMessage).font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
+                }
+            }
+            #endif
             Divider().overlay(Theme.hairline)
             HStack(spacing: 8) {
                 Button { close(); openWindow() } label: { Label("Open Headroom", systemImage: "macwindow") }
@@ -75,6 +101,21 @@ struct MenuBarView: View {
         .frame(width: 360)
         .foregroundStyle(Theme.textPrimary)
         .task { downloads = await Self.recentDownloads(home: library.home) }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didMountNotification)) { _ in drives = MountedDrive.current() }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didUnmountNotification)) { _ in drives = MountedDrive.current() }
+    }
+
+    private func eject(_ drive: MountedDrive) {
+        ejectMessage = "Ejecting \(drive.name)…"
+        Task {
+            let error = await Task.detached { () -> String? in
+                do { try NSWorkspace.shared.unmountAndEjectDevice(at: drive.url); return nil }
+                catch { return error.localizedDescription }
+            }.value
+            ejectMessage = error.map { "Couldn't eject \(drive.name): \($0) Close files open from it." }
+                ?? "\(drive.name) ejected. Safe to unplug."
+            drives = MountedDrive.current()
+        }
     }
 
     /// The newest arrivals in Downloads, by when they arrived (not when they last changed).
@@ -122,5 +163,24 @@ struct DownloadRow: View {
         .onTapGesture { close(); NSWorkspace.shared.open(item.url) }
         .onDrag { NSItemProvider(contentsOf: item.url) ?? NSItemProvider() }
         .help(item.url.tildePath)
+    }
+}
+
+/// An ejectable volume from the mount table (never Disk Arbitration or diskutil, which hang while
+/// macOS checks a drive): USB and Thunderbolt drives, SD cards, open disk images.
+struct MountedDrive: Identifiable, Hashable {
+    var url: URL
+    var name: String
+    var id: URL { url }
+
+    static func current() -> [MountedDrive] {
+        let keys: [URLResourceKey] = [.volumeNameKey, .volumeIsEjectableKey, .volumeIsRemovableKey, .volumeIsInternalKey]
+        let urls = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: keys, options: [.skipHiddenVolumes]) ?? []
+        return urls.compactMap { url in
+            guard url.path.hasPrefix("/Volumes/"), let v = try? url.resourceValues(forKeys: Set(keys)) else { return nil }
+            let external = v.volumeIsEjectable == true || v.volumeIsRemovable == true || v.volumeIsInternal == false
+            return external ? MountedDrive(url: url, name: v.volumeName ?? url.lastPathComponent) : nil
+        }
+        .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 }
