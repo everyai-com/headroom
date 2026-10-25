@@ -282,6 +282,16 @@ struct SettingsView: View {
                                   on: $readText)
                     }
                 }
+                if model.battery != nil {
+                    Card {
+                        VStack(alignment: .leading, spacing: 16) {
+                            SectionTitle(title: "Add-ons")
+                            toggleRow("Battery",
+                                      "Charge, health, heat and where the watts go, the health trend and a monthly card to share. Headroom notes the battery every few minutes while it runs (\(model.batteryLog.samples.count.formatted()) readings so far) and never changes how the Mac charges.",
+                                      on: $model.batteryAddOn)
+                        }
+                    }
+                }
                 Card {
                     VStack(alignment: .leading, spacing: 16) {
                         SectionTitle(title: "Automatic clean up", trailing: "off until you turn it on")
@@ -363,6 +373,8 @@ struct SettingsView: View {
                                 .disabled(model.excluded.isEmpty)
                             Button("Forget text read from images") { library.text.clear(); library.recognized = [:]; model.show("Recognised text forgotten") }
                                 .buttonStyle(GhostButtonStyle()).disabled(library.recognized.isEmpty)
+                            Button("Forget battery readings") { model.clearBatteryLog(); model.show("Battery readings forgotten") }
+                                .buttonStyle(GhostButtonStyle()).disabled(model.batteryLog.samples.isEmpty)
                             Button("Reset Quick Search ranking") { library.forgetQuickHistory(); model.show("Quick Search forgot what you open") }
                                 .buttonStyle(GhostButtonStyle())
                             Spacer()

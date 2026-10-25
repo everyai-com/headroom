@@ -333,6 +333,27 @@ final class AppModel: ObservableObject {
         memoryGroups = groups
     }
 
+    // MARK: Battery
+
+    /// nil on desktops. Read-only: Headroom shows the battery, it never changes how the Mac charges.
+    @Published var battery: BatteryStatus? = AppModel.demoMode ? BatteryDemo.status : BatteryStatus.current()
+    @Published var batteryLog = AppModel.demoMode ? BatteryDemo.log() : BatteryLog.load()
+    /// Settings → Add-ons. On by default; only shown on a Mac with a battery.
+    @AppStorage("batteryAddOn") var batteryAddOn = true
+    var showsBattery: Bool { batteryAddOn && battery != nil }
+
+    /// Cheap (one IOKit read). `record` keeps a reading for the trend and the monthly recap, at most every 4 minutes.
+    func refreshBattery(record: Bool = false) {
+        guard !Self.demoMode, let status = BatteryStatus.current() else { return }
+        battery = status
+        if record, batteryAddOn { batteryLog.record(status) }
+    }
+
+    func clearBatteryLog() {
+        batteryLog = BatteryLog()
+        try? FileManager.default.removeItem(at: BatteryLog.defaultURL)
+    }
+
     /// nil when the group can be quit; otherwise why not.
     func quitRefusal(_ g: MemoryGroup) -> String? {
         if g.kind == .system { return "Part of macOS — it manages its own memory" }

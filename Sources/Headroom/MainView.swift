@@ -7,7 +7,7 @@ enum Screen: String, CaseIterable, Identifiable {
          overview = "Overview",
          files = "Large files", screenshots = "Screenshots", duplicates = "Duplicates", cleanUp = "Clean up", downloads = "Downloaded from",
          worktrees = "Worktrees", buildOutput = "Build output", devCaches = "Dev caches",
-         map = "Map", reclaim = "Reclaim", memory = "Memory", ai = "AI", drives = "Drives", activity = "Activity",
+         map = "Map", reclaim = "Reclaim", memory = "Memory", battery = "Battery", ai = "AI", drives = "Drives", activity = "Activity",
          search = "Search", saved = "Saved search", folder = "Folder", workspace = "Workspace",
          settings = "Settings"
     var id: String { rawValue }
@@ -34,6 +34,7 @@ enum Screen: String, CaseIterable, Identifiable {
         case .map: "square.grid.3x3.square"
         case .reclaim: "sparkles"
         case .memory: "memorychip"
+        case .battery: "battery.75percent"
         case .ai: "sparkles.rectangle.stack"
         case .drives: "externaldrive"
         case .activity: "clock.arrow.circlepath"
@@ -265,6 +266,7 @@ struct MainView: View {
         case .files: FilesView()
         case .apps: AppsView()
         case .memory: MemoryView()
+        case .battery: BatteryView()
         case .ai: AIView()
         case .drives: DrivesView()
         case .activity: ActivityView()
@@ -550,6 +552,7 @@ struct MainView: View {
                     navItem(.map)
                     navItem(.reclaim, badge: model.safeReclaimable > 0 ? SidebarBadge(text: ByteFormat.compact(model.safeReclaimable), color: Theme.safe) : nil)
                     if Edition.available(.memory) { navItem(.memory) }
+                    if model.showsBattery { navItem(.battery, badge: batteryBadge) }
                     if Edition.available(.ai) { navItem(.ai) }
                     if Edition.available(.drives) { navItem(.drives) }
                     navItem(.activity, badge: model.waitingInTrash.bytes > 0 ? SidebarBadge(text: ByteFormat.compact(model.waitingInTrash.bytes), color: Theme.review) : nil)
@@ -580,6 +583,14 @@ struct MainView: View {
         let items = CodingScreen.items(s, model: model)
         let bytes = s == .worktrees ? Worktrees.total(model.worktrees) : items.reduce(0) { $0 + $1.size.allocated }
         return bytes > 0 ? SidebarBadge(text: ByteFormat.compact(bytes), color: Theme.color(for: CodingScreen.category(s))) : nil
+    }
+
+    /// Only when something needs attention: heat, or a battery due for service.
+    var batteryBadge: SidebarBadge? {
+        guard let b = model.battery else { return nil }
+        if b.hot { return SidebarBadge(text: String(format: "%.0f°", b.temperature), color: Theme.critical, whiteText: true) }
+        if b.failed || b.health < 0.8 { return SidebarBadge(text: "\(b.healthPercent)%", color: Theme.review) }
+        return nil
     }
 
     var cleanUpBytes: Int64 { library.suggestions.reduce(0) { $0 + $1.bytes } }

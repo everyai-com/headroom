@@ -12,7 +12,7 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   (+ `./headroom-cli`); `--no-install` to skip the copy. Then `open /Applications/Headroom.app` — opening
   it by hand shows the window; a login-item launch stays in the notch and menu bar.
 - tests: `swift test` (engine only; every test runs in a throwaway temp folder)
-- read-only reports: `./headroom-cli status|reclaim|projects|apps|map|files|growth|activity|library` (`--json`;
+- read-only reports: `./headroom-cli status|reclaim|projects|apps|map|files|growth|activity|library|battery` (`--json`;
   `library --ext` lists extensions per kind)
 - distribution signing: `HEADROOM_SIGN_ID="Developer ID Application: …" HEADROOM_NOTARY_PROFILE=<profile> ./scripts/bundle.sh`
   (version from `VERSION`; Developer ID builds keep Full Disk Access across rebuilds, ad-hoc ones don't)
@@ -109,6 +109,11 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   `Data/Library/Mail Downloads` (copies of attachments you opened) may go, to the Trash only (the
   Clean up card). Never the mailboxes, never `.delete`. Reading it is `#if !APPSTORE`.
 - Text recognition and duplicate detection run on this Mac only (Vision). Network stays update-check only.
+- Battery add-on (`Battery.swift` + `BatteryView`, Settings → Add-ons, on by default, hidden without a battery) is read-only:
+  `AppleSmartBattery` properties from IOKit, never SMC writes, a helper or `pmset` — Headroom never changes charging; tips point
+  to System Settings › Battery. Health = `AppleRawMaxCapacity / DesignCapacity` (`MaxCapacity` is a % on Apple silicon). Readings
+  (≤ one per 4 min, from the 30 s tick) go to `battery.json`; gaps over 20 min aren't counted as hours. The month card never shows
+  the Mac's name (it's meant to be shared).
 - Updates notify and open the download — never self-install, even though other apps do.
 - `LibraryItem` clashes with SwiftUI's DeveloperToolsSupport type: the app target has a module typealias.
 - Colours are dynamic (`Theme.dynamic`, resolved by the view's colour scheme): the notch forces

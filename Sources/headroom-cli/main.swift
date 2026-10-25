@@ -167,8 +167,27 @@ Task {
         }
         emit(found.prefix(500).map { ["path": $0.path, "kind": $0.kind.rawValue, "bytes": $0.bytes, "modified": date($0.modified),
                                       "source": DownloadSources.source(of: $0)?.name as Any] })
+    case "battery":
+        guard let b = BatteryStatus.current() else { say("No battery (this Mac is a desktop)."); emit(["battery": NSNull()]); break }
+        say("Battery \(b.percent)% · \(b.pluggedIn ? (b.charging ? "charging" : "on the charger") : "on battery")")
+        say("  health      \(b.healthPercent)% (\(b.maxCapacity) of \(b.designCapacity) mAh)")
+        say("  cycles      \(b.cycles) of \(b.designCycles)")
+        say(String(format: "  temperature %.1f °C", b.temperature))
+        say(String(format: "  battery     %+.1f W", b.batteryWatts))
+        if let w = b.systemWatts { say(String(format: "  Mac         %.1f W", w)) }
+        if let a = b.adapterWatts { say("  charger     \(b.adapterName ?? "\(a) W")\(b.adapterDelivering.map { String(format: ", delivering %.1f W", $0) } ?? "")") }
+        let log = BatteryLog.load()
+        if let t = log.trend() {
+            say(String(format: "\nWear %.1f%% a year · %.0f cycles a month", t.wearPerYear * 100, t.cyclesPerMonth)
+                + (t.yearsTo80.map { String(format: " · about %.1f years until 80%%", $0) } ?? ""))
+        }
+        say("\n\(log.samples.count) readings recorded")
+        emit(["percent": b.percent, "pluggedIn": b.pluggedIn, "charging": b.charging, "health": b.health, "cycles": b.cycles,
+              "designCycles": b.designCycles, "maxCapacity": b.maxCapacity, "designCapacity": b.designCapacity,
+              "temperature": b.temperature, "batteryWatts": b.batteryWatts, "systemWatts": b.systemWatts as Any,
+              "adapterWatts": b.adapterWatts as Any, "readings": log.samples.count])
     default:
-        print("usage: headroom-cli [status|reclaim|projects|apps|map|files|growth [hours]|activity|library|search \"query\"] [--json]")
+        print("usage: headroom-cli [status|reclaim|projects|apps|map|files|growth [hours]|activity|library|search \"query\"|battery] [--json]")
     }
 }
 semaphore.wait()

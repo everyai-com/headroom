@@ -73,6 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         ticks += 1
         model.refreshVolume()
         model.memory = MemoryStatus.current()
+        model.refreshBattery(record: true)
         updateStatusItem()
         checkMemory()
         if model.showNotch { notch?.show() } else { notch?.hide() }

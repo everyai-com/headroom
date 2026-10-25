@@ -38,6 +38,22 @@ struct MenuBarView: View {
                     .help("Remove only caches and build output that come back on their own")
                 }
             }
+            if model.showsBattery, let b = model.battery {
+                Divider().overlay(Theme.hairline)
+                Button { close(); openWindow(); NotificationCenter.default.post(name: .headroomShowScreen, object: Screen.battery) } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: b.pluggedIn ? "battery.100percent.bolt" : "battery.75percent")
+                            .foregroundStyle(b.hot ? Theme.critical : Theme.textSecondary).frame(width: 20)
+                        Text("Battery \(b.percent)%").font(.system(size: 12.5, weight: .medium))
+                        Spacer(minLength: 4)
+                        Text("\(b.healthPercent)% health · \(String(format: "%.0f °C", b.temperature))\(b.adapterDelivering.map { String(format: " · %.0f W in", $0) } ?? "")")
+                            .font(.system(size: 11.5)).foregroundStyle(b.hot ? Theme.critical : Theme.textTertiary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain).padding(.horizontal, 6)
+                .help("Open the battery in Headroom")
+            }
             if showDownloads {
                 Divider().overlay(Theme.hairline)
                 HStack {

@@ -32,6 +32,12 @@ enum Snapshots {
                     save(MainView(screen: screen, override: screen == .drives ? AnyView(DrivesView(model: drives)) : nil).environmentObject(model).environmentObject(library), size: CGSize(width: 1180, height: 780),
                          to: dir.appendingPathComponent("\(screen.rawValue.lowercased().replacingOccurrences(of: " ", with: "-"))\(scheme == .light ? "-light" : "").png"),
                          scheme: scheme)
+                    // The battery's monthly card sits below the fold.
+                    if screen == .battery {
+                        save(MainView(screen: screen).environment(\.snapshotScroll, 560).environmentObject(model).environmentObject(library),
+                             size: CGSize(width: 1180, height: 780),
+                             to: dir.appendingPathComponent("battery-month\(scheme == .light ? "-light" : "").png"), scheme: scheme)
+                    }
                 }
             }
             print("rendered \(only.map(\.rawValue).joined(separator: ", ")) to \(dir.path)")
