@@ -20,6 +20,7 @@ struct BatteryView: View {
                         PowerFlowCard(b: b)
                         tips(b)
                     }
+                    EnergyCard()
                     trend
                     recap
                 }

@@ -359,6 +359,75 @@ final class AppModel: ObservableObject {
     /// The XP just earned, shown for a moment where it was earned.
     @Published var plannerReward: PlannerReward?
 
+    // MARK: Keep awake + energy
+
+    /// The running keep-awake session, if any (macOS's own sleep assertion; released when it ends or Headroom quits).
+    @Published var awake: AwakeSession?
+    @Published var awakeState: KeepAwake.Decision = .ended("")
+    @Published var awakeAgents: [String] = []
+    @AppStorage("awakeRequireCharger") var awakeRequireCharger = false
+    /// 0 = no cutoff.
+    @AppStorage("awakeBatteryCutoff") var awakeBatteryCutoff = 20
+    @AppStorage("awakeKeepDisplay") var awakeKeepDisplay = false
+    let awakeAssertion = KeepAwake.Assertion()
+    @Published var energy: [Energy.Use] = []
+    @Published var sleepBlockers: [Energy.Blocker] = []
+
+    func startAwake(_ mode: AwakeSession.Mode, minutes: Int? = nil) {
+        var s = minutes.map { AwakeSession.timed(TimeInterval($0 * 60)) } ?? AwakeSession(mode: mode)
+        s.mode = mode
+        s.keepDisplay = awakeKeepDisplay
+        s.requireCharger = awakeRequireCharger
+        s.batteryCutoff = awakeBatteryCutoff > 0 ? awakeBatteryCutoff : nil
+        awake = s
+        updateAwake()
+    }
+
+    func stopAwake() {
+        awake = nil
+        awakeAssertion.release()
+        awakeState = .ended("Stopped")
+    }
+
+    /// From the 30 s tick (and on start). Returns why a session ended, for the notification.
+    @discardableResult func updateAwake() -> String? {
+        guard let s = awake else { return nil }
+        awakeAgents = s.mode == .whileAgents ? KeepAwake.agentsWorking(ProcessScanner.snapshot(includeArguments: false)) : []
+        let d = KeepAwake.decide(s, battery: battery, agentsWorking: awakeAgents)
+        awakeState = d
+        switch d {
+        case .awake: awakeAssertion.hold(true, display: s.keepDisplay)
+        case .paused: awakeAssertion.release()
+        case .ended(let why): stopAwake(); awakeState = d; return why
+        }
+        return nil
+    }
+
+    var awakeLabel: String {
+        guard let s = awake else { return "Off" }
+        switch awakeState {
+        case .paused(let why): return why
+        case .ended(let why): return why
+        case .awake:
+            if let ends = s.ends { return "Until \(ends.formatted(date: .omitted, time: .shortened))" }
+            return s.mode == .whileAgents ? "While \(awakeAgents.joined(separator: ", ")) works" : "Until you stop it"
+        }
+    }
+
+    /// What's using the battery: two samples `seconds` apart, grouped by app. Off the main thread.
+    func measureEnergy(seconds: Double = 3) async {
+        let (use, blockers) = await Task.detached { () -> ([Energy.Use], [Energy.Blocker]) in
+            let procs = ProcessScanner.snapshot(includeArguments: false)
+            let pids = procs.map(\.pid)
+            let before = Energy.sample(pids)
+            try? await Task.sleep(for: .seconds(seconds))
+            let after = Energy.sample(pids)
+            return (Energy.use(groups: ProcessScanner.groups(procs), before: before, after: after, seconds: seconds), Energy.blockers())
+        }.value
+        energy = Array(use.prefix(8))
+        sleepBlockers = blockers
+    }
+
     func clearBatteryLog() {
         batteryLog = BatteryLog()
         try? FileManager.default.removeItem(at: BatteryLog.defaultURL)

@@ -124,6 +124,11 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   to System Settings › Battery. Health = `AppleRawMaxCapacity / DesignCapacity` (`MaxCapacity` is a % on Apple silicon). Readings
   (≤ one per 4 min, from the 30 s tick) go to `battery.json`; gaps over 20 min aren't counted as hours. The month card never shows
   the Mac's name (it's meant to be shared).
+- Keep awake (`KeepAwake.swift`, menu bar row `KeepAwakeRow`): only macOS's own idle-sleep assertion (`IOPMAssertionCreateWithName`,
+  what `caffeinate` does) — no admin rights, no `pmset`, released when the session ends or Headroom quits. The rules are the pure
+  `KeepAwake.decide` (time's up → battery cutoff, only unplugged → charger required → while agents: your own `claude`/`codex`/builds).
+  Energy (`Energy.swift`, `EnergyCard` on the Battery screen) reads CPU time + wake-ups (`proc_pid_rusage`) and sleep blockers
+  (`IOPMCopyAssertionsByProcess`); quitting goes through `ProcessGuard` like Memory.
 - Updates notify and open the download — never self-install, even though other apps do.
 - `LibraryItem` clashes with SwiftUI's DeveloperToolsSupport type: the app target has a module typealias.
 - Colours are dynamic (`Theme.dynamic`, resolved by the view's colour scheme): the notch forces

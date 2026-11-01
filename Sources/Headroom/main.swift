@@ -76,6 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         model.refreshVolume()
         model.memory = MemoryStatus.current()
         model.refreshBattery(record: true)
+        if let why = model.updateAwake() { notify("Your Mac can sleep again", "Keep awake ended: \(why).") }
         model.reloadPlannerIfChanged()
         quickAdd?.update()
         nudgeHabits()

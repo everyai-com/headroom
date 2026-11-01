@@ -38,6 +38,8 @@ struct MenuBarView: View {
                     .help("Remove only caches and build output that come back on their own")
                 }
             }
+            Divider().overlay(Theme.hairline)
+            KeepAwakeRow().padding(.horizontal, 6)
             if model.showsBattery, let b = model.battery {
                 Divider().overlay(Theme.hairline)
                 Button { close(); openWindow(); NotificationCenter.default.post(name: .headroomShowScreen, object: Screen.battery) } label: {
