@@ -299,6 +299,7 @@ final class NotchController {
         let open = frame(for: g, expanded: true).insetBy(dx: -12, dy: -12)
         if !expanded, hot.contains(p) {
             expanded = true
+            model.reloadPlannerIfChanged() // a task Claude just added shows the moment you look
             render(g)
             Task { await model.refreshVolume() }
         } else if expanded, !open.contains(p) {

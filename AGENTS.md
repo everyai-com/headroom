@@ -117,7 +117,7 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   never a save of a stale copy; the app reloads on the file's date each tick. At most `Planner.bigLimit` (3) big tasks a day,
   finished ones included. XP and levels are computed from what's done (never stored); streaks are "never miss twice"
   (one missed planned day bends, two in a row break; today isn't a miss until it's over; days before the habit existed never
-  are). ⌥N (Carbon, only while the add-on is on) opens quick add; habit nudges notify once a day within 2 h of their time.
+  are). ⌃⌥N (Carbon, only while the add-on is on — never ⌥N, which types ñ) opens quick add; habit nudges notify once a day within 2 h of their time.
   Gamification stays white-hat: no penalties, no streak loss for a single miss, nothing that costs money or time to "protect".
 - Battery add-on (`Battery.swift` + `BatteryView`, Settings → Add-ons, on by default, hidden without a battery) is read-only:
   `AppleSmartBattery` properties from IOKit, never SMC writes, a helper or `pmset` — Headroom never changes charging; tips point

@@ -286,7 +286,7 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 16) {
                         SectionTitle(title: "Add-ons")
                         toggleRow("Planner",
-                                  "Today's Big 3, habits with streaks that forgive one miss, and levels — on the Today screen and the notch's Today tab. ⌥N adds a task from any app; `headroom-cli add` lets you (or Claude Code) add from a terminal. Kept in Headroom's own planner.json.",
+                                  "Today's Big 3, habits with streaks that forgive one miss, and levels — on the Today screen and the notch's Today tab. ⌃⌥N adds a task from any app; `headroom-cli add` lets you (or Claude Code) add from a terminal. Kept in Headroom's own planner.json.",
                                   on: $model.plannerAddOn)
                         if model.battery != nil {
                             toggleRow("Battery",

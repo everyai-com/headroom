@@ -100,6 +100,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         var nudged = UserDefaults.standard.dictionary(forKey: "habitNudged") as? [String: String] ?? [:]
         for h in model.planner.habitsDue(now) where !h.isDone(now) {
             guard let at = h.remindAt, minute >= at, minute < at + 120, nudged[h.id.uuidString] != today else { continue }
+            // A habit made after today's time starts tomorrow — no nudge the moment you save it.
+            if h.created > Calendar.current.startOfDay(for: now).addingTimeInterval(TimeInterval(at * 60)) { continue }
             nudged[h.id.uuidString] = today
             var body = [h.cue.map { "Cue: \($0)." }, h.twoMinute.map { "Even just: \($0)." }].compactMap { $0 }.joined(separator: " ")
             if case .missedOnce = h.streak(now) { body = "Never miss twice — today keeps the streak. " + body }

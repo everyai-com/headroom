@@ -15,9 +15,9 @@ extension AppModel {
     @discardableResult
     func plan<T>(_ change: (inout Planner) -> T) -> T {
         if Self.demoMode { return change(&planner) }
-        let (fresh, result) = PlannerStore.mutate(change)
+        let (fresh, result, modified) = PlannerStore.mutate(change)
         planner = fresh
-        plannerRead = PlannerStore.modified()
+        plannerRead = modified
         return result
     }
 
@@ -29,11 +29,14 @@ extension AppModel {
         plannerRead = modified
     }
 
-    func addTask(_ title: String, big: Bool, day: String? = Planner.key(.now), source: PlannerTask.Source = .app) {
+    /// Adds a task; returns why it couldn't be big, if it asked to be (the caller shows it where you're looking).
+    @discardableResult
+    func addTask(_ title: String, big: Bool, day: String? = Planner.key(.now), source: PlannerTask.Source = .app) -> String? {
         let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else { return }
+        guard !title.isEmpty else { return nil }
         let task = plan { $0.add(title, day: day, big: big, source: source) }
-        if big && !task.big { show(day == nil ? "Added to the inbox — plan it for a day to make it big" : "Three big ones already — added as an ordinary task") }
+        guard big && !task.big else { return nil }
+        return day == nil ? "Added to the inbox — plan it for a day to make it big" : "Three big ones already — added as an ordinary task"
     }
 
     func toggleTask(_ task: PlannerTask) {
@@ -45,10 +48,13 @@ extension AppModel {
     }
 
     /// Runs a change and flashes the XP it earned (nothing for undoing).
-    private func reward(_ change: (inout Planner) -> Void) {
-        let before = planner.xp()
-        plan(change)
-        let after = planner.xp()
+    private func reward(_ change: @escaping (inout Planner) -> Void) {
+        // Both counts come from the same fresh read, so a CLI write in between can't inflate the flash.
+        let (before, after) = plan { p -> (Int, Int) in
+            let before = p.xp()
+            change(&p)
+            return (before, p.xp())
+        }
         guard after > before else { return }
         let old = Planner.level(for: before).number, new = Planner.level(for: after).number
         withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
@@ -164,7 +170,8 @@ struct TodayView: View {
                     }
                     if !snapshot {
                         addField($newBig, prompt: big.isEmpty ? "What matters most today?" : "Another one that matters") {
-                            model.addTask(newBig, big: true); newBig = ""
+                            if let why = model.addTask(newBig, big: true) { model.show(why) }
+                            newBig = ""
                         }
                     }
                 }
@@ -178,7 +185,7 @@ struct TodayView: View {
             VStack(alignment: .leading, spacing: 8) {
                 SectionTitle(title: "Also today", trailing: others.isEmpty ? nil : "\(others.filter { !$0.isDone }.count) open")
                 ForEach(others) { t in TaskRow(task: t) }
-                if !snapshot { addField($newTask, prompt: "Add a task  (⌥N from anywhere)") { model.addTask(newTask, big: false); newTask = "" } }
+                if !snapshot { addField($newTask, prompt: "Add a task  (⌃⌥N from anywhere)") { model.addTask(newTask, big: false); newTask = "" } }
             }
         }
     }
@@ -264,23 +271,18 @@ struct TaskRow: View {
 
     @ViewBuilder var menu: some View {
         let today = Planner.key(.now)
-        if task.day != today { Button("Do Today") { model.plan { $0.update(task.id) { $0.day = today } } } }
-        Button("Move to Tomorrow") { model.plan { $0.update(task.id) { $0.day = Planner.key(daysFrom: .now, 1); $0.big = false } } }
+        if task.day != today { Button("Do Today") { model.plan { $0.schedule(task.id, day: today) } } }
+        Button("Move to Tomorrow") { model.plan { $0.schedule(task.id, day: Planner.key(daysFrom: .now, 1)) } }
         if task.day != nil {
             if task.big {
-                Button("Not One of the Big 3") { model.plan { $0.update(task.id) { $0.big = false } } }
+                Button("Not One of the Big 3") { model.plan { _ = $0.setBig(task.id, false) } }
             } else {
                 Button("Make It One of the Big 3") {
-                    let ok = model.plan { p -> Bool in
-                        guard p.canMakeBig(on: task.day ?? today) else { return false }
-                        p.update(task.id) { $0.big = true }
-                        return true
-                    }
-                    if !ok { model.show("Three big ones already — finish or move one first") }
+                    if !model.plan({ $0.setBig(task.id, true) }) { model.show("Three big ones already — finish or move one first") }
                 }
             }
         }
-        Button("Move to Inbox") { model.plan { $0.update(task.id) { $0.day = nil; $0.big = false } } }
+        Button("Move to Inbox") { model.plan { $0.schedule(task.id, day: nil) } }
         Divider()
         Button("Delete Task", role: .destructive) { model.plan { $0.remove(task.id) } }
     }
@@ -321,7 +323,7 @@ struct HabitRow: View {
     var streakText: String {
         switch habit.streak() {
         case .going(let n): "\(n) day\(n == 1 ? "" : "s")"
-        case .missedOnce: "never miss twice — today counts"
+        case .missedOnce(let n): "\(n) day\(n == 1 ? "" : "s") · never miss twice — today counts"
         case .none: "fresh start"
         }
     }
@@ -491,8 +493,12 @@ struct NotchTodayView: View {
 
     var body: some View {
         let p = model.planner
-        let big = p.bigToday()
+        let tasks = p.today()
+        // Three rows fit: the Big 3 first, then whatever else is open today.
+        let shown = Array(tasks.prefix(3))
+        let more = tasks.count - shown.count
         let habits = p.habitsDue()
+        let shownHabits = Array(habits.prefix(3))
         let level = Planner.level(for: p.xp())
         let done = p.today().filter(\.isDone).count + habits.filter { $0.isDone() }.count
         let total = p.today().count + habits.count
@@ -510,16 +516,17 @@ struct NotchTodayView: View {
                     .buttonStyle(GhostButtonStyle())
             }
             VStack(alignment: .leading, spacing: 4) {
-                if big.isEmpty {
-                    Text("Pick up to three things that matter today — ⌥N adds one from anywhere.")
+                if tasks.isEmpty {
+                    Text("Pick up to three things that matter today — ⌃⌥N adds one from anywhere.")
                         .font(.system(size: 12)).foregroundStyle(Theme.textSecondary).frame(height: 24)
                 }
-                ForEach(big.prefix(3)) { t in
+                ForEach(shown) { t in
                     Button { model.toggleTask(t) } label: {
                         HStack(spacing: 8) {
-                            CheckCircle(on: t.isDone, tint: Theme.review)
+                            CheckCircle(on: t.isDone, tint: t.big ? Theme.review : Theme.accent)
                             Text(t.title).font(.system(size: 12.5, weight: .medium)).lineLimit(1)
                                 .strikethrough(t.isDone).foregroundStyle(t.isDone ? Theme.textTertiary : Theme.textPrimary)
+                            if t.big { Image(systemName: "star.fill").font(.system(size: 8)).foregroundStyle(Theme.review) }
                             Spacer(minLength: 0)
                         }
                         .frame(height: 22).contentShape(Rectangle())
@@ -527,9 +534,17 @@ struct NotchTodayView: View {
                     .buttonStyle(.plain)
                 }
             }
+            .overlay(alignment: .bottomTrailing) {
+                if more > 0 {
+                    Button(action: openToday) {
+                        Text("+\(more) more today").font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.textTertiary)
+                    }
+                    .buttonStyle(.plain).frame(height: 22)
+                }
+            }
             if !habits.isEmpty {
                 HStack(spacing: 6) {
-                    ForEach(habits.prefix(4)) { h in
+                    ForEach(shownHabits) { h in
                         let on = h.isDone()
                         Button { model.toggleHabit(h) } label: {
                             HStack(spacing: 5) {
@@ -543,6 +558,9 @@ struct NotchTodayView: View {
                         }
                         .buttonStyle(.plain)
                         .help(h.twoMinute.map { "Two-minute version: \($0)" } ?? h.title)
+                    }
+                    if habits.count > shownHabits.count {
+                        Text("+\(habits.count - shownHabits.count)").font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.textTertiary)
                     }
                     Spacer(minLength: 0)
                 }

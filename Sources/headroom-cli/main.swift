@@ -21,7 +21,7 @@ import HeadroomCore
 //   headroom-cli add "<task>" [--big] [--tomorrow|--day YYYY-MM-DD|--inbox] [--project name] [--from claude]
 //   headroom-cli done <n|words> · later <n|words>
 //   headroom-cli habits · habit add "<habit>" [--identity …] [--cue …] [--two-minute …] [--at 21:00] [--days mon,wed]
-//   headroom-cli habit done <n|words>
+//   headroom-cli habit done <n|words> [--undo]
 //
 // Add --json to any of them for machine-readable output (for scripts and coding agents —
 // e.g. check free space before a large install).

@@ -6,13 +6,20 @@ import Foundation
 /// and reflection (identity "votes" — every completion counts toward who you're becoming).
 ///
 /// Lives in `planner.json` beside Headroom's other data. The app and `headroom-cli` both write it, so every
-/// change goes through `PlannerStore.mutate`, which re-reads the file first: an add from Claude Code in a
-/// terminal is never lost to the window's older copy.
+/// change goes through `PlannerStore.mutate`, which locks and re-reads the file first: an add from Claude Code
+/// in a terminal is never lost to the window's older copy, nor to another add running at the same moment.
 public struct Planner: Codable, Sendable, Equatable {
     public var tasks: [PlannerTask] = []
     public var habits: [Habit] = []
 
     public init() {}
+
+    // Missing keys decode to their defaults, so a file written by an older or newer Headroom still reads.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        tasks = try c.decodeIfPresent([PlannerTask].self, forKey: .tasks) ?? []
+        habits = try c.decodeIfPresent([Habit].self, forKey: .habits) ?? []
+    }
 
     /// Only three tasks a day can be big: choosing is the point.
     public static let bigLimit = 3
@@ -65,15 +72,35 @@ public struct Planner: Codable, Sendable, Equatable {
     /// No day yet: captured, not committed to.
     public var inbox: [PlannerTask] { tasks.filter { !$0.isDone && $0.day == nil }.sorted { $0.created < $1.created } }
 
-    /// Whether another task can be big on that day (finished big ones still count: three is three).
-    public func canMakeBig(on day: String, now: Date = .now, calendar: Calendar = .current) -> Bool {
+    /// Whether another task can be big on that day (finished big ones still count: three is three). A day
+    /// before today means today — that's where an overdue task shows. `except` leaves out the task being changed.
+    public func canMakeBig(on day: String, except: UUID? = nil, now: Date = .now, calendar: Calendar = .current) -> Bool {
         let todayKey = Self.key(now, calendar: calendar)
+        let day = max(day, todayKey)
         let onToday = Set(today(now, calendar: calendar).map(\.id))
         let count = tasks.filter { t in
-            guard t.big else { return false }
-            return day == todayKey ? onToday.contains(t.id) : t.day == day
+            guard t.big, t.id != except else { return false }
+            return day == todayKey ? onToday.contains(t.id) : t.day == day && !t.isDone
         }.count
         return count < Self.bigLimit
+    }
+
+    /// Plans a task for a day (nil = back to the inbox). It stays big only if that day has room.
+    public mutating func schedule(_ id: UUID, day: String?, now: Date = .now, calendar: Calendar = .current) {
+        guard let i = tasks.firstIndex(where: { $0.id == id }) else { return }
+        tasks[i].day = day
+        if tasks[i].big, day.map({ !canMakeBig(on: $0, except: id, now: now, calendar: calendar) }) ?? true { tasks[i].big = false }
+    }
+
+    /// Makes a task one of the Big 3 (or not). Returns false when its day is already full, or it has no day.
+    @discardableResult
+    public mutating func setBig(_ id: UUID, _ big: Bool, now: Date = .now, calendar: Calendar = .current) -> Bool {
+        guard let i = tasks.firstIndex(where: { $0.id == id }) else { return false }
+        if big {
+            guard let day = tasks[i].day, canMakeBig(on: day, except: id, now: now, calendar: calendar) else { return false }
+        }
+        tasks[i].big = big
+        return true
     }
 
     @discardableResult
@@ -97,12 +124,6 @@ public struct Planner: Codable, Sendable, Equatable {
 
     public mutating func remove(_ id: UUID) { tasks.removeAll { $0.id == id } }
 
-    /// Finished tasks older than 90 days go; XP already counted them only while they're kept, so the level is
-    /// "what you've done lately" rather than a number that only grows.
-    public mutating func prune(now: Date = .now) {
-        tasks.removeAll { $0.done.map { now.timeIntervalSince($0) > 90 * 86_400 } ?? false }
-    }
-
     // MARK: Habits
 
     public func habitsDue(_ now: Date = .now, calendar: Calendar = .current) -> [Habit] {
@@ -115,11 +136,18 @@ public struct Planner: Codable, Sendable, Equatable {
         if habits[i].done.contains(key) { habits[i].done.remove(key) } else { habits[i].done.insert(key) }
     }
 
+    /// Checks a habit off (never unchecks: running it twice is harmless).
+    public mutating func checkHabit(_ id: UUID, on date: Date = .now, calendar: Calendar = .current) {
+        guard let i = habits.firstIndex(where: { $0.id == id }) else { return }
+        habits[i].done.insert(Self.key(date, calendar: calendar))
+    }
+
     // MARK: Progress
 
     /// Every point comes from something done, so nothing can be farmed: a task is 10, a big one 30, a habit
     /// check-in 10 plus a little for keeping its streak alive (capped, so a long streak is a bonus, not a wall
-    /// to protect at all costs).
+    /// to protect at all costs). A run counts planned days, so a Mon/Wed/Fri habit earns it too. Nothing is
+    /// ever taken away for time passing: the level only grows.
     public func xp(calendar: Calendar = .current) -> Int {
         let fromTasks = tasks.reduce(0) { $0 + ($1.isDone ? ($1.big ? 30 : 10) : 0) }
         var fromHabits = 0
@@ -127,8 +155,8 @@ public struct Planner: Codable, Sendable, Equatable {
             var run = 0
             var previous: String?
             for day in h.done.sorted() {
-                let next = previous.flatMap { Self.date($0, calendar: calendar) }.map { Self.key(daysFrom: $0, 1, calendar: calendar) }
-                run = next == day ? run + 1 : 1
+                let plannedBefore = Self.date(day, calendar: calendar).flatMap { h.plannedDay(before: $0, calendar: calendar) }
+                run = previous != nil && previous == plannedBefore ? run + 1 : 1
                 fromHabits += 10 + min(run - 1, 5) * 2
                 previous = day
             }
@@ -159,7 +187,7 @@ public struct Planner: Codable, Sendable, Equatable {
         guard let week = cal.dateInterval(of: .weekOfYear, for: now) else { return [] }
         let start = Self.key(week.start, calendar: cal), end = Self.key(week.end.addingTimeInterval(-1), calendar: cal)
         var tally: [String: Int] = [:]
-        for h in habits where !(h.identity ?? "").isEmpty {
+        for h in habits where !h.archived && !(h.identity ?? "").isEmpty {
             tally[h.identity!, default: 0] += h.done.filter { $0 >= start && $0 <= end }.count
         }
         return tally.map { ($0.key, $0.value) }.sorted { $0.votes > $1.votes }
@@ -181,6 +209,22 @@ public struct PlannerTask: Codable, Sendable, Identifiable, Equatable, Hashable 
     public var project: String?
     public var source: Source
     public var isDone: Bool { done != nil }
+
+    public init(title: String, created: Date, day: String?, big: Bool, project: String?, source: Source) {
+        self.title = title; self.created = created; self.day = day; self.big = big; self.project = project; self.source = source
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        title = try c.decode(String.self, forKey: .title)
+        created = try c.decodeIfPresent(Date.self, forKey: .created) ?? .now
+        day = try c.decodeIfPresent(String.self, forKey: .day)
+        big = try c.decodeIfPresent(Bool.self, forKey: .big) ?? false
+        done = try c.decodeIfPresent(Date.self, forKey: .done)
+        project = try c.decodeIfPresent(String.self, forKey: .project)
+        source = (try? c.decodeIfPresent(Source.self, forKey: .source)) ?? .app
+    }
 }
 
 /// A habit in the Atomic Habits shape: who it makes you (identity), when it happens (the cue, often
@@ -204,6 +248,29 @@ public struct Habit: Codable, Sendable, Identifiable, Equatable, Hashable {
                 weekdays: Set<Int> = [], remindAt: Int? = nil, created: Date = .now) {
         self.title = title; self.identity = identity; self.cue = cue; self.twoMinute = twoMinute
         self.weekdays = weekdays; self.remindAt = remindAt; self.created = created
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        title = try c.decode(String.self, forKey: .title)
+        identity = try c.decodeIfPresent(String.self, forKey: .identity)
+        cue = try c.decodeIfPresent(String.self, forKey: .cue)
+        twoMinute = try c.decodeIfPresent(String.self, forKey: .twoMinute)
+        weekdays = try c.decodeIfPresent(Set<Int>.self, forKey: .weekdays) ?? []
+        remindAt = try c.decodeIfPresent(Int.self, forKey: .remindAt)
+        created = try c.decodeIfPresent(Date.self, forKey: .created) ?? .distantPast
+        done = try c.decodeIfPresent(Set<String>.self, forKey: .done) ?? []
+        archived = try c.decodeIfPresent(Bool.self, forKey: .archived) ?? false
+    }
+
+    /// The planned day before this one (within a week), as a key.
+    public func plannedDay(before date: Date, calendar: Calendar = .current) -> String? {
+        for back in 1...7 {
+            guard let d = calendar.date(byAdding: .day, value: -back, to: date) else { return nil }
+            if isScheduled(d, calendar: calendar) { return Planner.key(d, calendar: calendar) }
+        }
+        return nil
     }
 
     public func isScheduled(_ date: Date, calendar: Calendar = .current) -> Bool {
@@ -263,16 +330,31 @@ public struct Habit: Codable, Sendable, Identifiable, Equatable, Hashable {
     }
 }
 
-/// Reads and writes `planner.json`. Every write re-reads first, so two writers (the app and the CLI) merge
-/// instead of overwriting each other.
+/// Reads and writes `planner.json`. Every write takes a lock and re-reads first, so writers (the app, any
+/// number of CLI runs at once) merge instead of overwriting each other.
 public enum PlannerStore {
     public static var defaultURL: URL { HeadroomPaths.support.appendingPathComponent("planner.json") }
 
     public static func load(from url: URL = defaultURL) -> Planner {
         guard let data = try? Data(contentsOf: url) else { return Planner() }
+        return (try? decode(data)) ?? Planner()
+    }
+
+    static func decode(_ data: Data) throws -> Planner {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return (try? decoder.decode(Planner.self, from: data)) ?? Planner()
+        return try decoder.decode(Planner.self, from: data)
+    }
+
+    /// For a write: a file that exists but can't be read is set aside (planner-unreadable-<date>.json) before
+    /// anything replaces it — your tasks are never silently swapped for an empty list.
+    static func loadForWrite(from url: URL) -> Planner {
+        guard let data = try? Data(contentsOf: url) else { return Planner() }
+        if let planner = try? decode(data) { return planner }
+        let stamp = Int(Date().timeIntervalSince1970)
+        let aside = url.deletingLastPathComponent().appendingPathComponent("planner-unreadable-\(stamp).json")
+        try? FileManager.default.copyItem(at: url, to: aside)
+        return Planner()
     }
 
     public static func save(_ planner: Planner, to url: URL = defaultURL) {
@@ -282,12 +364,18 @@ public enum PlannerStore {
         if let data = try? encoder.encode(planner) { try? data.write(to: url, options: .atomic) }
     }
 
+    /// Locked read → change → write. `modified` is the file's date right after this write, read under the
+    /// lock, so a watcher that records it can't skip someone else's write that lands just after.
     @discardableResult
-    public static func mutate<T>(at url: URL = defaultURL, _ change: (inout Planner) -> T) -> (Planner, T) {
-        var planner = load(from: url)
+    public static func mutate<T>(at url: URL = defaultURL, _ change: (inout Planner) -> T) -> (planner: Planner, result: T, modified: Date?) {
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let lock = open(url.path + ".lock", O_CREAT | O_RDWR, 0o644)
+        if lock >= 0 { flock(lock, LOCK_EX) }
+        defer { if lock >= 0 { flock(lock, LOCK_UN); close(lock) } }
+        var planner = loadForWrite(from: url)
         let result = change(&planner)
         save(planner, to: url)
-        return (planner, result)
+        return (planner, result, modified(at: url))
     }
 
     public static func modified(at url: URL = defaultURL) -> Date? {

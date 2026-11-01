@@ -34,26 +34,28 @@ enum PlannerCommands {
             var day: String? = today
             if flag("--tomorrow") { day = Planner.key(daysFrom: now, 1) }
             if flag("--inbox") { day = nil }
-            if let d = option("--day") {
-                guard Planner.date(d) != nil else { fail("--day wants a date like 2026-11-03") }
-                day = d
-            }
+            if let d = option("--day") { day = dayKey(d) }
             _ = flag("--today")
             let title = rest.joined(separator: " ").trimmingCharacters(in: .whitespaces)
             guard !title.isEmpty else { fail("usage: headroom-cli add \"what to do\" [--big] [--tomorrow|--day YYYY-MM-DD|--inbox] [--project name]") }
-            let (_, task) = PlannerStore.mutate { $0.add(title, day: day, big: big, project: project, source: source) }
+            let task = PlannerStore.mutate { $0.add(title, day: day, big: big, project: project, source: source) }.result
+            if json { emitJSON(taskJSON(task)); return }
             if big && !task.big { print(day == nil ? "Added to the inbox (plan it for a day to make it big)." : "Already three big tasks that day — added as an ordinary one.") }
-            else if !json { print("Added\(task.big ? " ★" : ""): \(task.title)\(day.map { $0 == today ? "" : " (\($0))" } ?? " (inbox)")") }
-            if json { emitJSON(taskJSON(task)) }
+            else { print("Added\(task.big ? " ★" : ""): \(task.title)\(day.map { $0 == today ? "" : " (\($0))" } ?? " (inbox)")") }
 
         case "done", "later":
             let ref = rest.joined(separator: " ")
-            let (planner, found) = PlannerStore.mutate { p -> PlannerTask? in
-                guard let t = find(ref, in: p.today(now).filter { !$0.isDone } + p.inbox + p.upcoming(now)) else { return nil }
-                if args[0] == "done" { p.complete(t.id, at: now) } else { p.update(t.id) { $0.day = Planner.key(daysFrom: now, 1); $0.big = false } }
-                return t
+            let tomorrow = Planner.key(daysFrom: now, 1)
+            let (planner, outcome, _) = PlannerStore.mutate { p -> Result<PlannerTask, Lookup> in
+                // Numbers are the ones `today` prints (today's open tasks); words and ids also reach the inbox and later days.
+                let numbered = p.today(now).filter { !$0.isDone }
+                let found = find(ref, numbered: numbered, in: numbered + p.inbox + p.upcoming(now))
+                guard case .success(let t) = found else { return found }
+                if args[0] == "done" { p.complete(t.id, at: now) }
+                else if (t.day ?? "") < tomorrow { p.schedule(t.id, day: tomorrow, now: now) } // never pulls a later day forward
+                return .success(t)
             }
-            guard let found else { fail("No open task matches “\(ref)”. `headroom-cli today` lists them with numbers.") }
+            let found = outcome.or(ref)
             if json { emitJSON(taskJSON(planner.tasks.first { $0.id == found.id } ?? found)) }
             else {
                 print(args[0] == "done" ? "Done: \(found.title)  (+\(found.big ? 30 : 10) XP · \(levelLine(planner)))" : "Moved to tomorrow: \(found.title)")
@@ -67,22 +69,35 @@ enum PlannerCommands {
             rest = Array(rest.dropFirst())
             if sub == "add" {
                 let identity = option("--identity"), cue = option("--cue"), two = option("--two-minute")
-                let at = option("--at").flatMap(minutes)
-                let weekdays = option("--days").map(parseWeekdays) ?? []
+                var at: Int?
+                if let s = option("--at") {
+                    guard let m = minutes(s) else { fail("--at wants a time like 21:00") }
+                    at = m
+                }
+                var weekdays: Set<Int> = []
+                if let s = option("--days") {
+                    guard let d = parseWeekdays(s) else { fail("--days wants names like mon,wed,fri (or weekdays)") }
+                    weekdays = d
+                }
                 let title = rest.joined(separator: " ").trimmingCharacters(in: .whitespaces)
                 guard !title.isEmpty else { fail("usage: headroom-cli habit add \"Read 10 pages\" [--identity \"a reader\"] [--cue \"after dinner\"] [--two-minute \"read one page\"] [--at 21:00] [--days mon,wed,fri]") }
                 let habit = Habit(title: title, identity: identity, cue: cue, twoMinute: two, weekdays: weekdays, remindAt: at)
                 PlannerStore.mutate { $0.habits.append(habit) }
                 print("New habit: \(title)\(identity.map { " — every time is a vote for being \($0)" } ?? "")")
             } else if sub == "done" {
+                let undo = flag("--undo")
                 let ref = rest.joined(separator: " ")
-                let (planner, found) = PlannerStore.mutate { p -> Habit? in
+                let (planner, outcome, _) = PlannerStore.mutate { p -> Result<Habit, Lookup> in
                     let due = p.habitsDue(now)
-                    guard let h = find(ref, in: due) else { return nil }
-                    p.toggleHabit(h.id, on: now)
-                    return h
+                    let found = find(ref, numbered: due, in: due)
+                    guard case .success(let h) = found else { return found }
+                    // Checking is idempotent (an agent retrying can't uncheck it); --undo unchecks.
+                    if undo { if h.isDone(now) { p.toggleHabit(h.id, on: now) } } else { p.checkHabit(h.id, on: now) }
+                    return .success(h)
                 }
-                guard let found, let h = planner.habits.first(where: { $0.id == found.id }) else { fail("No habit due today matches “\(ref)”.") }
+                let found = outcome.or(ref, what: "habit due today")
+                guard let h = planner.habits.first(where: { $0.id == found.id }) else { fail("That habit is gone.") }
+                if json { emitJSON(habitJSON(h)); return }
                 print(h.isDone(now) ? "✓ \(h.title)  \(streakText(h.streak(now))) · \(levelLine(planner))" : "Unchecked \(h.title)")
             } else {
                 fail("usage: headroom-cli habit add|done …")
@@ -167,16 +182,32 @@ enum PlannerCommands {
 
     // MARK: Parsing
 
-    /// A number from the list, an id prefix, or words from the title.
-    static func find<T: Identifiable>(_ ref: String, in items: [T]) -> T? where T.ID == UUID {
+    enum Lookup: Error {
+        case none
+        case several([String])
+    }
+
+    /// A number from the printed list, an id prefix, or words from the title. Several title matches are an
+    /// error, not a guess: a coding agent ticking off the wrong task is worse than asking again.
+    static func find<T: Identifiable>(_ ref: String, numbered: [T], in items: [T]) -> Result<T, Lookup> where T.ID == UUID {
         let ref = ref.trimmingCharacters(in: .whitespaces)
-        if let n = Int(ref), items.indices.contains(n - 1) { return items[n - 1] }
-        if ref.count >= 4, let hit = items.first(where: { $0.id.uuidString.lowercased().hasPrefix(ref.lowercased()) }) { return hit }
-        let words = ref.lowercased()
-        return items.first { item in
-            let title = (item as? PlannerTask)?.title ?? (item as? Habit)?.title ?? ""
-            return !words.isEmpty && title.lowercased().contains(words)
-        }
+        guard !ref.isEmpty else { return .failure(.none) }
+        if let n = Int(ref) { return numbered.indices.contains(n - 1) ? .success(numbered[n - 1]) : .failure(.none) }
+        if ref.count >= 4, let hit = items.first(where: { $0.id.uuidString.lowercased().hasPrefix(ref.lowercased()) }) { return .success(hit) }
+        func title(_ item: T) -> String { (item as? PlannerTask)?.title ?? (item as? Habit)?.title ?? "" }
+        if let exact = items.first(where: { title($0).lowercased() == ref.lowercased() }) { return .success(exact) }
+        let hits = items.filter { title($0).lowercased().contains(ref.lowercased()) }
+        if hits.count == 1 { return .success(hits[0]) }
+        return .failure(hits.isEmpty ? .none : .several(hits.map(title)))
+    }
+
+    /// "2026-11-3" → "2026-11-03"; a date that doesn't exist (Feb 30) is refused, not rolled over.
+    static func dayKey(_ s: String) -> String {
+        guard let d = Planner.date(s) else { fail("--day wants a date like 2026-11-03") }
+        let key = Planner.key(d)
+        let parts = s.split(separator: "-").compactMap { Int($0) }
+        guard key.split(separator: "-").compactMap({ Int($0) }) == parts else { fail("There's no \(s).") }
+        return key
     }
 
     static func minutes(_ s: String) -> Int? {
@@ -185,14 +216,33 @@ enum PlannerCommands {
         return p[0] * 60 + p[1]
     }
 
-    static func parseWeekdays(_ s: String) -> Set<Int> {
+    static func parseWeekdays(_ s: String) -> Set<Int>? {
         let names = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]
+        let s = s.lowercased()
         if s == "weekdays" { return [2, 3, 4, 5, 6] }
-        return Set(s.lowercased().split(separator: ",").compactMap { names.firstIndex(of: String($0.prefix(3))).map { $0 + 1 } })
+        if s == "weekends" { return [1, 7] }
+        var days = Set<Int>()
+        for part in s.split(separator: ",") {
+            guard part.count >= 3, let i = names.firstIndex(of: String(part.prefix(3))) else { return nil }
+            days.insert(i + 1)
+        }
+        return days.isEmpty ? nil : days
     }
 
     static func fail(_ message: String) -> Never {
         FileHandle.standardError.write(Data((message + "\n").utf8))
         exit(1)
+    }
+}
+
+extension Result where Failure == PlannerCommands.Lookup {
+    /// The match, or exit with what went wrong.
+    func or(_ ref: String, what: String = "open task") -> Success {
+        switch self {
+        case .success(let value): return value
+        case .failure(.none): PlannerCommands.fail("No \(what) matches “\(ref)”. `headroom-cli today` lists them with numbers.")
+        case .failure(.several(let titles)):
+            PlannerCommands.fail("“\(ref)” matches \(titles.count): " + titles.map { "“\($0)”" }.joined(separator: ", ") + ". Use more words or the number.")
+        }
     }
 }
