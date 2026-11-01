@@ -349,6 +349,16 @@ final class AppModel: ObservableObject {
         if record, batteryAddOn { batteryLog.record(status) }
     }
 
+    // MARK: Planner
+
+    /// Tasks and habits (Settings → Add-ons → Planner). Written by the app and `headroom-cli`; see `PlannerStore`.
+    @Published var planner = AppModel.demoMode ? PlannerDemo.planner() : PlannerStore.load()
+    @AppStorage("plannerAddOn") var plannerAddOn = true
+    /// The file's date when last read, so a change from the CLI (or Claude Code) is picked up on the next tick.
+    var plannerRead: Date? = PlannerStore.modified()
+    /// The XP just earned, shown for a moment where it was earned.
+    @Published var plannerReward: PlannerReward?
+
     func clearBatteryLog() {
         batteryLog = BatteryLog()
         try? FileManager.default.removeItem(at: BatteryLog.defaultURL)

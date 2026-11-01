@@ -11,6 +11,11 @@ struct NotchView: View {
     var notchHeight: CGFloat
     var expanded: Bool
     var openApp: () -> Void
+    /// Opens the window on a screen (the Today tab's "Open Today").
+    var openScreen: (Screen) -> Void = { _ in }
+    @AppStorage("notchTab") private var tab: NotchTab = .today
+
+    enum NotchTab: String { case today, space }
 
     static let expandedSize = CGSize(width: 500, height: 228)
     static let wing: CGFloat = 74
@@ -23,8 +28,15 @@ struct NotchView: View {
                 .fill(Color.black)
                 .shadow(color: .black.opacity(expanded ? 0.55 : 0), radius: 22, y: 10)
             if expanded {
-                expandedContent(v, tint: tint)
-                    .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
+                ZStack(alignment: .top) {
+                    if model.plannerAddOn && tab == .today {
+                        NotchTodayView(notchHeight: notchHeight, openToday: { openScreen(.today) })
+                    } else {
+                        expandedContent(v, tint: tint)
+                    }
+                    if model.plannerAddOn { tabBar }
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
             } else {
                 compact(v, tint: tint)
             }
@@ -33,6 +45,27 @@ struct NotchView: View {
                height: expanded ? Self.expandedSize.height : notchHeight)
         .animation(.spring(response: 0.42, dampingFraction: 0.82), value: expanded)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// Today | Space, in the band beside the camera, so switching never makes the panel taller.
+    var tabBar: some View {
+        HStack(spacing: 4) {
+            ForEach([(NotchTab.today, "Today"), (.space, "Space")], id: \.0) { t, title in
+                Button { withAnimation(.easeOut(duration: 0.15)) { tab = t } } label: {
+                    Text(title).font(.system(size: 11.5, weight: .semibold)).fixedSize()
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(Capsule().fill(tab == t ? Theme.fill(0.16) : .clear))
+                        .foregroundStyle(tab == t ? Theme.textPrimary : Theme.textTertiary)
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer()
+        }
+        .frame(width: max(0, (Self.expandedSize.width - notchWidth) / 2 - 18), alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.leading, 18)
+        .frame(height: max(notchHeight - 4, 24))
     }
 
     // Leading ring + trailing value, either side of the camera (Yazio / Tide Guide pattern).
@@ -241,6 +274,10 @@ final class NotchController {
         let view = NotchView(notchWidth: g.notchWidth, notchHeight: g.notchHeight, expanded: expanded, openApp: { [weak self] in
             self?.collapse()
             self?.openApp()
+        }, openScreen: { [weak self] screen in
+            self?.collapse()
+            self?.openApp()
+            NotificationCenter.default.post(name: .headroomShowScreen, object: screen)
         })
         .environmentObject(model)
         // The notch is black whatever the window looks like.

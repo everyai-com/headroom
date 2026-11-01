@@ -14,6 +14,9 @@ README screenshots are rendered with `--demo` so no personal projects or files a
 - tests: `swift test` (engine only; every test runs in a throwaway temp folder)
 - read-only reports: `./headroom-cli status|reclaim|projects|apps|map|files|growth|activity|library|battery` (`--json`;
   `library --ext` lists extensions per kind)
+- planner: `./headroom-cli today | add "…" [--big] [--tomorrow|--day YYYY-MM-DD|--inbox] [--project p] [--from claude] |
+  done <n|words> | later <n|words> | habits | habit add "…" [--identity --cue --two-minute --at HH:MM --days mon,wed] | habit done`
+  — the only CLI commands that write, and only Headroom's own `planner.json`. Use them to plan the user's day from a session.
 - distribution signing: `HEADROOM_SIGN_ID="Developer ID Application: …" HEADROOM_NOTARY_PROFILE=<profile> ./scripts/bundle.sh`
   (version from `VERSION`; Developer ID builds keep Full Disk Access across rebuilds, ad-hoc ones don't)
 - Mac App Store edition: `scripts/appstore.sh [--upload]` → sandboxed universal `dist/Headroom-AppStore.pkg`
@@ -109,6 +112,13 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   `Data/Library/Mail Downloads` (copies of attachments you opened) may go, to the Trash only (the
   Clean up card). Never the mailboxes, never `.delete`. Reading it is `#if !APPSTORE`.
 - Text recognition and duplicate detection run on this Mac only (Vision). Network stays update-check only.
+- Planner add-on (`Planner.swift` + `TodayView`/`NotchTodayView`/`QuickAdd`, Settings → Add-ons, on by default): tasks and
+  habits in `planner.json`, written by the app AND the CLI — every write is `PlannerStore.mutate` (re-read, change, save),
+  never a save of a stale copy; the app reloads on the file's date each tick. At most `Planner.bigLimit` (3) big tasks a day,
+  finished ones included. XP and levels are computed from what's done (never stored); streaks are "never miss twice"
+  (one missed planned day bends, two in a row break; today isn't a miss until it's over; days before the habit existed never
+  are). ⌥N (Carbon, only while the add-on is on) opens quick add; habit nudges notify once a day within 2 h of their time.
+  Gamification stays white-hat: no penalties, no streak loss for a single miss, nothing that costs money or time to "protect".
 - Battery add-on (`Battery.swift` + `BatteryView`, Settings → Add-ons, on by default, hidden without a battery) is read-only:
   `AppleSmartBattery` properties from IOKit, never SMC writes, a helper or `pmset` — Headroom never changes charging; tips point
   to System Settings › Battery. Health = `AppleRawMaxCapacity / DesignCapacity` (`MaxCapacity` is a % on Apple silicon). Readings

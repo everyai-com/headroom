@@ -40,6 +40,19 @@ enum Snapshots {
                     }
                 }
             }
+            // The notch's Today tab, with the planner.
+            if only.contains(.today) {
+                UserDefaults.standard.set("today", forKey: "notchTab")
+                let notchW = NotchController.geometry().map { $0.notchWidth > 0 ? $0.notchWidth : 185 } ?? 185
+                let notchH = NotchController.geometry().map(\.notchHeight) ?? 32
+                let view = ZStack(alignment: .top) {
+                    LinearGradient(colors: [Color(hex: 0x2B3A67), Color(hex: 0x6A4C93), Color(hex: 0xC06C84)],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing)
+                    NotchView(notchWidth: notchW, notchHeight: notchH, expanded: true, openApp: {}).environmentObject(model)
+                    NotchShape(radius: 9).fill(Color.black).frame(width: notchW, height: notchH)
+                }
+                save(view, size: CGSize(width: 760, height: 300), to: dir.appendingPathComponent("notch-today.png"))
+            }
             print("rendered \(only.map(\.rawValue).joined(separator: ", ")) to \(dir.path)")
             return
         }

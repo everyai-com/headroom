@@ -15,6 +15,14 @@ import HeadroomCore
 //   headroom-cli library         your files by kind (images, videos, music…) and where downloads came from
 //   headroom-cli search "<q>"    find files in plain English: "pdfs from last week over 5 mb"
 //
+//
+// The planner (the only commands that write — and only Headroom's own planner.json):
+//   headroom-cli today                         today's tasks (★ = one of the Big 3), habits, level
+//   headroom-cli add "<task>" [--big] [--tomorrow|--day YYYY-MM-DD|--inbox] [--project name] [--from claude]
+//   headroom-cli done <n|words> · later <n|words>
+//   headroom-cli habits · habit add "<habit>" [--identity …] [--cue …] [--two-minute …] [--at 21:00] [--days mon,wed]
+//   headroom-cli habit done <n|words>
+//
 // Add --json to any of them for machine-readable output (for scripts and coding agents —
 // e.g. check free space before a large install).
 
@@ -44,6 +52,12 @@ func findingJSON(_ f: Finding) -> [String: Any] {
     return ["id": f.id, "title": f.title, "category": f.category.rawValue, "safety": "\(f.safety)",
             "paths": f.paths.map(\.path), "bytes": f.size.allocated, "reclaimableBytes": f.reclaimable,
             "lastUsed": date(f.lastUsed), "method": method, "rebuild": f.rebuild ?? NSNull(), "project": f.project ?? NSNull()]
+}
+
+// The planner writes only Headroom's own planner.json, and skips the disk header.
+if PlannerCommands.names.contains(command) {
+    PlannerCommands.run(args, json: json)
+    exit(0)
 }
 
 let volume = VolumeStatus.current()
@@ -187,7 +201,7 @@ Task {
               "temperature": b.temperature, "batteryWatts": b.batteryWatts, "systemWatts": b.systemWatts as Any,
               "adapterWatts": b.adapterWatts as Any, "readings": log.samples.count])
     default:
-        print("usage: headroom-cli [status|reclaim|projects|apps|map|files|growth [hours]|activity|library|search \"query\"|battery] [--json]")
+        print("usage: headroom-cli [status|reclaim|projects|apps|map|files|growth [hours]|activity|library|search \"query\"|battery|today|add|done|later|habits|habit] [--json]")
     }
 }
 semaphore.wait()

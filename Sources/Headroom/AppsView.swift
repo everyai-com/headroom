@@ -282,10 +282,13 @@ struct SettingsView: View {
                                   on: $readText)
                     }
                 }
-                if model.battery != nil {
-                    Card {
-                        VStack(alignment: .leading, spacing: 16) {
-                            SectionTitle(title: "Add-ons")
+                Card {
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionTitle(title: "Add-ons")
+                        toggleRow("Planner",
+                                  "Today's Big 3, habits with streaks that forgive one miss, and levels — on the Today screen and the notch's Today tab. ⌥N adds a task from any app; `headroom-cli add` lets you (or Claude Code) add from a terminal. Kept in Headroom's own planner.json.",
+                                  on: $model.plannerAddOn)
+                        if model.battery != nil {
                             toggleRow("Battery",
                                       "Charge, health, heat and where the watts go, the health trend and a monthly card to share. Headroom notes the battery every few minutes while it runs (\(model.batteryLog.samples.count.formatted()) readings so far) and never changes how the Mac charges.",
                                       on: $model.batteryAddOn)

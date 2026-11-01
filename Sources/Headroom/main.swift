@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
     private var quickSearch: QuickSearchController?
+    private var quickAdd: QuickAddController?
     private var window: NSWindow?
     private var monitor: Timer?
     private var lastAlert: Date?
@@ -31,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         setupStatusItem()
         NSApp.mainMenu = mainMenu()
         quickSearch = QuickSearchController(library: library)
+        quickAdd = QuickAddController(model: model)
         NotificationCenter.default.addObserver(forName: .headroomOpenWindow, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.openWindow() }
         }
@@ -74,6 +76,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         model.refreshVolume()
         model.memory = MemoryStatus.current()
         model.refreshBattery(record: true)
+        model.reloadPlannerIfChanged()
+        quickAdd?.update()
+        nudgeHabits()
         updateStatusItem()
         checkMemory()
         if model.showNotch { notch?.show() } else { notch?.hide() }
@@ -83,6 +88,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         if ticks % 720 == 0, model.mapProgress == nil { Task { await model.buildMap() } }
         if ticks % 2880 == 0 { Task { await checkForUpdates() } } // daily
         checkForAlert()
+    }
+
+    /// A habit's nudge, once a day at its time, while it's still undone: the cue plus the two-minute
+    /// version, so the easiest way to keep the streak is right there.
+    private func nudgeHabits() {
+        guard model.plannerAddOn, model.notificationsEnabled else { return }
+        let now = Date()
+        let minute = Calendar.current.component(.hour, from: now) * 60 + Calendar.current.component(.minute, from: now)
+        let today = Planner.key(now)
+        var nudged = UserDefaults.standard.dictionary(forKey: "habitNudged") as? [String: String] ?? [:]
+        for h in model.planner.habitsDue(now) where !h.isDone(now) {
+            guard let at = h.remindAt, minute >= at, minute < at + 120, nudged[h.id.uuidString] != today else { continue }
+            nudged[h.id.uuidString] = today
+            var body = [h.cue.map { "Cue: \($0)." }, h.twoMinute.map { "Even just: \($0)." }].compactMap { $0 }.joined(separator: " ")
+            if case .missedOnce = h.streak(now) { body = "Never miss twice — today keeps the streak. " + body }
+            notify(h.title, body.isEmpty ? "A vote for being \(h.identity ?? "who you want to be")." : body)
+        }
+        UserDefaults.standard.set(nudged.filter { $0.value == today }, forKey: "habitNudged")
     }
 
     private var criticalTicks = 0

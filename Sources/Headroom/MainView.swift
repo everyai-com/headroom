@@ -2,7 +2,7 @@ import SwiftUI
 import HeadroomCore
 
 enum Screen: String, CaseIterable, Identifiable {
-    case home = "Home", recents = "Recents",
+    case home = "Home", today = "Today", recents = "Recents",
          images = "Images", videos = "Videos", music = "Music", documents = "Documents", archives = "Archives", apps = "Apps",
          overview = "Overview",
          files = "Large files", screenshots = "Screenshots", duplicates = "Duplicates", cleanUp = "Clean up", downloads = "Downloaded from",
@@ -15,6 +15,7 @@ enum Screen: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .home: "house"
+        case .today: "checkmark.circle"
         case .recents: "clock"
         case .images: "photo"
         case .videos: "film"
@@ -251,6 +252,7 @@ struct MainView: View {
         if !Edition.available(screen) { FullVersionOnly(screen: screen) } else {
         switch screen {
         case .home: HomeView(go: { screen = $0 })
+        case .today: TodayView()
         case .recents, .images, .videos, .music, .documents, .archives, .screenshots: KindScreen(screen: screen).id(screen)
         case .search: SearchScreen()
         case .saved: SavedSearchScreen().id(library.savedID)
@@ -289,6 +291,8 @@ struct MainView: View {
 
     var subtitle: String? {
         switch screen {
+        case .today:
+            return Date().formatted(.dateTime.weekday(.wide).day().month(.wide))
         case .home:
             guard library.hasScanned else { return nil }
             let t = library.shelvedTotals
@@ -522,6 +526,7 @@ struct MainView: View {
             Scrolling {
                 VStack(alignment: .leading, spacing: 1) {
                     navItem(.home)
+                    if model.plannerAddOn { navItem(.today, badge: todayBadge) }
                     navItem(.recents)
                     group("Workspaces")
                     ForEach(Array(library.workspaces.enumerated()), id: \.element.id) { i, w in workspaceItem(w, index: i) }
@@ -583,6 +588,12 @@ struct MainView: View {
         let items = CodingScreen.items(s, model: model)
         let bytes = s == .worktrees ? Worktrees.total(model.worktrees) : items.reduce(0) { $0 + $1.size.allocated }
         return bytes > 0 ? SidebarBadge(text: ByteFormat.compact(bytes), color: Theme.color(for: CodingScreen.category(s))) : nil
+    }
+
+    /// Big ones still open today.
+    var todayBadge: SidebarBadge? {
+        let open = model.planner.bigToday().filter { !$0.isDone }.count
+        return open > 0 ? SidebarBadge(text: "\(open)", color: Theme.review) : nil
     }
 
     /// Only when something needs attention: heat, or a battery due for service.
