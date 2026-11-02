@@ -11,6 +11,11 @@ import Foundation
 public struct Planner: Codable, Sendable, Equatable {
     public var tasks: [PlannerTask] = []
     public var habits: [Habit] = []
+    /// Focus sessions, rewards you set yourself, what you spent coins on, and habit challenges (Progression.swift).
+    public var sessions: [FocusSession] = []
+    public var rewards: [Reward] = []
+    public var purchases: [Purchase] = []
+    public var challenges: [Challenge] = []
 
     public init() {}
 
@@ -19,6 +24,10 @@ public struct Planner: Codable, Sendable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         tasks = try c.decodeIfPresent([PlannerTask].self, forKey: .tasks) ?? []
         habits = try c.decodeIfPresent([Habit].self, forKey: .habits) ?? []
+        sessions = try c.decodeIfPresent([FocusSession].self, forKey: .sessions) ?? []
+        rewards = try c.decodeIfPresent([Reward].self, forKey: .rewards) ?? []
+        purchases = try c.decodeIfPresent([Purchase].self, forKey: .purchases) ?? []
+        challenges = try c.decodeIfPresent([Challenge].self, forKey: .challenges) ?? []
     }
 
     /// Only three tasks a day can be big: choosing is the point.
@@ -104,11 +113,14 @@ public struct Planner: Codable, Sendable, Equatable {
     }
 
     @discardableResult
-    public mutating func add(_ title: String, day: String?, big: Bool = false, project: String? = nil,
-                             source: PlannerTask.Source = .app, now: Date = .now, calendar: Calendar = .current) -> PlannerTask {
+    public mutating func add(_ title: String, day: String?, big: Bool = false, project: String? = nil, effort: Int = 1,
+                             area: String? = nil, source: PlannerTask.Source = .app, now: Date = .now,
+                             calendar: Calendar = .current) -> PlannerTask {
         let wantsBig = big && canMakeBig(on: day ?? Self.key(now, calendar: calendar), now: now, calendar: calendar)
-        let task = PlannerTask(title: title.trimmingCharacters(in: .whitespacesAndNewlines), created: now, day: day,
+        var task = PlannerTask(title: title.trimmingCharacters(in: .whitespacesAndNewlines), created: now, day: day,
                                big: wantsBig && day != nil, project: project, source: source)
+        task.effort = min(max(effort, 1), 3)
+        task.area = area?.trimmingCharacters(in: .whitespaces).nilIfBlank
         tasks.append(task)
         return task
     }
@@ -144,24 +156,10 @@ public struct Planner: Codable, Sendable, Equatable {
 
     // MARK: Progress
 
-    /// Every point comes from something done, so nothing can be farmed: a task is 10, a big one 30, a habit
-    /// check-in 10 plus a little for keeping its streak alive (capped, so a long streak is a bonus, not a wall
-    /// to protect at all costs). A run counts planned days, so a Mon/Wed/Fri habit earns it too. Nothing is
-    /// ever taken away for time passing: the level only grows.
-    public func xp(calendar: Calendar = .current) -> Int {
-        let fromTasks = tasks.reduce(0) { $0 + ($1.isDone ? ($1.big ? 30 : 10) : 0) }
-        var fromHabits = 0
-        for h in habits {
-            var run = 0
-            var previous: String?
-            for day in h.done.sorted() {
-                let plannedBefore = Self.date(day, calendar: calendar).flatMap { h.plannedDay(before: $0, calendar: calendar) }
-                run = previous != nil && previous == plannedBefore ? run + 1 : 1
-                fromHabits += 10 + min(run - 1, 5) * 2
-                previous = day
-            }
-        }
-        return fromTasks + fromHabits
+    /// Every point comes from something done (see `ledger`), so nothing can be farmed and nothing drifts.
+    /// Nothing is ever taken away for time passing: the level only grows.
+    public func xp(now: Date = .now, calendar: Calendar = .current) -> Int {
+        ledger(now: now, calendar: calendar).reduce(0) { $0 + $1.xp }
     }
 
     public struct Level: Sendable, Equatable {
@@ -174,10 +172,10 @@ public struct Planner: Codable, Sendable, Equatable {
 
     /// Each level needs 100 XP more than the last (100, 200, 300…): early levels come in a day or two,
     /// later ones reward weeks of showing up.
-    public static func level(for xp: Int) -> Level {
+    public static func level(for xp: Int, step: Int = 100) -> Level {
         var level = 1, floor = 0
-        while xp >= floor + level * 100 { floor += level * 100; level += 1 }
-        return Level(number: level, into: xp - floor, needed: level * 100)
+        while xp >= floor + level * step { floor += level * step; level += 1 }
+        return Level(number: level, into: xp - floor, needed: level * step)
     }
 
     /// Votes for each identity this week (Monday on): habit check-ins whose habit names that identity.
@@ -190,7 +188,7 @@ public struct Planner: Codable, Sendable, Equatable {
         for h in habits where !h.archived && !(h.identity ?? "").isEmpty {
             tally[h.identity!, default: 0] += h.done.filter { $0 >= start && $0 <= end }.count
         }
-        return tally.map { ($0.key, $0.value) }.sorted { $0.votes > $1.votes }
+        return tally.filter { $0.value > 0 }.map { ($0.key, $0.value) }.sorted { $0.votes > $1.votes }
     }
 }
 
@@ -208,7 +206,12 @@ public struct PlannerTask: Codable, Sendable, Identifiable, Equatable, Hashable 
     /// A project name or path, so work can be grouped (and later matched to Claude Code sessions).
     public var project: String?
     public var source: Source
+    /// How hard: 1 easy, 2 medium, 3 hard (10/20/30 XP, +20 for one of the Big 3).
+    public var effort = 1
+    /// The life area it grows (Health, Work, Writing…): its XP also levels that area.
+    public var area: String?
     public var isDone: Bool { done != nil }
+    public var xp: Int { effort * 10 + (big ? 20 : 0) }
 
     public init(title: String, created: Date, day: String?, big: Bool, project: String?, source: Source) {
         self.title = title; self.created = created; self.day = day; self.big = big; self.project = project; self.source = source
@@ -224,6 +227,8 @@ public struct PlannerTask: Codable, Sendable, Identifiable, Equatable, Hashable 
         done = try c.decodeIfPresent(Date.self, forKey: .done)
         project = try c.decodeIfPresent(String.self, forKey: .project)
         source = (try? c.decodeIfPresent(Source.self, forKey: .source)) ?? .app
+        effort = min(max(try c.decodeIfPresent(Int.self, forKey: .effort) ?? 1, 1), 3)
+        area = try c.decodeIfPresent(String.self, forKey: .area)
     }
 }
 
@@ -243,6 +248,13 @@ public struct Habit: Codable, Sendable, Identifiable, Equatable, Hashable {
     /// Day keys it was done on.
     public var done: Set<String> = []
     public var archived = false
+    /// Build a habit (check it off) or break one (log a slip; every clean day counts). No damage, no HP.
+    public enum Kind: String, Codable, Sendable { case build, avoid }
+    public var kind: Kind = .build
+    /// Days an avoid-habit slipped.
+    public var slips: Set<String> = []
+    /// The life area it grows.
+    public var area: String?
 
     public init(title: String, identity: String? = nil, cue: String? = nil, twoMinute: String? = nil,
                 weekdays: Set<Int> = [], remindAt: Int? = nil, created: Date = .now) {
@@ -262,6 +274,9 @@ public struct Habit: Codable, Sendable, Identifiable, Equatable, Hashable {
         created = try c.decodeIfPresent(Date.self, forKey: .created) ?? .distantPast
         done = try c.decodeIfPresent(Set<String>.self, forKey: .done) ?? []
         archived = try c.decodeIfPresent(Bool.self, forKey: .archived) ?? false
+        kind = (try? c.decodeIfPresent(Kind.self, forKey: .kind)) ?? .build
+        slips = try c.decodeIfPresent(Set<String>.self, forKey: .slips) ?? []
+        area = try c.decodeIfPresent(String.self, forKey: .area)
     }
 
     /// The planned day before this one (within a week), as a key.
@@ -293,6 +308,10 @@ public struct Habit: Codable, Sendable, Identifiable, Equatable, Hashable {
     /// "Never miss twice": one missed planned day bends the streak, two in a row break it. Today only counts
     /// once it's done — the day isn't over. Looks back at most a year.
     public func streak(_ now: Date = .now, calendar: Calendar = .current) -> Streak {
+        if kind == .avoid {
+            let clean = cleanDays(now, calendar: calendar)
+            return clean > 0 ? .going(clean) : .none
+        }
         let createdKey = Planner.key(created, calendar: calendar)
         var count = 0, missesInARow = 0
         var lastPlannedMissed: Bool? = nil // the most recent planned day before today

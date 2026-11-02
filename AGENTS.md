@@ -15,7 +15,9 @@ README screenshots are rendered with `--demo` so no personal projects or files a
 - read-only reports: `./headroom-cli status|reclaim|projects|apps|map|files|growth|activity|library|battery` (`--json`;
   `library --ext` lists extensions per kind)
 - planner: `./headroom-cli today | add "…" [--big] [--tomorrow|--day YYYY-MM-DD|--inbox] [--project p] [--from claude] |
-  done <n|words> | later <n|words> | habits | habit add "…" [--identity --cue --two-minute --at HH:MM --days mon,wed] | habit done`
+  done <n|words> | later <n|words> | habits | habit add "…" [--identity --cue --two-minute --at HH:MM --days mon,wed --area a --avoid] |
+  habit done | habit slip | focus [start "…"|<n>] | focus stop | rewards | reward add "…" <coins> | buy <n|words> |
+  challenge add "<habit>" <times> [--days 30] | stats` (add also takes `--effort 1-3 --area a`)
   — the only CLI commands that write, and only Headroom's own `planner.json`. Use them to plan the user's day from a session.
 - distribution signing: `HEADROOM_SIGN_ID="Developer ID Application: …" HEADROOM_NOTARY_PROFILE=<profile> ./scripts/bundle.sh`
   (version from `VERSION`; Developer ID builds keep Full Disk Access across rebuilds, ad-hoc ones don't)
@@ -119,6 +121,12 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   (one missed planned day bends, two in a row break; today isn't a miss until it's over; days before the habit existed never
   are). ⌃⌥N (Carbon, only while the add-on is on — never ⌥N, which types ñ) opens quick add; habit nudges notify once a day within 2 h of their time.
   Gamification stays white-hat: no penalties, no streak loss for a single miss, nothing that costs money or time to "protect".
+  The game layer (`Progression.swift`, Progress screen `JourneyView`, after the LiFE RPG Notion template minus its HP/death/
+  overdraft mechanics): `Planner.ledger` derives every XP and coin from what's done — task 10×effort (+20 big), habit check-in
+  10 (+2/planned day in a row, max +10), avoid-habit 5 per finished clean day, focus 20/h (≥ 5 min, ≤ 3 h a session, only
+  once stopped), won challenge min(300, 10×target); coins = XP earned − purchases, never stored, and buying needs the coins
+  (no debt). Areas level on their own (step 50). A slip only restarts an avoid-habit's clean run; an ended challenge costs
+  nothing. Quick capture: "#area" and "!!"/"!!!" (effort) in any add field.
 - Battery add-on (`Battery.swift` + `BatteryView`, Settings → Add-ons, on by default, hidden without a battery) is read-only:
   `AppleSmartBattery` properties from IOKit, never SMC writes, a helper or `pmset` — Headroom never changes charging; tips point
   to System Settings › Battery. Health = `AppleRawMaxCapacity / DesignCapacity` (`MaxCapacity` is a % on Apple silicon). Readings

@@ -32,9 +32,9 @@ extension AppModel {
     /// Adds a task; returns why it couldn't be big, if it asked to be (the caller shows it where you're looking).
     @discardableResult
     func addTask(_ title: String, big: Bool, day: String? = Planner.key(.now), source: PlannerTask.Source = .app) -> String? {
-        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else { return nil }
-        let task = plan { $0.add(title, day: day, big: big, source: source) }
+        let capture = Planner.parseCapture(title.trimmingCharacters(in: .whitespacesAndNewlines))
+        guard !capture.title.isEmpty else { return nil }
+        let task = plan { $0.add(capture.title, day: day, big: big, effort: capture.effort, area: capture.area, source: source) }
         guard big && !task.big else { return nil }
         return day == nil ? "Added to the inbox — plan it for a day to make it big" : "Three big ones already — added as an ordinary task"
     }
@@ -44,7 +44,24 @@ extension AppModel {
     }
 
     func toggleHabit(_ habit: Habit) {
+        if habit.kind == .avoid { plan { $0.toggleSlip(habit.id) }; return }
         reward { $0.toggleHabit(habit.id) }
+    }
+
+    func startFocus(_ title: String, task: PlannerTask? = nil) {
+        reward { _ = $0.startFocus(title, taskID: task?.id) } // ending a running session can pay out
+    }
+
+    func stopFocus() {
+        reward { _ = $0.stopFocus() }
+    }
+
+    func buy(_ r: Reward) {
+        switch plan({ $0.buy(r.id) }) {
+        case .bought: show("Enjoy it: \(r.title)")
+        case .short(let n): show("\(n) coins short — keep going")
+        case .missing: break
+        }
     }
 
     /// Runs a change and flashes the XP it earned (nothing for undoing).
@@ -113,8 +130,9 @@ struct TodayView: View {
     var header: some View {
         let level = Planner.level(for: p.xp())
         let today = p.today()
-        let doneCount = today.filter(\.isDone).count + p.habitsDue().filter { $0.isDone() }.count
-        let total = today.count + p.habitsDue().count
+        let build = p.habitsDue().filter { $0.kind == .build }
+        let doneCount = today.filter(\.isDone).count + build.filter { $0.isDone() }.count
+        let total = today.count + build.count
         return Card {
             HStack(alignment: .center, spacing: 22) {
                 ZStack {
@@ -128,11 +146,15 @@ struct TodayView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
                         Text("Level \(level.number)").font(.system(size: 22, weight: .bold, design: .rounded))
+                        Text(Planner.rank(for: level.number).title).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.accent)
                         Text("\(level.into) / \(level.needed) XP").font(Theme.number(12.5, weight: .medium)).foregroundStyle(Theme.textSecondary)
+                        Spacer(minLength: 8)
+                        Label(p.coins().formatted(), systemImage: "circle.hexagongrid.fill").font(Theme.number(13, weight: .semibold))
+                            .foregroundStyle(Theme.review).help("Coins: earned with XP, spent on rewards you choose (Progress).")
                     }
                     SegmentedBar(segments: [.init(id: "xp", value: Double(level.into), color: Theme.safe)], total: Double(level.needed), height: 8)
                         .frame(maxWidth: 360)
-                    Text(headline).font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary)
+                    FocusBar()
                     let votes = p.votes()
                     if !votes.isEmpty {
                         HStack(spacing: 6) {
@@ -146,13 +168,6 @@ struct TodayView: View {
                 Spacer(minLength: 0)
             }
         }
-    }
-
-    var headline: String {
-        let open = p.bigToday().filter { !$0.isDone }
-        if p.bigToday().isEmpty { return "What are the three things that would make today a good day?" }
-        if open.isEmpty { return "All three big ones done. Anything else today is a bonus." }
-        return "Next: \(open[0].title)"
     }
 
     // MARK: Tasks
@@ -253,6 +268,13 @@ struct TaskRow: View {
                 if let detail { Text(detail).font(.system(size: 11)).foregroundStyle(Theme.textTertiary) }
             }
             Spacer(minLength: 4)
+            if model.planner.runningSession?.taskID == task.id {
+                Image(systemName: "timer").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.safe).help("Focusing on this")
+            }
+            if !task.isDone && !compact {
+                Text("+\(task.xp)").font(Theme.number(10.5, weight: .semibold)).foregroundStyle(Theme.textTertiary)
+                    .help("XP for finishing it (effort \(task.effort)\(task.big ? ", one of the Big 3" : ""))")
+            }
             if task.big { Image(systemName: "star.fill").font(.system(size: 10)).foregroundStyle(Theme.review) }
         }
         .padding(.vertical, compact ? 2 : 4)
@@ -264,6 +286,7 @@ struct TaskRow: View {
         var parts: [String] = []
         if let day = task.day, day > Planner.key(.now), let d = Planner.date(day) { parts.append(d.formatted(.dateTime.weekday(.wide).day().month())) }
         if task.day == nil { parts.append("Inbox") }
+        if let area = task.area { parts.append(area) }
         if let project = task.project { parts.append(project) }
         if task.source == .claude || task.source == .cli { parts.append(task.source == .claude ? "from Claude" : "from the terminal") }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
@@ -284,6 +307,20 @@ struct TaskRow: View {
         }
         Button("Move to Inbox") { model.plan { $0.schedule(task.id, day: nil) } }
         Divider()
+        if !task.isDone && model.planner.runningSession?.taskID != task.id {
+            Button("Focus on This") { model.startFocus(task.title, task: task) }
+        }
+        Picker("Effort", selection: Binding(get: { task.effort }, set: { e in model.plan { $0.update(task.id) { $0.effort = e } } })) {
+            Text("Easy  (+10)").tag(1); Text("Medium  (+20)").tag(2); Text("Hard  (+30)").tag(3)
+        }
+        let areas = model.planner.areas().map(\.name)
+        if !areas.isEmpty {
+            Picker("Area", selection: Binding(get: { task.area ?? "" }, set: { a in model.plan { $0.update(task.id) { $0.area = a.isEmpty ? nil : a } } })) {
+                Text("None").tag("")
+                ForEach(areas, id: \.self) { Text($0).tag($0) }
+            }
+        }
+        Divider()
         Button("Delete Task", role: .destructive) { model.plan { $0.remove(task.id) } }
     }
 }
@@ -294,8 +331,40 @@ struct HabitRow: View {
     var edit: () -> Void
 
     var body: some View {
+        if habit.kind == .avoid { avoidRow } else { buildRow }
+    }
+
+    /// A habit to break: clean days grow on their own; "Slipped" logs today without taking anything away.
+    var avoidRow: some View {
+        let slipped = habit.slipped()
+        let clean = habit.cleanDays()
+        return HStack(alignment: .top, spacing: 10) {
+            Image(systemName: slipped ? "arrow.counterclockwise.circle" : "shield.lefthalf.filled")
+                .font(.system(size: 17)).foregroundStyle(slipped ? Theme.review : Theme.safe).frame(width: 18).padding(.top, 1)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(habit.title).font(.system(size: 13.5, weight: .medium))
+                HStack(spacing: 4) {
+                    ForEach(habit.recent(7), id: \.key) { d in
+                        Circle().fill(habit.slips.contains(d.key) ? Theme.review.opacity(0.7) : d.scheduled && d.key < Planner.key(.now) ? Theme.safe : Theme.fill(0.08))
+                            .frame(width: 7, height: 7)
+                    }
+                    Text(slipped ? "fresh start tomorrow" : clean == 0 ? "day one" : "\(clean) clean day\(clean == 1 ? "" : "s")")
+                        .font(.system(size: 11)).foregroundStyle(slipped ? Theme.review : Theme.textTertiary).padding(.leading, 4)
+                }
+            }
+            Spacer(minLength: 0)
+            Button(slipped ? "Undo" : "Slipped") { model.toggleHabit(habit) }
+                .buttonStyle(GhostButtonStyle()).controlSize(.small)
+                .help(slipped ? "Unlog today's slip" : "Log a slip — the clean run restarts; nothing you earned is taken away")
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2, perform: edit)
+        .contextMenu { Button("Edit Habit…", action: edit) }
+    }
+
+    var buildRow: some View {
         let done = habit.isDone()
-        HStack(alignment: .top, spacing: 10) {
+        return HStack(alignment: .top, spacing: 10) {
             Button { model.toggleHabit(habit) } label: { CheckCircle(on: done) }.buttonStyle(.plain).padding(.top, 1)
             VStack(alignment: .leading, spacing: 3) {
                 Text(habit.title).font(.system(size: 13.5, weight: .medium))
@@ -390,7 +459,13 @@ struct HabitEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(draft.isNew ? "New habit" : "Edit habit").font(.system(size: 17, weight: .bold))
-            field("Habit", "Write 300 words", \.title)
+            Picker("", selection: $draft.habit.kind) {
+                Text("Build a habit").tag(Habit.Kind.build)
+                Text("Break a habit").tag(Habit.Kind.avoid)
+            }
+            .pickerStyle(.segmented).labelsHidden()
+            field("Habit", draft.habit.kind == .avoid ? "Doomscrolling in bed" : "Write 300 words", \.title)
+            field("Area", "Health, Work, Writing…", \.area, help: "Its XP also levels this area of your life (see Progress).")
             field("Who it makes you", "a writer", \.identity, help: "Every time you do it is a vote for being this person.")
             field("When (the cue)", "after my morning coffee", \.cue, help: "Stack it on something you already do.")
             field("Two-minute version", "write one sentence", \.twoMinute, help: "What counts on a bad day — showing up beats skipping.")
@@ -463,15 +538,30 @@ enum PlannerDemo {
     static func planner(now: Date = .now) -> Planner {
         var p = Planner()
         let today = Planner.key(now)
-        let ship = p.add("Ship the planner add-on", day: today, big: true, project: "Headroom", now: now)
-        p.add("Record the demo reel", day: today, big: true, project: "Headroom", now: now)
-        p.add("Write the launch post", day: today, big: true, now: now)
-        let mail = p.add("Reply to Arthur", day: today, now: now)
-        p.add("Review Claude's PR on drives", day: today, project: "Headroom", source: .claude, now: now)
-        p.add("Book dentist", day: Planner.key(daysFrom: now, 1), now: now)
+        let ship = p.add("Ship the planner add-on", day: today, big: true, project: "Headroom", effort: 3, area: "Work", now: now)
+        let reel = p.add("Record the demo reel", day: today, big: true, project: "Headroom", effort: 2, area: "Work", now: now)
+        p.add("Write the launch post", day: today, big: true, effort: 2, area: "Writing", now: now)
+        let mail = p.add("Reply to Arthur", day: today, area: "Work", now: now)
+        p.add("Review Claude's PR on drives", day: today, project: "Headroom", effort: 2, area: "Work", source: .claude, now: now)
+        p.add("Book dentist", day: Planner.key(daysFrom: now, 1), area: "Health", now: now)
         p.add("Try the Calendar idea", day: nil, now: now)
         p.complete(ship.id, at: now)
         p.complete(mail.id, at: now)
+        // A few weeks of history, so the level, areas and log look lived-in.
+        for back in 1...24 {
+            let day = now.addingTimeInterval(-Double(back) * 86_400)
+            let t = p.add(["Plan the week", "Fix the drives bug", "Gym", "Read 30 pages", "Draft the newsletter"][back % 5],
+                          day: Planner.key(day), effort: back % 3 + 1, area: ["Work", "Work", "Health", "Learning", "Writing"][back % 5], now: day)
+            p.complete(t.id, at: day)
+            var s = FocusSession(title: "Deep work", start: day.addingTimeInterval(-3 * 3600), area: back % 2 == 0 ? "Work" : "Writing")
+            s.end = s.start.addingTimeInterval(Double(60 + back % 4 * 20) * 60)
+            p.sessions.append(s)
+        }
+        var focus = FocusSession(title: "Record the demo reel", start: now.addingTimeInterval(-26 * 60 - 14), taskID: reel.id, area: "Work")
+        p.sessions.append(focus)
+        p.rewards = [Reward(title: "Coffee at the good place", cost: 150, created: now), Reward(title: "Dinner out", cost: 800, created: now),
+                     Reward(title: "New mechanical keyboard", cost: 4000, created: now)]
+        p.purchases = [Purchase(rewardID: p.rewards[0].id, title: "Coffee at the good place", cost: 150, date: now.addingTimeInterval(-3 * 86_400))]
         var write = Habit(title: "Write 300 words", identity: "a writer", cue: "after morning coffee", twoMinute: "write one sentence",
                           remindAt: 9 * 60, created: now.addingTimeInterval(-40 * 86_400))
         write.done = Set((0..<12).filter { $0 != 4 }.map { Planner.key(daysFrom: now, -$0) })
@@ -480,7 +570,14 @@ enum PlannerDemo {
         walk.done = Set([2, 3, 5, 6, 7].map { Planner.key(daysFrom: now, -$0) })
         var ship2 = Habit(title: "Commit something", identity: "someone who ships", twoMinute: "fix one typo", created: now.addingTimeInterval(-40 * 86_400))
         ship2.done = Set((1..<20).map { Planner.key(daysFrom: now, -$0) })
-        p.habits = [write, walk, ship2]
+        write.area = "Writing"; walk.area = "Health"; ship2.area = "Work"
+        var scroll = Habit(title: "No phone in bed", identity: "someone who sleeps well", created: now.addingTimeInterval(-20 * 86_400))
+        scroll.kind = .avoid
+        scroll.area = "Health"
+        scroll.slips = [Planner.key(daysFrom: now, -9)]
+        p.habits = [write, walk, ship2, scroll]
+        p.challenges = [Challenge(title: "Write 20× in 30 days", habitID: write.id, target: 20, start: Planner.key(daysFrom: now, -12), end: Planner.key(daysFrom: now, 17)),
+                        Challenge(title: "Commit something 14× in 14 days", habitID: ship2.id, target: 14, start: Planner.key(daysFrom: now, -16), end: Planner.key(daysFrom: now, -3))]
         return p
     }
 }
@@ -500,8 +597,9 @@ struct NotchTodayView: View {
         let habits = p.habitsDue()
         let shownHabits = Array(habits.prefix(3))
         let level = Planner.level(for: p.xp())
-        let done = p.today().filter(\.isDone).count + habits.filter { $0.isDone() }.count
-        let total = p.today().count + habits.count
+        let build = habits.filter { $0.kind == .build }
+        let done = p.today().filter(\.isDone).count + build.filter { $0.isDone() }.count
+        let total = p.today().count + build.count
         VStack(alignment: .leading, spacing: 10) {
             Spacer().frame(height: notchHeight - 4)
             HStack(spacing: 10) {
@@ -509,9 +607,25 @@ struct NotchTodayView: View {
                     .frame(width: 26, height: 26)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(total == 0 ? "Nothing planned yet" : "\(done) of \(total) done today").font(.system(size: 13, weight: .semibold))
-                    Text("Level \(level.number) · \(level.into)/\(level.needed) XP").font(Theme.number(10.5, weight: .medium)).foregroundStyle(Theme.textTertiary)
+                    if let s = p.runningSession {
+                        HStack(spacing: 4) {
+                            Image(systemName: "timer").font(.system(size: 9.5, weight: .bold))
+                            FocusClock(start: s.start, size: 10.5)
+                            Text("· \(s.title)").font(.system(size: 10.5, weight: .medium)).lineLimit(1)
+                        }
+                        .foregroundStyle(Theme.safe)
+                    } else {
+                        Text("\(Planner.rank(for: level.number).title) · Level \(level.number) · \(level.into)/\(level.needed) XP · \(p.coins()) coins")
+                            .font(Theme.number(10.5, weight: .medium)).foregroundStyle(Theme.textTertiary).lineLimit(1)
+                    }
                 }
                 Spacer()
+                if p.runningSession != nil {
+                    Button("Stop") { model.stopFocus() }.buttonStyle(GhostButtonStyle())
+                } else if let next = tasks.first(where: { !$0.isDone }) {
+                    Button { model.startFocus(next.title, task: next) } label: { Image(systemName: "timer") }
+                        .buttonStyle(GhostButtonStyle()).help("Focus on “\(next.title)”")
+                }
                 Button(action: openToday) { Label("Today", systemImage: "arrow.up.left.and.arrow.down.right") }
                     .buttonStyle(GhostButtonStyle())
             }
@@ -545,10 +659,12 @@ struct NotchTodayView: View {
             if !habits.isEmpty {
                 HStack(spacing: 6) {
                     ForEach(shownHabits) { h in
-                        let on = h.isDone()
+                        let avoid = h.kind == .avoid
+                        let on = avoid ? !h.slipped() : h.isDone()
                         Button { model.toggleHabit(h) } label: {
                             HStack(spacing: 5) {
-                                Image(systemName: on ? "checkmark.circle.fill" : "circle").font(.system(size: 11, weight: .semibold))
+                                Image(systemName: avoid ? (on ? "shield.lefthalf.filled" : "arrow.counterclockwise") : on ? "checkmark.circle.fill" : "circle")
+                                    .font(.system(size: 11, weight: .semibold))
                                 Text(h.title).font(.system(size: 11, weight: .medium)).lineLimit(1)
                             }
                             .padding(.horizontal, 8).padding(.vertical, 5)

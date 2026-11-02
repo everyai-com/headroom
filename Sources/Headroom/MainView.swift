@@ -2,7 +2,7 @@ import SwiftUI
 import HeadroomCore
 
 enum Screen: String, CaseIterable, Identifiable {
-    case home = "Home", today = "Today", recents = "Recents",
+    case home = "Home", today = "Today", progress = "Progress", recents = "Recents",
          images = "Images", videos = "Videos", music = "Music", documents = "Documents", archives = "Archives", apps = "Apps",
          overview = "Overview",
          files = "Large files", screenshots = "Screenshots", duplicates = "Duplicates", cleanUp = "Clean up", downloads = "Downloaded from",
@@ -16,6 +16,7 @@ enum Screen: String, CaseIterable, Identifiable {
         switch self {
         case .home: "house"
         case .today: "checkmark.circle"
+        case .progress: "trophy"
         case .recents: "clock"
         case .images: "photo"
         case .videos: "film"
@@ -253,6 +254,7 @@ struct MainView: View {
         switch screen {
         case .home: HomeView(go: { screen = $0 })
         case .today: TodayView()
+        case .progress: JourneyView()
         case .recents, .images, .videos, .music, .documents, .archives, .screenshots: KindScreen(screen: screen).id(screen)
         case .search: SearchScreen()
         case .saved: SavedSearchScreen().id(library.savedID)
@@ -526,7 +528,10 @@ struct MainView: View {
             Scrolling {
                 VStack(alignment: .leading, spacing: 1) {
                     navItem(.home)
-                    if model.plannerAddOn { navItem(.today, badge: todayBadge) }
+                    if model.plannerAddOn {
+                        navItem(.today, badge: todayBadge)
+                        navItem(.progress)
+                    }
                     navItem(.recents)
                     group("Workspaces")
                     ForEach(Array(library.workspaces.enumerated()), id: \.element.id) { i, w in workspaceItem(w, index: i) }

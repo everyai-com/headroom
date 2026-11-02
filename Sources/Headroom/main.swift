@@ -99,7 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let minute = Calendar.current.component(.hour, from: now) * 60 + Calendar.current.component(.minute, from: now)
         let today = Planner.key(now)
         var nudged = UserDefaults.standard.dictionary(forKey: "habitNudged") as? [String: String] ?? [:]
-        for h in model.planner.habitsDue(now) where !h.isDone(now) {
+        for h in model.planner.habitsDue(now) where h.kind == .build && !h.isDone(now) {
             guard let at = h.remindAt, minute >= at, minute < at + 120, nudged[h.id.uuidString] != today else { continue }
             // A habit made after today's time starts tomorrow — no nudge the moment you save it.
             if h.created > Calendar.current.startOfDay(for: now).addingTimeInterval(TimeInterval(at * 60)) { continue }
