@@ -268,6 +268,10 @@ struct FolderScreen: View {
         .onChange(of: library.index.items.count) { _, _ in Task { await load(path, changed: true) } }
         // Undo from the toast (a tidy put back) changes the folder too.
         .onChange(of: model.activity.entries.map(\.restored)) { _, _ in Task { await load(path, changed: true) } }
+        // A new file from New File.
+        .onReceive(NotificationCenter.default.publisher(for: .headroomFolderChanged)) { note in
+            if note.object as? String == path { Task { await load(path) } }
+        }
     }
 
     /// List the folder; when something in it changed, its subfolders' sizes and git status are read again.
@@ -308,6 +312,21 @@ struct FolderScreen: View {
                 Button { Task { await library.planTidy(path) } } label: { Label("Tidy…", systemImage: "wand.and.stars") }
                     .buttonStyle(GhostButtonStyle())
                     .help("Put the loose files here into folders by kind — you see the plan first, and Undo puts it back  ⌥⌘T")
+            }
+            if Notes.canCreate(in: path, home: home) {
+                if snapshot {
+                    Label("New File", systemImage: "doc.badge.plus").font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.textSecondary)
+                } else {
+                    Menu {
+                        ForEach(Notes.Kind.allCases) { kind in
+                            Button("\(kind.title) (.\(kind.rawValue))") { library.createNote(kind, in: path) }
+                        }
+                    } label: {
+                        Label("New File", systemImage: "doc.badge.plus").font(.system(size: 12, weight: .medium))
+                    }
+                    .menuStyle(.borderlessButton).fixedSize()
+                    .help("Make a new text file here and write in it in Headroom")
+                }
             }
             Button { library.reveal([LibraryItem(path: path, kind: .other, bytes: 0, created: .now, modified: .now, isFolder: true)]) } label: {
                 Label("Show in Finder", systemImage: "folder")

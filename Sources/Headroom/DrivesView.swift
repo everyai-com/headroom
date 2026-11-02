@@ -107,6 +107,42 @@ final class DrivesModel: ObservableObject {
         loading = false
     }
 
+    /// New File, Add Files and the notepad work only on a drive macOS opened normally (read-write) —
+    /// never on one opened read-only to rescue files.
+    var canWrite: Bool { drive?.mounted == true && drive?.readOnly == false && folder != nil }
+
+    func newFile(_ kind: Notes.Kind) {
+        guard canWrite, let folder else { return }
+        do {
+            let url = try Notes.create(kind, in: folder)
+            Task { await open(folder) }
+            NoteWindows.shared.open(url)
+        } catch {
+            message = "Couldn't make a new file: \(error.localizedDescription)"
+        }
+    }
+
+    /// Copy files from the Mac onto the drive, into the folder you're looking at. Nothing is replaced.
+    func add(_ files: [URL]) {
+        guard canWrite, let folder, !files.isEmpty else { return }
+        message = "Copying \(files.count == 1 ? files[0].lastPathComponent : "\(files.count) items") to the drive…"
+        Task {
+            let result = await Task.detached { Notes.add(files, into: folder) }.value
+            message = result.skipped.isEmpty ? "Copied \(result.copied) to \(folder.lastPathComponent)."
+                : "Copied \(result.copied). Skipped \(result.skipped.count) already there or unreadable: \(result.skipped.prefix(3).joined(separator: ", "))"
+            await open(folder)
+        }
+    }
+
+    func pickFilesToAdd() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = true
+        panel.prompt = "Copy to Drive"
+        panel.message = "These are copied onto the drive. The originals stay on your Mac."
+        if panel.runModal() == .OK { add(panel.urls) }
+    }
+
     nonisolated static func list(_ url: URL) -> [Entry] {
         let keys: [URLResourceKey] = [.isDirectoryKey, .fileSizeKey, .contentModificationDateKey]
         let items = (try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: keys)) ?? []
@@ -191,6 +227,7 @@ struct DrivesView: View {
     /// Snapshots pass a model already filled in (ImageRenderer never runs `.task`).
     @MainActor init(model: DrivesModel? = nil) { _model = StateObject(wrappedValue: model ?? DrivesModel()) }
     @Environment(\.snapshotMode) private var snapshot
+    @State private var dropping = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -369,6 +406,24 @@ struct DrivesView: View {
                 }
                 .padding(.horizontal, 10).padding(.vertical, 6)
                 .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.fill(0.06)))
+                if model.canWrite, model.results == nil {
+                    if snapshot {
+                        Label("New File", systemImage: "doc.badge.plus").font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.textSecondary)
+                    } else {
+                        Menu {
+                            ForEach(Notes.Kind.allCases) { kind in
+                                Button("\(kind.title) (.\(kind.rawValue))") { model.newFile(kind) }
+                            }
+                        } label: {
+                            Label("New File", systemImage: "doc.badge.plus").font(.system(size: 12, weight: .medium))
+                        }
+                        .menuStyle(.borderlessButton).fixedSize()
+                        .help("Make a new text file on the drive and write in it in Headroom")
+                    }
+                    Button { model.pickFilesToAdd() } label: { Label("Add Files…", systemImage: "plus") }
+                        .buttonStyle(GhostButtonStyle())
+                        .help("Copy files from your Mac onto the drive, here. Or drop them on the list")
+                }
                 if let folder = model.folder, model.results == nil {
                     Button("Copy this folder to Mac") { model.copy(folder) }.buttonStyle(PrimaryButtonStyle())
                 }
@@ -379,7 +434,9 @@ struct DrivesView: View {
                     HStack(spacing: 10) { ProgressView().controlSize(.small); Text("Reading the drive…").foregroundStyle(Theme.textSecondary) }
                         .padding(20)
                 } else if list.isEmpty {
-                    Text(model.results == nil ? "This folder is empty." : "Nothing matches.").foregroundStyle(Theme.textSecondary).padding(20)
+                    Text(model.results != nil ? "Nothing matches." : model.canWrite ? "This folder is empty. Drop files here to copy them onto the drive, or make a New File."
+                         : "This folder is empty.").foregroundStyle(Theme.textSecondary).padding(20)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     Scrolling {
                         VStack(spacing: 0) {
@@ -389,6 +446,17 @@ struct DrivesView: View {
                             }
                         }
                     }
+                }
+            }
+            .modifier(DriveDrop(model: model, targeted: $dropping))
+            .overlay {
+                if dropping {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(Theme.accent, style: StrokeStyle(lineWidth: 2, dash: [7, 5]))
+                        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.accent.opacity(0.06)))
+                        .overlay(Label("Copy onto \(model.folder?.lastPathComponent ?? "the drive")", systemImage: "plus.circle.fill")
+                            .font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.accent))
+                        .allowsHitTesting(false)
                 }
             }
             Text("Copies go to ~/Drive Rescue. Re-copying skips files already copied whole, so an interrupted copy just picks up where it stopped.")
@@ -444,6 +512,8 @@ struct DrivesView: View {
             if !e.isFolder { Text(e.bytes.gb).font(Theme.number(13, weight: .medium)).foregroundStyle(Theme.textSecondary) }
             if e.isFolder {
                 Button("Open") { Task { await model.open(e.url) } }.buttonStyle(GhostButtonStyle())
+            } else if model.canWrite, Notes.canEdit(e.url) {
+                Button("Edit") { NoteWindows.shared.open(e.url) }.buttonStyle(GhostButtonStyle())
             } else {
                 Button("Preview") { NSWorkspace.shared.open(e.url) }.buttonStyle(GhostButtonStyle())
             }
@@ -451,7 +521,10 @@ struct DrivesView: View {
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
         .contentShape(Rectangle())
-        .onTapGesture(count: 2) { if e.isFolder { Task { await model.open(e.url) } } }
+        .onTapGesture(count: 2) {
+            if e.isFolder { Task { await model.open(e.url) } }
+            else if model.canWrite, Notes.canEdit(e.url) { NoteWindows.shared.open(e.url) }
+        }
     }
 
     func symbol(_ url: URL) -> String {
@@ -515,4 +588,22 @@ struct DrivesView: View {
 
 private extension String {
     func ifEmpty(_ fallback: String) -> String { isEmpty ? fallback : self }
+}
+
+/// Files dropped on a drive's folder list are copied onto it (renders skip drop targets).
+struct DriveDrop: ViewModifier {
+    @ObservedObject var model: DrivesModel
+    var targeted: Binding<Bool>
+    @Environment(\.snapshotMode) private var snapshot
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if snapshot || !model.canWrite || model.results != nil {
+            content
+        } else {
+            content.dropDestination(for: URL.self) { urls, _ in
+                model.add(urls.filter(\.isFileURL))
+                return true
+            } isTargeted: { targeted.wrappedValue = $0 }
+        }
+    }
 }

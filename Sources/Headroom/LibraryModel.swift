@@ -522,8 +522,21 @@ final class LibraryModel: ObservableObject {
             browse(item.path)
         } else if item.kind == .audio {
             player.play(item, queue: visible.filter { $0.kind == .audio })
+        } else if Notes.canEdit(item.url) {
+            NoteWindows.shared.open(item.url)
         } else {
             NSWorkspace.shared.open(item.url)
+        }
+    }
+
+    /// A new empty text file in this folder, opened in Headroom's notepad. Never replaces a file.
+    func createNote(_ kind: Notes.Kind, in folder: String) {
+        do {
+            let url = try Notes.create(kind, in: URL(fileURLWithPath: folder), home: home)
+            NotificationCenter.default.post(name: .headroomFolderChanged, object: folder)
+            NoteWindows.shared.open(url)
+        } catch {
+            app.toast = AppModel.Toast(message: "Couldn't make a new file: \(error.localizedDescription)", failed: true)
         }
     }
 
@@ -779,6 +792,7 @@ extension DuplicateGroup {
 extension Notification.Name {
     /// Show a screen in the window (from Quick Search, the menu bar, Shortcuts).
     static let headroomShowScreen = Notification.Name("headroomShowScreen")
+    static let headroomFolderChanged = Notification.Name("headroomFolderChanged")
     /// Open (or bring forward) the main window.
     static let headroomOpenWindow = Notification.Name("headroomOpenWindow")
 }

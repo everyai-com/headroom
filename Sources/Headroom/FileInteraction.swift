@@ -138,7 +138,7 @@ enum FileMenu {
         menu.autoenablesItems = false
         let openTitle = item.isFolder ? "Open" : item.kind == .audio ? "Play" : many ? "Open \(targets.count) Items" : "Open"
         menu.addItem(ActionMenuItem(openTitle, symbol: item.kind == .audio ? "play.fill" : "arrow.up.forward.app") {
-            if item.isFolder || item.kind == .audio { library.open(item) } else { targets.forEach { NSWorkspace.shared.open($0.url) } }
+            if item.isFolder || item.kind == .audio || !many { library.open(item) } else { targets.forEach { NSWorkspace.shared.open($0.url) } }
         })
         if !item.isFolder, !many {
             let apps = NSWorkspace.shared.urlsForApplications(toOpen: item.url).prefix(10)

@@ -113,6 +113,11 @@ README screenshots are rendered with `--demo` so no personal projects or files a
 - Mail's container (`~/Library/Containers/com.apple.mail`) is protected; only the contents of its
   `Data/Library/Mail Downloads` (copies of attachments you opened) may go, to the Trash only (the
   Clean up card). Never the mailboxes, never `.delete`. Reading it is `#if !APPSTORE`.
+- Notepad (`Notes` + `NoteEditor`/`NoteWindows`): New File (folder screen, Drives) makes an empty .md/.txt with
+  `.withoutOverwriting` — never in Library, inside a bundle or outside home + /Volumes. Opening a .md/.txt opens it in
+  Headroom (≤ 5 MB, never a dataless iCloud file). Saves rewrite only the open file and refuse when its date on disk
+  changed since it was read (another app's edit) until you pick Keep Mine; dates are read fresh (a URL caches them).
+  `Notes.add` copies dropped/picked files onto a drive, skipping names already there. Nothing here deletes.
 - Text recognition and duplicate detection run on this Mac only (Vision). Network stays update-check only.
 - Planner add-on (`Planner.swift` + `TodayView`/`NotchTodayView`/`QuickAdd`, Settings → Add-ons, on by default): tasks and
   habits in `planner.json`, written by the app AND the CLI — every write is `PlannerStore.mutate` (re-read, change, save),
@@ -215,7 +220,9 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   `.statusBar + 1`, all spaces, full-screen auxiliary. Non-notch screens get a centred pill.
 - Drives (`ExternalDrive`/`DrivesView`) read IOKit (`ioreg`) and the mount table, never `diskutil`:
   while macOS checks a drive before mounting, diskutil and Disk Arbitration hang. The check's progress
-  is the disk's IOKit "Bytes (Read)" sampled over time. Headroom only ever reads a drive: "Check & open"
+  is the disk's IOKit "Bytes (Read)" sampled over time. Headroom never deletes or changes what's on a drive;
+  it writes to one only when you ask (New File, Add Files…/drop, the notepad — `Notes`), only on a drive macOS
+  mounted read-write, never replacing a file: "Check & open"
   is `diskutil mount` (macOS checks, then mounts it normally — run detached, it waits for the check);
   "Open now" mounts read-only (admin prompt via osascript) and `DriveCopier` copies into `~/Drive Rescue`
   without deleting anything (it truncates/replaces only its own copies). Never offer to skip the check
