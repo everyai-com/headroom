@@ -20,6 +20,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var notifiedVersion: String?
     private var ticks = 0
 
+    /// The timeline saves every minute; this keeps the last minute too.
+    func applicationWillTerminate(_ notification: Notification) {
+        ActivityRecorder.shared.save()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // App Store edition: reopen the folders you granted before anything scans.
         FolderAccess.shared.restore()
@@ -79,6 +84,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         if let why = model.updateAwake() { notify("Your Mac can sleep again", "Keep awake ended: \(why).") }
         model.reloadPlannerIfChanged()
         quickAdd?.update()
+        ActivityRecorder.shared.update()
+        if model.plannerAddOn { model.applyQuests(model.questMinutes(ActivityRecorder.shared)) }
         nudgeHabits()
         updateStatusItem()
         checkMemory()

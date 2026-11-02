@@ -17,7 +17,9 @@ README screenshots are rendered with `--demo` so no personal projects or files a
 - planner: `./headroom-cli today | add "…" [--big] [--tomorrow|--day YYYY-MM-DD|--inbox] [--project p] [--from claude] |
   done <n|words> | later <n|words> | habits | habit add "…" [--identity --cue --two-minute --at HH:MM --days mon,wed --area a --avoid] |
   habit done | habit slip | focus [start "…"|<n>] | focus stop | rewards | reward add "…" <coins> | buy <n|words> |
-  challenge add "<habit>" <times> [--days 30] | stats` (add also takes `--effort 1-3 --area a`)
+  challenge add "<habit>" <times> [--days 30] | stats | season [set "<main>" 20 ["<side>" 8] | end]` (add also takes
+  `--effort 1-3 --area a`; `habit add --minutes 240 --track <project>` is a daily quest that fills from the timeline).
+  `./headroom-cli timeline [--day D] [--json]` (read-only) says where a day went — read it before planning someone's day.
   — the only CLI commands that write, and only Headroom's own `planner.json`. Use them to plan the user's day from a session.
 - distribution signing: `HEADROOM_SIGN_ID="Developer ID Application: …" HEADROOM_NOTARY_PROFILE=<profile> ./scripts/bundle.sh`
   (version from `VERSION`; Developer ID builds keep Full Disk Access across rebuilds, ad-hoc ones don't)
@@ -132,6 +134,17 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   once stopped), won challenge min(300, 10×target); coins = XP earned − purchases, never stored, and buying needs the coins
   (no debt). Areas level on their own (step 50). A slip only restarts an avoid-habit's clean run; an ended challenge costs
   nothing. Quick capture: "#area" and "!!"/"!!!" (effort) in any add field.
+- Timeline (`Timeline.swift` + `Quests.swift` in Core, `ActivityRecorder` + `TimelineScreen`/`LifeHome` in the app; Life
+  section of the sidebar): OFF until the user turns it on, never in the App Store edition. Every 10 s while the user is at
+  the keyboard (idle < 3 min; 30 min for video and calls) it notes the front app, the window title only if Accessibility is
+  already trusted, and for browsers the HOST only (never the URL), only if macOS already allows Automation for that browser —
+  checked with `AEDeterminePermissionToAutomateTarget(ask: false)`; prompts come only from the Timeline screen's buttons, on a
+  background queue. Incognito windows, password managers and excluded apps/sites are never recorded. Days live in
+  `timeline/<day>.json` for 30 days (`TimelineStore.prune`), rules in `timeline/rules.json`; "Forget today" deletes the file.
+  Nothing is uploaded. Claude Code time is read (never written) from `~/.claude/projects/*/*.jsonl` (user/assistant
+  timestamps < 5 min apart = one stretch; worktrees count as their repository). Overlaps count once (`TimelineMath.covered`).
+  Timed habits (`minutes` + `track`) are checked off by `Planner.applyQuotas` on the tick — never unchecked. A season is one
+  main + at most 2 side projects with hours/week, compared to the week's tracked minutes.
 - Battery add-on (`Battery.swift` + `BatteryView`, Settings → Add-ons, on by default, hidden without a battery) is read-only:
   `AppleSmartBattery` properties from IOKit, never SMC writes, a helper or `pmset` — Headroom never changes charging; tips point
   to System Settings › Battery. Health = `AppleRawMaxCapacity / DesignCapacity` (`MaxCapacity` is a % on Apple silicon). Readings

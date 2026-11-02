@@ -26,6 +26,8 @@ import HeadroomCore
 //   headroom-cli focus start "<what>"|<n> [--area a] · focus stop · focus   20 XP an hour, up to 3 h a session
 //   headroom-cli rewards · reward add "<reward>" <coins> · buy <n|words>       coins come 1:1 with XP
 //   headroom-cli challenge add "<habit>" <times> [--days 30] · stats           areas, rank, challenges, what earned what
+//   headroom-cli timeline [--day YYYY-MM-DD] · season · season set "<main>" 20 ["<side>" 8] · season end
+//   headroom-cli habit add "<quest>" --minutes 240 --track "<project>"          a daily quest that fills from the timeline
 //
 // Add --json to any of them for machine-readable output (for scripts and coding agents —
 // e.g. check free space before a large install).
@@ -205,7 +207,7 @@ Task {
               "temperature": b.temperature, "batteryWatts": b.batteryWatts, "systemWatts": b.systemWatts as Any,
               "adapterWatts": b.adapterWatts as Any, "readings": log.samples.count])
     default:
-        print("usage: headroom-cli [status|reclaim|projects|apps|map|files|growth [hours]|activity|library|search \"query\"|battery|today|add|done|later|habits|habit|focus|rewards|reward|buy|challenge|stats] [--json]")
+        print("usage: headroom-cli [status|reclaim|projects|apps|map|files|growth [hours]|activity|library|search \"query\"|battery|today|add|done|later|habits|habit|focus|rewards|reward|buy|challenge|stats|timeline|season] [--json]")
     }
 }
 semaphore.wait()

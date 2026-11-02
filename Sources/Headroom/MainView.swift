@@ -2,7 +2,7 @@ import SwiftUI
 import HeadroomCore
 
 enum Screen: String, CaseIterable, Identifiable {
-    case home = "Home", today = "Today", progress = "Progress", recents = "Recents",
+    case home = "Home", today = "Today", timeline = "Timeline", progress = "Progress", recents = "Recents",
          images = "Images", videos = "Videos", music = "Music", documents = "Documents", archives = "Archives", apps = "Apps",
          overview = "Overview",
          files = "Large files", screenshots = "Screenshots", duplicates = "Duplicates", cleanUp = "Clean up", downloads = "Downloaded from",
@@ -17,6 +17,7 @@ enum Screen: String, CaseIterable, Identifiable {
         case .home: "house"
         case .today: "checkmark.circle"
         case .progress: "trophy"
+        case .timeline: "chart.bar.xaxis"
         case .recents: "clock"
         case .images: "photo"
         case .videos: "film"
@@ -255,6 +256,7 @@ struct MainView: View {
         case .home: HomeView(go: { screen = $0 })
         case .today: TodayView()
         case .progress: JourneyView()
+        case .timeline: TimelineScreen()
         case .recents, .images, .videos, .music, .documents, .archives, .screenshots: KindScreen(screen: screen).id(screen)
         case .search: SearchScreen()
         case .saved: SavedSearchScreen().id(library.savedID)
@@ -529,8 +531,11 @@ struct MainView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     navItem(.home)
                     if model.plannerAddOn {
+                        group("Life")
                         navItem(.today, badge: todayBadge)
+                        if Edition.available(.timeline) { navItem(.timeline) }
                         navItem(.progress)
+                        group("Files")
                     }
                     navItem(.recents)
                     group("Workspaces")
@@ -557,7 +562,7 @@ struct MainView: View {
                     navItem(.worktrees, badge: codingBadge(.worktrees))
                     navItem(.buildOutput, badge: codingBadge(.buildOutput))
                     navItem(.devCaches, badge: codingBadge(.devCaches))
-                    group("Disk")
+                    group("Mac")
                     navItem(.overview)
                     navItem(.map)
                     navItem(.reclaim, badge: model.safeReclaimable > 0 ? SidebarBadge(text: ByteFormat.compact(model.safeReclaimable), color: Theme.safe) : nil)

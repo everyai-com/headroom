@@ -6,7 +6,7 @@ import HeadroomCore
 /// never a file of yours; the app picks the change up within seconds.
 enum PlannerCommands {
     static let names: Set<String> = ["today", "add", "done", "later", "habits", "habit", "focus", "rewards", "reward", "buy",
-                                     "stats", "challenge"]
+                                     "stats", "challenge", "timeline", "season"]
 
     static func run(_ args: [String], json: Bool) {
         var rest = Array(args.dropFirst())
@@ -77,6 +77,8 @@ enum PlannerCommands {
             if sub == "add" {
                 let identity = option("--identity"), cue = option("--cue"), two = option("--two-minute"), area = option("--area")
                 let avoid = flag("--avoid")
+                let dailyMinutes = option("--minutes").flatMap(Int.init)
+                let trackProject = option("--track")
                 var at: Int?
                 if let s = option("--at") {
                     guard let m = minutes(s) else { fail("--at wants a time like 21:00") }
@@ -92,6 +94,10 @@ enum PlannerCommands {
                 var habit = Habit(title: title, identity: identity, cue: cue, twoMinute: two, weekdays: weekdays, remindAt: at)
                 habit.area = area
                 if avoid { habit.kind = .avoid }
+                if let dailyMinutes, dailyMinutes > 0, let trackProject {
+                    habit.minutes = dailyMinutes
+                    habit.track = QuotaTrack(project: trackProject)
+                }
                 PlannerStore.mutate { $0.habits.append(habit) }
                 print("New habit\(avoid ? " to break" : ""): \(title)\(identity.map { " — every \(avoid ? "clean day" : "time") is a vote for being \($0)" } ?? "")")
             } else if sub == "slip" {
@@ -235,6 +241,59 @@ enum PlannerCommands {
             if !log.isEmpty {
                 print("\nLately")
                 for e in log { print("  \(e.coins < 0 ? "\(e.coins) coins" : "+\(e.xp) XP")  \(e.title)") }
+            }
+
+        case "timeline":
+            // Read-only: where today (or --day) went, from the app's timeline and Claude Code's logs.
+            var day = Planner.key(now)
+            if let d = option("--day") { day = dayKey(d) }
+            let store = TimelineStore()
+            let spans = store.load(day) + ClaudeCodeActivity.spans(on: day)
+            let classifier = Classifier(settings: store.loadSettings(),
+                                        projects: ClaudeCodeActivity.projectPaths().map { URL(fileURLWithPath: $0).lastPathComponent })
+            let byKind = TimelineMath.totals(spans) { classifier.classify($0).category.title }
+            let byProject = TimelineMath.totals(spans) { classifier.classify($0).project }
+            let byApp = TimelineMath.totals(spans) { $0.host ?? $0.appName }
+            if json {
+                func list(_ t: [TimelineMath.Total]) -> [[String: Any]] { t.map { ["name": $0.name, "minutes": Int($0.seconds / 60)] } }
+                emitJSON(["day": day, "minutes": Int(TimelineMath.covered(spans) / 60), "byKind": list(byKind), "byProject": list(byProject),
+                          "appsAndSites": list(Array(byApp.prefix(20)))])
+                return
+            }
+            if spans.isEmpty { print("Nothing recorded for \(day). Turn on Timeline in Headroom (Home › Where today went)."); return }
+            func line(_ t: TimelineMath.Total) -> String { "  \(t.name)  \(Int(t.seconds / 60) / 60) h \(String(format: "%02d", Int(t.seconds / 60) % 60)) m" }
+            print("\(day) · \(Int(TimelineMath.covered(spans) / 60)) min at the Mac\n")
+            print("By kind of work"); byKind.forEach { print(line($0)) }
+            if !byProject.isEmpty { print("\nBy project"); byProject.forEach { print(line($0)) } }
+            print("\nApps & sites"); byApp.prefix(12).forEach { print(line($0)) }
+
+        case "season":
+            // headroom-cli season · season set "<main>" <h/wk> ["<side>" <h/wk>]… [--weeks 2] · season end
+            if rest.first == "end" {
+                PlannerStore.mutate { $0.season = nil }
+                print("Season ended.")
+            } else if rest.first == "set" {
+                rest = Array(rest.dropFirst())
+                let weeks = option("--weeks").flatMap(Int.init) ?? 2
+                var quests: [Season.Quest] = []
+                var i = 0
+                while i + 1 < rest.count, let h = Int(rest[i + 1]) { quests.append(.init(project: rest[i], hoursPerWeek: h)); i += 2 }
+                guard let main = quests.first, i == rest.count, (1...6).contains(weeks) else {
+                    fail("usage: headroom-cli season set \"Main project\" 20 [\"Side\" 8] [\"Side\" 4] [--weeks 2]")
+                }
+                if quests.count > 1 + Season.maxSideQuests { fail("A season has one main quest and at most \(Season.maxSideQuests) side quests — that's the point.") }
+                let s = Season(start: Planner.key(now), end: Planner.key(daysFrom: now, weeks * 7 - 1), main: main, sides: Array(quests.dropFirst()))
+                PlannerStore.mutate { $0.season = s }
+                print("Season on until \(s.end): \(main.project) (\(main.hoursPerWeek) h/wk)" + s.sides.map { " · \($0.project) (\($0.hoursPerWeek) h/wk)" }.joined())
+            } else {
+                let p = PlannerStore.load()
+                guard let s = p.season else { print("No season. headroom-cli season set \"Main project\" 20 \"Side\" 8"); return }
+                if json {
+                    emitJSON(["start": s.start, "end": s.end, "quests": s.quests.map { ["project": $0.project, "hoursPerWeek": $0.hoursPerWeek, "main": $0 == s.main] }])
+                    return
+                }
+                print("Season \(s.start) → \(s.end)")
+                for q in s.quests { print("  \(q == s.main ? "★" : "·") \(q.project)  \(q.hoursPerWeek) h/wk") }
             }
 
         default:

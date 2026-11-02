@@ -12,6 +12,7 @@ struct HomeView: View {
         Scrolling {
             VStack(alignment: .leading, spacing: 28) {
                 HomeAccessCard()
+                if model.plannerAddOn { LifeHome(go: go) }
                 if !library.hasScanned {
                     LoadingLibrary()
                 } else {

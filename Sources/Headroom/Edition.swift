@@ -13,7 +13,7 @@ enum Edition {
     #endif
 
     /// Screens that need what the sandbox doesn't allow.
-    static let fullOnly: Set<Screen> = appStore ? [.memory, .ai, .drives] : []
+    static let fullOnly: Set<Screen> = appStore ? [.memory, .ai, .drives, .timeline] : []
 
     static func available(_ screen: Screen) -> Bool { !fullOnly.contains(screen) }
 

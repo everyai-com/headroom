@@ -48,6 +48,30 @@ extension AppModel {
         reward { $0.toggleHabit(habit.id) }
     }
 
+    /// Checks off timed habits whose minutes are met (from the timeline and focus sessions), once each.
+    func applyQuests(_ minutes: [UUID: Int]) {
+        guard !minutes.isEmpty, model(planner, meets: minutes) else { return }
+        var met: [Habit] = []
+        reward { met = $0.applyQuotas(minutes) }
+        for h in met { show("Quest complete: \(h.title)") }
+    }
+
+    private func model(_ p: Planner, meets minutes: [UUID: Int]) -> Bool {
+        let today = Planner.key(.now)
+        return p.habits.contains { h in h.isTimed && !h.done.contains(today) && (minutes[h.id] ?? 0) >= (h.minutes ?? .max) }
+    }
+
+    /// Minutes today toward each timed habit.
+    func questMinutes(_ timeline: ActivityRecorder) -> [UUID: Int] {
+        let today = Planner.key(.now)
+        let sessions = planner.sessions.filter { Planner.key($0.start) == today }
+        var out: [UUID: Int] = [:]
+        for h in planner.habits where h.isTimed && !h.archived {
+            out[h.id] = Quests.minutes(h.track!, spans: timeline.allToday, sessions: sessions, tasks: planner.tasks, classifier: timeline.classifier)
+        }
+        return out
+    }
+
     func startFocus(_ title: String, task: PlannerTask? = nil) {
         reward { _ = $0.startFocus(title, taskID: task?.id) } // ending a running session can pay out
     }
@@ -65,7 +89,7 @@ extension AppModel {
     }
 
     /// Runs a change and flashes the XP it earned (nothing for undoing).
-    private func reward(_ change: @escaping (inout Planner) -> Void) {
+    private func reward(_ change: (inout Planner) -> Void) {
         // Both counts come from the same fresh read, so a CLI write in between can't inflate the flash.
         let (before, after) = plan { p -> (Int, Int) in
             let before = p.xp()
@@ -466,6 +490,7 @@ struct HabitEditor: View {
             .pickerStyle(.segmented).labelsHidden()
             field("Habit", draft.habit.kind == .avoid ? "Doomscrolling in bed" : "Write 300 words", \.title)
             field("Area", "Health, Work, Writing…", \.area, help: "Its XP also levels this area of your life (see Progress).")
+            if draft.habit.kind == .build { timeTarget }
             field("Who it makes you", "a writer", \.identity, help: "Every time you do it is a vote for being this person.")
             field("When (the cue)", "after my morning coffee", \.cue, help: "Stack it on something you already do.")
             field("Two-minute version", "write one sentence", \.twoMinute, help: "What counts on a bad day — showing up beats skipping.")
@@ -500,6 +525,7 @@ struct HabitEditor: View {
                 Button(draft.isNew ? "Add Habit" : "Save") {
                     var h = draft.habit
                     h.title = h.title.trimmingCharacters(in: .whitespaces)
+                    if h.track?.isEmpty == true { h.minutes = nil; h.track = nil }
                     let c = Calendar.current.dateComponents([.hour, .minute], from: time)
                     h.remindAt = remind ? (c.hour ?? 9) * 60 + (c.minute ?? 0) : nil
                     save(h)
@@ -511,6 +537,33 @@ struct HabitEditor: View {
         }
         .padding(22)
         .frame(width: 420)
+    }
+
+    /// "Marketing · Magicteams — 4 h a day": checked off by itself when the timeline (and focus sessions) reach it.
+    var timeTarget: some View {
+        let timed = Binding(get: { draft.habit.minutes != nil },
+                            set: { on in
+                                draft.habit.minutes = on ? 60 : nil
+                                draft.habit.track = on ? (draft.habit.track ?? QuotaTrack()) : nil
+                            })
+        return VStack(alignment: .leading, spacing: 6) {
+            Toggle("Daily time target — fills in from what you do", isOn: timed)
+            if let m = draft.habit.minutes {
+                Stepper("\(Minutes.text(Double(m) * 60)) a day", value: Binding(get: { m }, set: { draft.habit.minutes = $0 }), in: 15...720, step: 15)
+                HStack(spacing: 8) {
+                    TextField("Project (e.g. Magicteams)", text: Binding(get: { draft.habit.track?.project ?? "" },
+                                                                          set: { draft.habit.track?.project = $0.nilIfEmpty }))
+                        .textFieldStyle(.roundedBorder)
+                    Picker("", selection: Binding(get: { draft.habit.track?.category }, set: { draft.habit.track?.category = $0 })) {
+                        Text("Any kind of work").tag(ActivityCategory?.none)
+                        ForEach(ActivityCategory.allCases, id: \.self) { Text($0.title).tag(ActivityCategory?.some($0)) }
+                    }
+                    .labelsHidden().frame(width: 170)
+                }
+                Text("Counts time on that project (from window titles, sites you assign, Claude Code and focus sessions) and/or that kind of work. Turn on the Timeline for it to see the Mac.")
+                    .font(.system(size: 11)).foregroundStyle(Theme.textTertiary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 
     func field(_ label: String, _ prompt: String, _ key: WritableKeyPath<Habit, String>, help: String? = nil) -> some View {
@@ -575,7 +628,15 @@ enum PlannerDemo {
         scroll.kind = .avoid
         scroll.area = "Health"
         scroll.slips = [Planner.key(daysFrom: now, -9)]
-        p.habits = [write, walk, ship2, scroll]
+        var marketing = Habit(title: "Marketing · magicteams", identity: "a founder who sells", created: now.addingTimeInterval(-20 * 86_400))
+        marketing.minutes = 240
+        marketing.track = QuotaTrack(project: "magicteams")
+        marketing.area = "Work"
+        marketing.done = Set([1, 2, 4, 5].map { Planner.key(daysFrom: now, -$0) })
+        p.habits = [marketing, write, walk, ship2, scroll]
+        p.season = Season(start: Planner.key(daysFrom: now, -3), end: Planner.key(daysFrom: now, 10),
+                          main: .init(project: "magicteams", hoursPerWeek: 20),
+                          sides: [.init(project: "Headroom", hoursPerWeek: 8), .init(project: "flare-forge", hoursPerWeek: 4)])
         p.challenges = [Challenge(title: "Write 20× in 30 days", habitID: write.id, target: 20, start: Planner.key(daysFrom: now, -12), end: Planner.key(daysFrom: now, 17)),
                         Challenge(title: "Commit something 14× in 14 days", habitID: ship2.id, target: 14, start: Planner.key(daysFrom: now, -16), end: Planner.key(daysFrom: now, -3))]
         return p
