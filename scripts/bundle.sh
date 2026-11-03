@@ -73,6 +73,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSUIElement</key><true/>
   <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
   <key>NSHumanReadableCopyright</key><string>Headroom</string>
+  <key>NSCalendarsFullAccessUsageDescription</key><string>Headroom shows today's events beside your plan, and the coach plans around them. It never changes your calendar.</string>
+  <key>NSAppleEventsUsageDescription</key><string>Headroom's Timeline asks your browser for the site you're on (never the full address), only after you turn it on.</string>
   <key>CFBundleURLTypes</key><array><dict>
     <key>CFBundleURLName</key><string>app.headroom.Headroom</string>
     <key>CFBundleURLSchemes</key><array><string>headroom</string></array>

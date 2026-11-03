@@ -85,7 +85,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         model.reloadPlannerIfChanged()
         quickAdd?.update()
         ActivityRecorder.shared.update()
-        if model.plannerAddOn { model.applyQuests(model.questMinutes(ActivityRecorder.shared)) }
+        if model.plannerAddOn {
+            model.applyQuests(model.questMinutes(ActivityRecorder.shared))
+            LifeCoach.shared.update()
+            if model.notificationsEnabled, let n = LifeCoach.shared.nudge(model: model) { notify(n.title, n.body) }
+        }
         nudgeHabits()
         updateStatusItem()
         checkMemory()

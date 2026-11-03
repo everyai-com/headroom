@@ -390,11 +390,15 @@ public enum ClaudeCodeActivity {
     /// The project a folder belongs to: a worktree (".../repo/.claude/worktrees/frosty-einstein") counts as its repository.
     /// Trimmed: folders like "connector saas " would otherwise never match a project typed by hand.
     public static func projectName(_ cwd: String) -> String {
-        var root = cwd
+        URL(fileURLWithPath: mainCheckout(cwd)).lastPathComponent.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// The repository folder a worktree belongs to (the path itself when it isn't one).
+    public static func mainCheckout(_ cwd: String) -> String {
         for marker in ["/.claude/worktrees/", "/.worktrees/", "/worktrees/"] {
-            if let r = cwd.range(of: marker) { root = String(cwd[..<r.lowerBound]); break }
+            if let r = cwd.range(of: marker) { return String(cwd[..<r.lowerBound]) }
         }
-        return URL(fileURLWithPath: root).lastPathComponent.trimmingCharacters(in: .whitespaces)
+        return cwd
     }
 
     /// `"key":"value"` from a JSON line without parsing it all (lines can be megabytes).

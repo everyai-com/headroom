@@ -147,6 +147,13 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   timestamps < 5 min apart = one stretch; worktrees count as their repository). Overlaps count once (`TimelineMath.covered`).
   Timed habits (`minutes` + `track`) are checked off by `Planner.applyQuotas` on the tick — never unchecked. A season is one
   main + at most 2 side projects with hours/week, compared to the week's tracked minutes.
+- Coach (`Coach.swift` in Core, `LifeCoach` + `CoachCard`/`CoachSheet` on Today; full edition only): the calendar is read
+  through EventKit only after the user presses Connect Calendar (never prompted from the tick), never written. Proof is your
+  own commits (`git log --author=<repo user.email>`, optional locks off) in the repositories behind Claude Code projects —
+  read-only like `Git.status`. The coach runs the user's own `claude -p` ONLY when they press Plan/Review, with `--tools ""
+  --strict-mcp-config --no-session-persistence` (no tools, no MCP, no log that would count as timeline time); its reply is a
+  suggestion — nothing is added until the user ticks it and presses Add (`Planner.accept`: a matching open task is moved,
+  never duplicated; the Big 3 limit holds). Drift nudges come from the pure `Nudges.decide`, only while the timeline is on.
 - Battery add-on (`Battery.swift` + `BatteryView`, Settings → Add-ons, on by default, hidden without a battery) is read-only:
   `AppleSmartBattery` properties from IOKit, never SMC writes, a helper or `pmset` — Headroom never changes charging; tips point
   to System Settings › Battery. Health = `AppleRawMaxCapacity / DesignCapacity` (`MaxCapacity` is a % on Apple silicon). Readings

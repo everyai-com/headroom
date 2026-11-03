@@ -1,0 +1,285 @@
+import Foundation
+
+// Life OS step 2: proof (your commits, read from git), your calendar, a coach that plans the morning and
+// reviews the evening through your own Claude CLI (no tools, nothing written but what you accept), and
+// nudges when the day drifts away from its quests.
+
+/// One of your commits: the proof that a day on a project shipped something.
+public struct Commit: Sendable, Equatable, Codable, Hashable {
+    public var project: String
+    public var hash: String
+    public var date: Date
+    public var subject: String
+    public init(project: String, hash: String, date: Date, subject: String) {
+        self.project = project; self.hash = hash; self.date = date; self.subject = subject
+    }
+}
+
+extension Git {
+    /// Your commits in a repository between two dates (author = the repo's `user.email`), newest first.
+    /// Read-only: `git log` with optional locks off, like `status`.
+    public static func commits(repo: String, project: String, since: Date, until: Date) -> [Commit] {
+        guard let git = executable else { return [] }
+        let base = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-C", repo]
+        guard let email = Shell.run(git, base + ["config", "user.email"], timeout: 5)?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !email.isEmpty,
+              let out = Shell.run(git, base + ["log", "--all", "--no-merges", "--author=\(email)",
+                                               "--since=\(Int(since.timeIntervalSince1970))", "--until=\(Int(until.timeIntervalSince1970))",
+                                               "--format=%H%x09%ct%x09%s"], timeout: 10) else { return [] }
+        return parseLog(out, project: project)
+    }
+
+    /// `hash<TAB>unix time<TAB>subject` lines; anything else is skipped.
+    static func parseLog(_ out: String, project: String) -> [Commit] {
+        out.split(separator: "\n").compactMap { line in
+            let parts = line.split(separator: "\t", maxSplits: 2, omittingEmptySubsequences: false)
+            guard parts.count == 3, let t = TimeInterval(parts[1]) else { return nil }
+            return Commit(project: project, hash: String(parts[0]), date: Date(timeIntervalSince1970: t), subject: String(parts[2]))
+        }
+    }
+}
+
+public enum Proof {
+    /// The repositories behind your Claude Code projects, once each (worktrees fold into their repository).
+    public static func repos(_ paths: [String], home: String = HeadroomPaths.home) -> [(repo: String, project: String)] {
+        var seen = Set<String>()
+        return paths.compactMap { path in
+            let main = ClaudeCodeActivity.mainCheckout(path)
+            guard let root = Git.repoRoot(containing: main, home: home), seen.insert(root.lowercased()).inserted else { return nil }
+            return (root, ClaudeCodeActivity.projectName(root))
+        }
+    }
+
+    /// Your commits on a day across those repositories, newest first. Each commit counts once (the same
+    /// hash reached from two checkouts of one repo is one commit).
+    public static func commits(on day: String, paths: [String], home: String = HeadroomPaths.home, calendar: Calendar = .current) -> [Commit] {
+        guard let start = Planner.date(day, calendar: calendar),
+              let end = calendar.date(byAdding: .day, value: 1, to: start) else { return [] }
+        var seen = Set<String>()
+        return repos(paths, home: home).flatMap { Git.commits(repo: $0.repo, project: $0.project, since: start, until: end) }
+            .filter { seen.insert($0.hash).inserted }
+            .sorted { $0.date > $1.date }
+    }
+}
+
+/// An event from your calendars (read through EventKit by the app, never changed).
+public struct CalendarEvent: Sendable, Equatable, Codable, Hashable {
+    public var title: String
+    public var start: Date
+    public var end: Date
+    public var calendar: String
+    public var allDay: Bool
+    public init(title: String, start: Date, end: Date, calendar: String, allDay: Bool = false) {
+        self.title = title; self.start = start; self.end = end; self.calendar = calendar; self.allDay = allDay
+    }
+    public var minutes: Int { allDay ? 0 : max(0, Int(end.timeIntervalSince(start) / 60)) }
+}
+
+/// How a daily quest stands right now.
+public struct QuestStatus: Sendable, Equatable {
+    public var title: String
+    public var done: Int
+    public var target: Int
+    public init(title: String, done: Int, target: Int) { self.title = title; self.done = done; self.target = target }
+    public var left: Int { max(0, target - done) }
+}
+
+/// Everything the coach is told about a day. Built by the app (or the CLI) from what's already on this Mac.
+public struct DayContext: Sendable {
+    public var now: Date
+    public var planner: Planner
+    public var events: [CalendarEvent]          // today and tomorrow
+    public var commits: [Commit]                // today
+    public var byProject: [(name: String, minutes: Int)]
+    public var byKind: [(name: String, minutes: Int)]
+    public var quests: [QuestStatus]
+    public var seasonWeek: [String: Int]        // project (lowercased) → minutes this week
+    public init(now: Date, planner: Planner, events: [CalendarEvent] = [], commits: [Commit] = [],
+                byProject: [(name: String, minutes: Int)] = [], byKind: [(name: String, minutes: Int)] = [],
+                quests: [QuestStatus] = [], seasonWeek: [String: Int] = [:]) {
+        self.now = now; self.planner = planner; self.events = events; self.commits = commits
+        self.byProject = byProject; self.byKind = byKind; self.quests = quests; self.seasonWeek = seasonWeek
+    }
+}
+
+/// What the coach suggests. Nothing is added until you tick it and press Add.
+public struct CoachPlan: Codable, Sendable, Equatable {
+    public var big: [String]
+    public var tasks: [String]
+    public var note: String
+    public init(big: [String] = [], tasks: [String] = [], note: String = "") { self.big = big; self.tasks = tasks; self.note = note }
+
+    enum CodingKeys: String, CodingKey { case big, tasks, note }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        big = (try? c.decodeIfPresent([String].self, forKey: .big)) ?? []
+        tasks = (try? c.decodeIfPresent([String].self, forKey: .tasks)) ?? []
+        note = (try? c.decodeIfPresent(String.self, forKey: .note)) ?? ""
+    }
+}
+
+public enum Coach {
+    public enum Moment: String, Sendable { case morning, evening }
+
+    /// The prompt for `claude -p`. Plain facts, then the ask, then the exact JSON shape wanted back.
+    public static func prompt(_ m: Moment, _ c: DayContext, calendar: Calendar = .current) -> String {
+        let today = Planner.key(c.now, calendar: calendar)
+        let tomorrow = Planner.key(daysFrom: c.now, 1, calendar: calendar)
+        let time = DateFormatter()
+        time.calendar = calendar; time.timeZone = calendar.timeZone
+        time.dateFormat = "EEE HH:mm"
+        let clock = DateFormatter()
+        clock.calendar = calendar; clock.timeZone = calendar.timeZone
+        clock.dateFormat = "HH:mm"
+        func hm(_ minutes: Int) -> String { "\(minutes / 60)h\(String(format: "%02d", minutes % 60))" }
+        var lines: [String] = []
+        lines.append("You are the user's coach inside Headroom, their life OS. It is \(time.string(from: c.now)).")
+        if let s = c.planner.season, s.isActive(on: today) {
+            let quests = [s.main] + s.sides
+            lines.append("\nSEASON until \(s.end) (hours this week / planned per week):")
+            for (i, q) in quests.enumerated() {
+                lines.append("- \(i == 0 ? "MAIN" : "side"): \(q.project) \(hm(c.seasonWeek[q.project.lowercased()] ?? 0)) / \(q.hoursPerWeek)h")
+            }
+        }
+        if !c.quests.isEmpty {
+            lines.append("\nDAILY QUESTS (done / target today):")
+            c.quests.forEach { lines.append("- \($0.title): \(hm($0.done)) / \(hm($0.target))") }
+        }
+        let habits = c.planner.habitsDue(c.now, calendar: calendar).filter { !$0.isTimed }
+        if !habits.isEmpty {
+            lines.append("\nHABITS today:")
+            habits.forEach { h in
+                let state = h.kind == .avoid ? (h.slipped(c.now, calendar: calendar) ? "slipped" : "clean so far") : (h.isDone(c.now, calendar: calendar) ? "done" : "not yet")
+                lines.append("- \(h.kind == .avoid ? "avoid " : "")\(h.title): \(state)")
+            }
+        }
+        let open = c.planner.tasks.filter { $0.done == nil && ($0.day ?? today) <= tomorrow }
+        if !open.isEmpty {
+            lines.append("\nOPEN TASKS:")
+            open.prefix(30).forEach { t in
+                lines.append("- \(t.big ? "[BIG] " : "")\(t.title)\(t.project.map { " (\($0))" } ?? "")\(t.day.map { $0 < today ? " — overdue since \($0)" : $0 == tomorrow ? " — tomorrow" : "" } ?? " — inbox")")
+            }
+        }
+        let doneToday = c.planner.tasks.filter { $0.done.map { Planner.key($0, calendar: calendar) == today } ?? false }
+        if !doneToday.isEmpty { lines.append("\nDONE TODAY: " + doneToday.map(\.title).joined(separator: "; ")) }
+        if !c.events.isEmpty {
+            lines.append("\nCALENDAR:")
+            c.events.sorted { $0.start < $1.start }.forEach { e in
+                lines.append("- \(e.allDay ? Planner.key(e.start, calendar: calendar) + " all day" : time.string(from: e.start) + "–" + clock.string(from: e.end)) \(e.title)")
+            }
+        }
+        if !c.byProject.isEmpty {
+            lines.append("\nWHERE TODAY WENT (by project): " + c.byProject.prefix(10).map { "\($0.name) \(hm($0.minutes))" }.joined(separator: ", "))
+        }
+        if !c.byKind.isEmpty {
+            lines.append("BY KIND: " + c.byKind.prefix(8).map { "\($0.name) \(hm($0.minutes))" }.joined(separator: ", "))
+        }
+        if !c.commits.isEmpty {
+            let per = Dictionary(grouping: c.commits, by: \.project).map { "\($0.key) \($0.value.count)" }.sorted()
+            lines.append("COMMITS TODAY: " + per.joined(separator: ", "))
+        }
+        switch m {
+        case .morning:
+            lines.append("""
+
+            Plan TODAY (\(today)). Pick at most 3 BIG tasks that move the season's main quest and the daily quests the most, \
+            fit around the calendar. Reuse open task titles exactly when one fits; otherwise write new short tasks starting with a verb. \
+            Up to 5 small tasks. In "note", 2–3 sentences: the order to do things and when, naming real times from the calendar.
+            """)
+        case .evening:
+            lines.append("""
+
+            Review TODAY honestly and kindly: what moved, what didn't, where time leaked (name it), in 3–5 sentences in "note". \
+            Then plan TOMORROW (\(tomorrow)): at most 3 BIG tasks and up to 5 small ones, reusing open task titles exactly when one fits.
+            """)
+        }
+        lines.append(#"Reply with ONLY this JSON, no code fence: {"big": ["…"], "tasks": ["…"], "note": "…"}"#)
+        return lines.joined(separator: "\n")
+    }
+
+    /// The JSON object in a reply, even with a code fence or a sentence around it.
+    public static func parse(_ reply: String) -> CoachPlan? {
+        guard let open = reply.firstIndex(of: "{"), let close = reply.lastIndex(of: "}"), open < close,
+              let plan = try? JSONDecoder().decode(CoachPlan.self, from: Data(reply[open...close].utf8)) else { return nil }
+        var p = plan
+        p.big = Array(p.big.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.prefix(Planner.bigLimit))
+        p.tasks = Array(p.tasks.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.prefix(8))
+        return p.big.isEmpty && p.tasks.isEmpty && p.note.isEmpty ? nil : p
+    }
+}
+
+extension Planner {
+    /// Adds what you ticked from a coach plan to a day. A title that matches an open task is that task —
+    /// moved to the day (and made big if asked), never a duplicate. Big still means at most three a day.
+    @discardableResult
+    public mutating func accept(big: [String], tasks: [String], day: String, now: Date = .now, calendar: Calendar = .current) -> Int {
+        var count = 0
+        for (title, wantsBig) in big.map({ ($0, true) }) + tasks.map({ ($0, false) }) {
+            if let existing = self.tasks.first(where: { $0.done == nil && $0.title.caseInsensitiveCompare(title) == .orderedSame }) {
+                schedule(existing.id, day: day, now: now, calendar: calendar)
+                if wantsBig && !existing.big { _ = setBig(existing.id, true, now: now, calendar: calendar) }
+            } else {
+                _ = add(title, day: day, big: wantsBig, source: .claude, now: now, calendar: calendar)
+            }
+            count += 1
+        }
+        return count
+    }
+}
+
+/// The user's own Claude Code CLI, run with no tools: it reads the prompt and answers, nothing else.
+public enum ClaudeCLI {
+    public static var executable: String? {
+        let home = HeadroomPaths.home
+        let extra = [home + "/.local/bin/claude", home + "/.claude/local/claude"]
+        return Shell.which("claude") ?? extra.first { FileManager.default.isExecutableFile(atPath: $0) }
+    }
+
+    /// No tools, no MCP servers, no session saved (so it never shows up as Claude Code time on the timeline).
+    public static func ask(_ prompt: String, timeout: TimeInterval = 180) -> String? {
+        guard !HeadroomPaths.isSandboxed, let claude = executable else { return nil }
+        return Shell.run(claude, ["-p", "--tools", "", "--strict-mcp-config", "--no-session-persistence", prompt], timeout: timeout)
+    }
+}
+
+/// A notification that pulls the day back toward its quests.
+public struct Nudge: Sendable, Equatable {
+    public var title: String
+    public var body: String
+    public init(title: String, body: String) { self.title = title; self.body = body }
+}
+
+public enum Nudges {
+    /// What the nudge rule sees on each tick.
+    public struct Input: Sendable {
+        public var now: Date
+        /// Minutes spent on distractions (social, entertainment) in the last 30 minutes.
+        public var distractedLast30: Int
+        /// The biggest distraction in that window ("youtube.com"), if any.
+        public var topDistraction: String?
+        public var quests: [QuestStatus]
+        /// Minutes left until the end of the working day (0 once it's over).
+        public var workMinutesLeft: Int
+        public var lastNudge: Date?
+        public init(now: Date, distractedLast30: Int, topDistraction: String?, quests: [QuestStatus], workMinutesLeft: Int, lastNudge: Date?) {
+            self.now = now; self.distractedLast30 = distractedLast30; self.topDistraction = topDistraction
+            self.quests = quests; self.workMinutesLeft = workMinutesLeft; self.lastNudge = lastNudge
+        }
+    }
+
+    /// Whether to nudge now, and what to say. Pure, so it's tested without a clock or notifications.
+    public static func decide(_ i: Input) -> Nudge? {
+        // Quiet for an hour after any nudge, never after the working day, and a break isn't drift.
+        if let last = i.lastNudge, i.now.timeIntervalSince(last) < 60 * 60 { return nil }
+        guard i.workMinutesLeft > 0, i.distractedLast30 >= 15,
+              let behind = i.quests.filter({ $0.left > 0 }).max(by: { $0.left < $1.left }) else { return nil }
+        func hm(_ m: Int) -> String { m >= 60 ? "\(m / 60)h\(m % 60 == 0 ? "" : String(format: "%02d", m % 60))" : "\(m) min" }
+        let source = i.topDistraction.map { " on \($0)" } ?? ""
+        let title = "\(i.distractedLast30) min\(source)"
+        // Honest when the full target can't fit any more: a smaller win still counts.
+        let body = behind.left > i.workMinutesLeft
+            ? "\(behind.title) is at \(hm(behind.done)) of \(hm(behind.target)). The full target won't fit today, but 30 minutes now still counts."
+            : "\(behind.title) is at \(hm(behind.done)) of \(hm(behind.target)) — \(hm(behind.left)) to go, \(hm(i.workMinutesLeft)) left in the day."
+        return Nudge(title: title, body: body)
+    }
+}

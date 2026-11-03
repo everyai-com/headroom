@@ -123,6 +123,7 @@ struct TodayView: View {
         Scrolling {
             VStack(alignment: .leading, spacing: 14) {
                 header
+                if LifeCoach.shared.available { CoachCard() }
                 HStack(alignment: .top, spacing: 14) {
                     VStack(alignment: .leading, spacing: 14) {
                         bigThree
