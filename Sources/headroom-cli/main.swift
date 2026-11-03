@@ -27,7 +27,8 @@ import HeadroomCore
 //   headroom-cli rewards · reward add "<reward>" <coins> · buy <n|words>       coins come 1:1 with XP
 //   headroom-cli challenge add "<habit>" <times> [--days 30] · stats           areas, rank, challenges, what earned what
 //   headroom-cli timeline [--day YYYY-MM-DD] · season · season set "<main>" 20 ["<side>" 8] · season end
-//   headroom-cli habit add "<quest>" --minutes 240 --track "<project>"          a daily quest that fills from the timeline
+//   headroom-cli timeline rules · timeline teach <app|host|title|project> "<value>" [--project p] [--area a] [--kind k]
+//   headroom-cli habit add "<quest>" --minutes 240 [--track "<project>" | --area "<area>"]   a daily quest that fills from the timeline
 //
 // Add --json to any of them for machine-readable output (for scripts and coding agents —
 // e.g. check free space before a large install).

@@ -94,9 +94,10 @@ enum PlannerCommands {
                 var habit = Habit(title: title, identity: identity, cue: cue, twoMinute: two, weekdays: weekdays, remindAt: at)
                 habit.area = area
                 if avoid { habit.kind = .avoid }
-                if let dailyMinutes, dailyMinutes > 0, let trackProject {
+                // A time target counts the --track project, or without one, everything in the habit's --area.
+                if let dailyMinutes, dailyMinutes > 0, trackProject != nil || area != nil {
                     habit.minutes = dailyMinutes
-                    habit.track = QuotaTrack(project: trackProject)
+                    habit.track = trackProject.map { QuotaTrack(project: $0) } ?? QuotaTrack(area: area)
                 }
                 PlannerStore.mutate { $0.habits.append(habit) }
                 print("New habit\(avoid ? " to break" : ""): \(title)\(identity.map { " — every \(avoid ? "clean day" : "time") is a vote for being \($0)" } ?? "")")
@@ -244,19 +245,53 @@ enum PlannerCommands {
             }
 
         case "timeline":
-            // Read-only: where today (or --day) went, from the app's timeline and Claude Code's logs.
+            // timeline [--day] · timeline rules · timeline teach <app|host|title|project> "<value>" [--project] [--area] [--kind]
+            // Reading is read-only; teach writes only the app's own rules.json (the app picks it up on its next tick).
+            let store = TimelineStore()
+            if rest.first == "teach" {
+                let project = option("--project"), area = option("--area"), kindName = option("--kind")
+                rest = Array(rest.dropFirst())
+                guard let k = rest.first.flatMap(ActivityRule.Kind.init(rawValue:)), rest.count > 1 else {
+                    fail("usage: headroom-cli timeline teach <app|host|title|project> \"<value>\" [--project p] [--area a] [--kind writing]")
+                }
+                var category: ActivityCategory?
+                if let kindName {
+                    guard let c = ActivityCategory(rawValue: kindName.lowercased()) else {
+                        fail("--kind is one of: \(ActivityCategory.allCases.map(\.rawValue).joined(separator: ", "))")
+                    }
+                    category = c
+                }
+                guard project != nil || area != nil || category != nil else { fail("Say what it counts as: --project, --area or --kind") }
+                let value = rest.dropFirst().joined(separator: " ").trimmingCharacters(in: .whitespaces)
+                var settings = store.loadSettings()
+                if let i = settings.rules.firstIndex(where: { $0.kind == k && $0.value.caseInsensitiveCompare(value) == .orderedSame }) {
+                    if let project { settings.rules[i].project = project }
+                    if let area { settings.rules[i].area = area }
+                    if let category { settings.rules[i].category = category }
+                } else {
+                    settings.rules.append(ActivityRule(kind: k, value: value, project: project, area: area, category: category))
+                }
+                store.saveSettings(settings)
+                print("\(k.rawValue) \(value) → \([project, area, category?.title].compactMap { $0 }.joined(separator: " · "))")
+                return
+            }
+            if rest.first == "rules" {
+                let rules = store.loadSettings().rules
+                if rules.isEmpty { print("No rules yet. headroom-cli timeline teach host linkedin.com --project Svikarr --area Marketing") }
+                for r in rules { print("  \(r.kind.rawValue) \(r.value) → \([r.project, r.area, r.category?.title].compactMap { $0 }.joined(separator: " · "))") }
+                return
+            }
             var day = Planner.key(now)
             if let d = option("--day") { day = dayKey(d) }
-            let store = TimelineStore()
             let spans = store.load(day) + ClaudeCodeActivity.spans(on: day)
-            let classifier = Classifier(settings: store.loadSettings(),
-                                        projects: ClaudeCodeActivity.projectPaths().map { URL(fileURLWithPath: $0).lastPathComponent })
+            let classifier = Classifier(settings: store.loadSettings(), projects: ClaudeCodeActivity.projectPaths().map(ClaudeCodeActivity.projectName))
             let byKind = TimelineMath.totals(spans) { classifier.classify($0).category.title }
             let byProject = TimelineMath.totals(spans) { classifier.classify($0).project }
             let byApp = TimelineMath.totals(spans) { $0.host ?? $0.appName }
+            let byArea = TimelineMath.totals(spans) { classifier.classify($0).area }
             if json {
                 func list(_ t: [TimelineMath.Total]) -> [[String: Any]] { t.map { ["name": $0.name, "minutes": Int($0.seconds / 60)] } }
-                emitJSON(["day": day, "minutes": Int(TimelineMath.covered(spans) / 60), "byKind": list(byKind), "byProject": list(byProject),
+                emitJSON(["day": day, "minutes": Int(TimelineMath.covered(spans) / 60), "byKind": list(byKind), "byProject": list(byProject), "byArea": list(byArea),
                           "appsAndSites": list(Array(byApp.prefix(20)))])
                 return
             }
@@ -265,6 +300,7 @@ enum PlannerCommands {
             print("\(day) · \(Int(TimelineMath.covered(spans) / 60)) min at the Mac\n")
             print("By kind of work"); byKind.forEach { print(line($0)) }
             if !byProject.isEmpty { print("\nBy project"); byProject.forEach { print(line($0)) } }
+            if !byArea.isEmpty { print("\nBy area"); byArea.forEach { print(line($0)) } }
             print("\nApps & sites"); byApp.prefix(12).forEach { print(line($0)) }
 
         case "season":

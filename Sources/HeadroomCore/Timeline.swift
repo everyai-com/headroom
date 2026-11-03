@@ -66,10 +66,11 @@ public enum ActivityCategory: String, Codable, Sendable, CaseIterable {
 
 /// "This app / site / title is that project or area" — the rules you teach it from the Timeline screen.
 public struct ActivityRule: Codable, Sendable, Equatable, Identifiable, Hashable {
-    public enum Kind: String, Codable, Sendable { case app, host, title }
+    public enum Kind: String, Codable, Sendable, CaseIterable { case app, host, title, project }
     public var id = UUID()
     public var kind: Kind
-    /// Bundle ID, host ("linkedin.com" also matches "www.linkedin.com"), or words in the window title.
+    /// Bundle ID, host ("linkedin.com" also matches "www.linkedin.com"), words in the window title, or a project
+    /// (matched against the project the span ends up with, so "svikarr folder" can count as Svikarr · Marketing).
     public var value: String
     public var project: String?
     public var area: String?
@@ -89,6 +90,8 @@ public struct ActivityRule: Codable, Sendable, Equatable, Identifiable, Hashable
         case .title:
             guard let t = s.title?.lowercased(), !value.isEmpty else { return false }
             return t.contains(value.lowercased())
+        case .project:
+            return s.project?.caseInsensitiveCompare(value) == .orderedSame
         }
     }
 }
@@ -126,6 +129,10 @@ public struct Classification: Sendable, Equatable {
     public var category: ActivityCategory
     public var project: String?
     public var area: String?
+
+    public init(category: ActivityCategory, project: String? = nil, area: String? = nil) {
+        self.category = category; self.project = project; self.area = area
+    }
 }
 
 public struct Classifier: Sendable {
@@ -151,6 +158,14 @@ public struct Classifier: Sendable {
         }
         if out.project == nil, let title = s.title?.lowercased() {
             out.project = projects.first { name in Self.containsWord(title, name.lowercased()) }
+        }
+        // Project rules last: they see the project the span ended up with, however it got there.
+        var resolved = s
+        resolved.project = out.project
+        for r in settings.rules where r.kind == .project && r.matches(resolved) {
+            if let c = r.category { out.category = c }
+            if let p = r.project { out.project = p }
+            if let a = r.area { out.area = a }
         }
         return out
     }
@@ -297,6 +312,11 @@ public struct TimelineStore: Sendable {
         return (try? Self.decoder.decode(TimelineSettings.self, from: data)) ?? TimelineSettings()
     }
 
+    /// When the rules last changed on disk — the app reloads them, so the CLI and agents can teach it too.
+    public func settingsDate() -> Date? {
+        (try? FileManager.default.attributesOfItem(atPath: dir.appendingPathComponent("rules.json").path))?[.modificationDate] as? Date
+    }
+
     public func saveSettings(_ s: TimelineSettings) {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         if let data = try? Self.encoder.encode(s) { try? data.write(to: dir.appendingPathComponent("rules.json"), options: .atomic) }
@@ -368,11 +388,13 @@ public enum ClaudeCodeActivity {
     }
 
     /// The project a folder belongs to: a worktree (".../repo/.claude/worktrees/frosty-einstein") counts as its repository.
+    /// Trimmed: folders like "connector saas " would otherwise never match a project typed by hand.
     public static func projectName(_ cwd: String) -> String {
+        var root = cwd
         for marker in ["/.claude/worktrees/", "/.worktrees/", "/worktrees/"] {
-            if let r = cwd.range(of: marker) { return URL(fileURLWithPath: String(cwd[..<r.lowerBound])).lastPathComponent }
+            if let r = cwd.range(of: marker) { root = String(cwd[..<r.lowerBound]); break }
         }
-        return URL(fileURLWithPath: cwd).lastPathComponent
+        return URL(fileURLWithPath: root).lastPathComponent.trimmingCharacters(in: .whitespaces)
     }
 
     /// `"key":"value"` from a JSON line without parsing it all (lines can be megabytes).

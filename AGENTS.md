@@ -18,8 +18,10 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   done <n|words> | later <n|words> | habits | habit add "…" [--identity --cue --two-minute --at HH:MM --days mon,wed --area a --avoid] |
   habit done | habit slip | focus [start "…"|<n>] | focus stop | rewards | reward add "…" <coins> | buy <n|words> |
   challenge add "<habit>" <times> [--days 30] | stats | season [set "<main>" 20 ["<side>" 8] | end]` (add also takes
-  `--effort 1-3 --area a`; `habit add --minutes 240 --track <project>` is a daily quest that fills from the timeline).
+  `--effort 1-3 --area a`; `habit add --minutes 240 --track <project>` (or `--area <area>`) is a daily quest that fills from the timeline).
   `./headroom-cli timeline [--day D] [--json]` (read-only) says where a day went — read it before planning someone's day.
+  `timeline teach <app|host|title|project> "<value>" --project/--area/--kind` writes only `timeline/rules.json`; the app
+  reloads it on its next tick. Project rules apply last, to the project a span ended up with.
   — the only CLI commands that write, and only Headroom's own `planner.json`. Use them to plan the user's day from a session.
 - distribution signing: `HEADROOM_SIGN_ID="Developer ID Application: …" HEADROOM_NOTARY_PROFILE=<profile> ./scripts/bundle.sh`
   (version from `VERSION`; Developer ID builds keep Full Disk Access across rebuilds, ad-hoc ones don't)

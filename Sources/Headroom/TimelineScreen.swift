@@ -139,7 +139,12 @@ struct TimelineScreen: View {
                     Text("Projects show up when a window title names one (your repositories and Claude Code projects), or when you assign an app or site to one.")
                         .font(.system(size: 12)).foregroundStyle(Theme.textTertiary).fixedSize(horizontal: false, vertical: true)
                 }
-                ForEach(totals) { t in bar(t.name, t.seconds, top: top, color: Theme.accent) }
+                ForEach(totals) { t in
+                    bar(t.name, t.seconds, top: top, color: Theme.accent)
+                        .contentShape(Rectangle())
+                        .contextMenu { menu(Row(kind: .project, value: t.name, name: t.name, seconds: t.seconds,
+                                                classification: Classification(category: .other, project: t.name, area: nil))) }
+                }
             }
         }
     }
@@ -202,7 +207,7 @@ struct TimelineScreen: View {
 
     @ViewBuilder func menu(_ r: Row) -> some View {
         let projects = Array(Set(timeline.projects + timeline.settings.rules.compactMap(\.project) + model.planner.tasks.compactMap(\.project))).sorted()
-        Menu("Project") {
+        Menu(r.kind == .project ? "Count As Project" : "Project") {
             ForEach(projects, id: \.self) { p in Button(p) { timeline.assign(r.kind, r.value, project: p) } }
             Divider()
             Button("New Project…") { assigning = AssignTarget(kind: r.kind, value: r.value, name: r.name, field: .project) }
@@ -216,8 +221,10 @@ struct TimelineScreen: View {
         Menu("Kind of Work") {
             ForEach(ActivityCategory.allCases, id: \.self) { c in Button(c.title) { timeline.assign(r.kind, r.value, category: c) } }
         }
-        Divider()
-        Button("Never Record \(r.name)") { timeline.exclude(app: r.kind == .app ? r.value : nil, host: r.kind == .host ? r.value : nil) }
+        if r.kind != .project {
+            Divider()
+            Button("Never Record \(r.name)") { timeline.exclude(app: r.kind == .app ? r.value : nil, host: r.kind == .host ? r.value : nil) }
+        }
     }
 
     // MARK: Privacy & permissions

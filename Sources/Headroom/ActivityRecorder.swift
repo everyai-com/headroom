@@ -39,6 +39,7 @@ final class ActivityRecorder: ObservableObject {
     private var timer: Timer?
     private var lastSave = Date.distantPast
     private var lastClaude = Date.distantPast
+    private var settingsDate: Date?
     private let browserQueue = DispatchQueue(label: "headroom.timeline.browser")
     private var pendingHost: (app: String, host: String?, at: Date)?
 
@@ -55,12 +56,12 @@ final class ActivityRecorder: ObservableObject {
             weekProjectMinutes = ["magicteams": 9 * 60 + 40, "headroom": 7 * 60 + 15, "flare-forge": 2 * 60 + 5, "video os": 3 * 60 + 30]
             return
         }
-        settings = store.loadSettings()
+        reloadSettings()
         recorder = TimelineRecorder(spans: store.load(day))
         today = recorder.spans
         Task.detached(priority: .utility) {
             let paths = ClaudeCodeActivity.projectPaths()
-            await MainActor.run { self.projects = paths.map { URL(fileURLWithPath: $0).lastPathComponent } }
+            await MainActor.run { self.projects = Array(Set(paths.map(ClaudeCodeActivity.projectName))).sorted() }
         }
         refreshClaude(force: true)
         update()
@@ -70,6 +71,7 @@ final class ActivityRecorder: ObservableObject {
     func update() {
         guard !AppModel.demoMode else { return }
         titlesAllowed = AXIsProcessTrusted()
+        if store.settingsDate() != settingsDate { reloadSettings() } // taught from the CLI or an agent
         if isOn, timer == nil {
             timer = Timer.scheduledTimer(withTimeInterval: Self.interval, repeats: true) { _ in
                 Task { @MainActor in ActivityRecorder.shared.sample() }
@@ -131,6 +133,13 @@ final class ActivityRecorder: ObservableObject {
     func saveSettings() {
         guard !AppModel.demoMode else { return }
         store.saveSettings(settings)
+        settingsDate = store.settingsDate()
+    }
+
+    private func reloadSettings() {
+        settings = store.loadSettings()
+        settingsDate = store.settingsDate()
+        refreshWeek(force: true)
     }
 
     /// Teach it: this app / site / title belongs to a project, an area or a category from now on (and for today).

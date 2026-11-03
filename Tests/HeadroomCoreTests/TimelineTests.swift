@@ -41,6 +41,18 @@ final class TimelineTests: XCTestCase {
         XCTAssertNil(c.classify(word).project, "whole words only, and names under 4 letters never match")
     }
 
+    func testProjectRulesRenameAndFileAWholeProject() {
+        var settings = TimelineSettings()
+        settings.rules = [ActivityRule(kind: .project, value: "svikarr folder", project: "Svikarr", area: "Marketing")]
+        let c = Classifier(settings: settings, projects: ["svikarr folder"])
+        let claude = ActivitySpan(start: now, end: at(5), app: ActivitySpan.claudeCode, appName: "Claude Code", project: "svikarr folder")
+        XCTAssertEqual(c.classify(claude), Classification(category: .coding, project: "Svikarr", area: "Marketing"))
+        let titled = ActivitySpan(start: now, end: at(5), app: "com.apple.dt.Xcode", appName: "Xcode", title: "svikarr folder — lead-plan.md")
+        XCTAssertEqual(c.classify(titled).area, "Marketing", "a project found from the window title gets the rule too")
+        let track = QuotaTrack(area: "Marketing")
+        XCTAssertEqual(Quests.minutes(track, spans: [claude], sessions: [], tasks: [], classifier: c, now: at(10)), 5)
+    }
+
     func testOverlapsCountOnce() {
         let a = ActivitySpan(start: now, end: at(30), app: "com.apple.Terminal", appName: "Terminal")
         let b = ActivitySpan(start: at(20), end: at(50), app: ActivitySpan.claudeCode, appName: "Claude Code", project: "Headroom")
@@ -77,6 +89,7 @@ final class TimelineTests: XCTestCase {
     func testWorktreesCountAsTheirRepository() {
         XCTAssertEqual(ClaudeCodeActivity.projectName("/Applications/Headroom/.claude/worktrees/frosty-einstein-dc8eed"), "Headroom")
         XCTAssertEqual(ClaudeCodeActivity.projectName("/Users/me/flare-forge"), "flare-forge")
+        XCTAssertEqual(ClaudeCodeActivity.projectName("/Users/me/connector saas "), "connector saas", "a trailing space in the folder name")
     }
 
     func testStoreKeepsThirtyDaysAndForgets() throws {
