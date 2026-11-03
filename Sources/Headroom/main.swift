@@ -88,6 +88,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         if model.plannerAddOn {
             model.applyQuests(model.questMinutes(ActivityRecorder.shared))
             LifeCoach.shared.update()
+            if LifeCoach.shared.available {
+                model.applyProof(LifeCoach.shared.commits)
+                if ticks % 4 == 0 { LifeCoach.shared.detectFocus(model: model) } // every 2 minutes
+            }
             if model.notificationsEnabled, let n = LifeCoach.shared.nudge(model: model) { notify(n.title, n.body) }
         }
         nudgeHabits()

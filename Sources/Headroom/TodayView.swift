@@ -72,6 +72,28 @@ extension AppModel {
         return out
     }
 
+    /// Proof habits ("a commit checks this off") met by today's commits, once each.
+    func applyProof(_ commits: [Commit]) {
+        let key = Planner.key(.now)
+        guard planner.habits.contains(where: { h in h.proof != nil && !h.done.contains(key) && commits.contains { h.proof!.matches($0) } }) else { return }
+        var met: [Habit] = []
+        reward { met = $0.applyProof(commits) }
+        for h in met { show("Proof: \(h.title) checked off by your commit") }
+    }
+
+    /// Focus found in the timeline (40+ minutes in one project, no distraction) becomes a focus session.
+    func recordDetectedFocus(_ stretches: [FocusStretch]) {
+        guard stretches.contains(where: { st in !planner.sessions.contains { $0.start < st.end && ($0.end ?? .distantFuture) > st.start } }) else { return }
+        var added: [FocusSession] = []
+        reward { added = $0.recordDetectedFocus(stretches) }
+        if let first = added.first { show("Focus found: \(first.minutes()) min on \(first.title.replacingOccurrences(of: "Deep work · ", with: ""))") }
+    }
+
+    /// Today's journal and check-in.
+    func updateLog(_ day: String = Planner.key(.now), _ change: (inout DayLog) -> Void) {
+        reward { $0.updateLog(day, change) }
+    }
+
     func startFocus(_ title: String, task: PlannerTask? = nil) {
         reward { _ = $0.startFocus(title, taskID: task?.id) } // ending a running session can pay out
     }
@@ -130,6 +152,7 @@ struct TodayView: View {
                         alsoToday
                     }
                     VStack(alignment: .leading, spacing: 14) {
+                        DayLogCard()
                         habits
                         later
                     }
@@ -491,7 +514,7 @@ struct HabitEditor: View {
             .pickerStyle(.segmented).labelsHidden()
             field("Habit", draft.habit.kind == .avoid ? "Doomscrolling in bed" : "Write 300 words", \.title)
             field("Area", "Health, Work, Writing…", \.area, help: "Its XP also levels this area of your life (see Progress).")
-            if draft.habit.kind == .build { timeTarget }
+            if draft.habit.kind == .build { timeTarget; proofToggle }
             field("Who it makes you", "a writer", \.identity, help: "Every time you do it is a vote for being this person.")
             field("When (the cue)", "after my morning coffee", \.cue, help: "Stack it on something you already do.")
             field("Two-minute version", "write one sentence", \.twoMinute, help: "What counts on a bad day — showing up beats skipping.")
@@ -567,6 +590,19 @@ struct HabitEditor: View {
         }
     }
 
+    /// "Commit something": checked off by the first commit of the day (any project, or one).
+    var proofToggle: some View {
+        let on = Binding(get: { draft.habit.proof != nil }, set: { draft.habit.proof = $0 ? (draft.habit.proof ?? HabitProof()) : nil })
+        return VStack(alignment: .leading, spacing: 6) {
+            Toggle("Checked off by a commit of yours", isOn: on)
+            if draft.habit.proof != nil {
+                TextField("Project (empty = any repository)", text: Binding(get: { draft.habit.proof?.project ?? "" },
+                                                                          set: { draft.habit.proof?.project = $0.nilIfEmpty }))
+                    .textFieldStyle(.roundedBorder)
+            }
+        }
+    }
+
     func field(_ label: String, _ prompt: String, _ key: WritableKeyPath<Habit, String>, help: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.textSecondary)
@@ -623,6 +659,7 @@ enum PlannerDemo {
                          created: now.addingTimeInterval(-40 * 86_400))
         walk.done = Set([2, 3, 5, 6, 7].map { Planner.key(daysFrom: now, -$0) })
         var ship2 = Habit(title: "Commit something", identity: "someone who ships", twoMinute: "fix one typo", created: now.addingTimeInterval(-40 * 86_400))
+        ship2.proof = HabitProof()
         ship2.done = Set((1..<20).map { Planner.key(daysFrom: now, -$0) })
         write.area = "Writing"; walk.area = "Health"; ship2.area = "Work"
         var scroll = Habit(title: "No phone in bed", identity: "someone who sleeps well", created: now.addingTimeInterval(-20 * 86_400))
@@ -635,6 +672,21 @@ enum PlannerDemo {
         marketing.area = "Work"
         marketing.done = Set([1, 2, 4, 5].map { Planner.key(daysFrom: now, -$0) })
         p.habits = [marketing, write, walk, ship2, scroll]
+        var found = FocusSession(title: "Deep work · magicteams", start: now.addingTimeInterval(-4 * 3600), area: "Work")
+        found.end = found.start.addingTimeInterval(72 * 60)
+        found.detected = true
+        p.sessions.append(found)
+        for back in 1...12 {
+            p.updateLog(Planner.key(daysFrom: now, -back), now: now) { l in
+                l.mood = [4, 3, 4, 5, 2, 4, 3][back % 7]; l.energy = [3, 3, 4, 4, 2, 5, 3][back % 7]
+                l.note = "Shipped the front desk flow and called two clinics — felt good to sell."
+            }
+        }
+        p.updateLog(today, now: now) { l in
+            l.mood = 4; l.energy = 3
+            l.note = "Good morning on outreach, the demo call went well. Slumped after lunch and lost 40 minutes to YouTube."
+            l.reflection = "The demo landing right after a focused outreach block isn't luck — your best days start with marketing before noon. The afternoon slump follows short nights; last night was 6h10. What would make tomorrow's first two hours as protected as today's?"
+        }
         p.season = Season(start: Planner.key(daysFrom: now, -3), end: Planner.key(daysFrom: now, 10),
                           main: .init(project: "magicteams", hoursPerWeek: 20),
                           sides: [.init(project: "Headroom", hoursPerWeek: 8), .init(project: "flare-forge", hoursPerWeek: 4)])

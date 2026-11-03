@@ -79,6 +79,7 @@ struct JourneyView: View {
                 HStack(alignment: .top, spacing: 14) {
                     VStack(alignment: .leading, spacing: 14) {
                         areas
+                        HabitMonthCard()
                         challenges
                     }
                     VStack(alignment: .leading, spacing: 14) {
@@ -316,6 +317,8 @@ struct JourneyView: View {
         case .focus: "timer"
         case .challenge: "trophy"
         case .purchase: "gift"
+        case .journal: "book"
+        case .checkin: "face.smiling"
         }
     }
 }

@@ -22,6 +22,8 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   `./headroom-cli timeline [--day D] [--json]` (read-only) says where a day went — read it before planning someone's day.
   `timeline teach <app|host|title|project> "<value>" --project/--area/--kind` writes only `timeline/rules.json`; the app
   reloads it on its next tick. Project rules apply last, to the project a span ended up with.
+  `journal ["how it went"] [--mood 1-5 --energy 1-5]` appends to today's entry (no text = show it); `sleep` (read-only) lists
+  the nights the Mac saw; `habit add "Commit something" --commit [project]` is checked off by the first commit of the day.
   — the only CLI commands that write, and only Headroom's own `planner.json`. Use them to plan the user's day from a session.
 - distribution signing: `HEADROOM_SIGN_ID="Developer ID Application: …" HEADROOM_NOTARY_PROFILE=<profile> ./scripts/bundle.sh`
   (version from `VERSION`; Developer ID builds keep Full Disk Access across rebuilds, ad-hoc ones don't)
@@ -154,6 +156,14 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   --strict-mcp-config --no-session-persistence` (no tools, no MCP, no log that would count as timeline time); its reply is a
   suggestion — nothing is added until the user ticks it and presses Add (`Planner.accept`: a matching open task is moved,
   never duplicated; the Big 3 limit holds). Drift nudges come from the pure `Nudges.decide`, only while the timeline is on.
+- Life log (`LifeLog.swift` in Core, `DayLogCard` on Today, `HabitMonthCard` on Progress): one `DayLog` a day in planner.json —
+  journal (+10 XP only with ≥ 5 words) and check-in (+5 only with both mood and energy), both derived by the ledger, so clearing
+  one takes its XP back. "Reflect with Claude" runs the same no-tools `claude -p` only on that button, and saves the reply beside
+  the entry. Proof habits (`Habit.proof`) are checked by `Planner.applyProof` from today's commits — never unchecked. Detected
+  focus (`FocusDetector`, timeline on only): ≥ 40 min in one project, gaps ≤ 5 min, cut by any distraction ≥ 2 min, finished
+  stretches only; recorded as `FocusSession(detected: true)` never over an existing session, split at the 3 h cap. Sleep is an
+  estimate from `rest.json` (sleep/wake/lock/unlock/screen times only, 30 days) — `Rest.night`, longest overnight rest, short
+  wake-ups under 20 min joined; never `pmset`. The month view is a mirror: missed days are outlined, never red.
 - Battery add-on (`Battery.swift` + `BatteryView`, Settings → Add-ons, on by default, hidden without a battery) is read-only:
   `AppleSmartBattery` properties from IOKit, never SMC writes, a helper or `pmset` — Headroom never changes charging; tips point
   to System Settings › Battery. Health = `AppleRawMaxCapacity / DesignCapacity` (`MaxCapacity` is a % on Apple silicon). Readings

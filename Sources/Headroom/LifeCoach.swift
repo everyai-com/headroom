@@ -17,6 +17,10 @@ final class LifeCoach: ObservableObject {
     @Published private(set) var failure: String?
     /// The last thing the coach said today (its plan's note or the evening review).
     @Published private(set) var note: (moment: Coach.Moment, text: String)?
+    /// Last night, estimated from when the Mac slept, locked or turned its screen off.
+    @Published private(set) var sleep: SleepEstimate?
+    /// The day whose journal Claude is reflecting on.
+    @Published private(set) var reflecting: String?
 
     struct Suggestion: Identifiable {
         let id = UUID()
@@ -33,6 +37,8 @@ final class LifeCoach: ObservableObject {
     private let store = EKEventStore()
     private var lastCalendar = Date.distantPast
     private var lastProof = Date.distantPast
+    private let rest = RestStore()
+    private var sleepDay = ""
 
     private init() {
         if AppModel.demoMode { seedDemo(); return }
@@ -44,6 +50,35 @@ final class LifeCoach: ObservableObject {
         NotificationCenter.default.addObserver(forName: .EKEventStoreChanged, object: store, queue: .main) { _ in
             Task { @MainActor in LifeCoach.shared.refreshCalendar(force: true) }
         }
+        guard available else { return }
+        // Times only: when the Mac went to rest and came back. Sleep is the longest rest overnight.
+        rest.append(RestEvent(.launch, at: .now))
+        let ws = NSWorkspace.shared.notificationCenter
+        let pairs: [(Notification.Name, RestEvent.Kind)] = [
+            (NSWorkspace.willSleepNotification, .sleep), (NSWorkspace.didWakeNotification, .wake),
+            (NSWorkspace.screensDidSleepNotification, .lock), (NSWorkspace.screensDidWakeNotification, .unlock),
+        ]
+        for (name, kind) in pairs {
+            ws.addObserver(forName: name, object: nil, queue: .main) { _ in Task { @MainActor in LifeCoach.shared.rested(kind) } }
+        }
+        for (name, kind) in [("com.apple.screenIsLocked", RestEvent.Kind.lock), ("com.apple.screenIsUnlocked", .unlock)] {
+            DistributedNotificationCenter.default().addObserver(forName: .init(name), object: nil, queue: .main) { _ in
+                Task { @MainActor in LifeCoach.shared.rested(kind) }
+            }
+        }
+        refreshSleep(force: true)
+    }
+
+    private func rested(_ kind: RestEvent.Kind) {
+        rest.append(RestEvent(kind, at: .now))
+        if kind == .wake || kind == .unlock { refreshSleep(force: true) }
+    }
+
+    func refreshSleep(force: Bool = false) {
+        let today = Planner.key(.now)
+        guard force || sleepDay != today else { return }
+        sleepDay = today
+        sleep = Rest.night(endingOn: today, events: rest.load())
     }
 
     /// From the 30 s tick: calendar every 5 minutes, commits every 10. Never asks for anything.
@@ -53,6 +88,7 @@ final class LifeCoach: ObservableObject {
         if note != nil, UserDefaults.standard.dictionary(forKey: "coachNote")?["day"] as? String != Planner.key(.now) { note = nil }
         refreshCalendar()
         refreshProof()
+        refreshSleep()
     }
 
     // MARK: Calendar
@@ -133,10 +169,37 @@ final class LifeCoach: ObservableObject {
         let questMinutes = model.questMinutes(timeline)
         let quests = model.planner.habits.filter { $0.isTimed && !$0.archived }
             .map { QuestStatus(title: $0.title, done: questMinutes[$0.id] ?? 0, target: $0.minutes ?? 0) }
-        return DayContext(now: .now, planner: model.planner, events: events, commits: commits,
-                          byProject: minutes(TimelineMath.totals(spans) { c.classify($0).project }),
-                          byKind: minutes(TimelineMath.totals(spans) { c.classify($0).category.title }),
-                          quests: quests, seasonWeek: timeline.weekProjectMinutes)
+        var context = DayContext(now: .now, planner: model.planner, events: events, commits: commits,
+                                 byProject: minutes(TimelineMath.totals(spans) { c.classify($0).project }),
+                                 byKind: minutes(TimelineMath.totals(spans) { c.classify($0).category.title }),
+                                 quests: quests, seasonWeek: timeline.weekProjectMinutes)
+        context.sleep = sleep
+        context.logs = [Planner.key(daysFrom: .now, -1), Planner.key(.now)].compactMap { model.planner.log(on: $0) }
+        return context
+    }
+
+    /// The journal's Reflect button: Claude reads the day (and the entry) and answers in a few sentences,
+    /// saved beside the entry. Asked only when you press it.
+    func reflect(on day: String, model: AppModel) {
+        guard reflecting == nil else { return }
+        reflecting = day
+        failure = nil
+        let prompt = Coach.reflectionPrompt(context(model: model), day: day)
+        Task.detached(priority: .userInitiated) {
+            let reply = ClaudeCLI.ask(prompt)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            await MainActor.run {
+                LifeCoach.shared.reflecting = nil
+                guard let reply, !reply.isEmpty else { LifeCoach.shared.failure = "Claude didn't answer (is `claude` signed in?)."; return }
+                model.updateLog(day) { $0.reflection = reply }
+            }
+        }
+    }
+
+    /// From the tick, while the timeline is on: long stretches in one project become focus sessions.
+    func detectFocus(model: AppModel) {
+        guard available, !AppModel.demoMode, ActivityRecorder.shared.isOn else { return }
+        let t = ActivityRecorder.shared
+        model.recordDetectedFocus(FocusDetector.stretches(t.allToday, classifier: t.classifier))
     }
 
     // MARK: Nudges
@@ -171,6 +234,7 @@ final class LifeCoach: ObservableObject {
         let day = Calendar.current.startOfDay(for: .now)
         func at(_ h: Double, _ d: Int = 0) -> Date { day.addingTimeInterval(Double(d) * 86_400 + h * 3600) }
         calendarConnected = true
+        sleep = SleepEstimate(start: day.addingTimeInterval(-50 * 60), end: day.addingTimeInterval(5.35 * 3600))
         events = [
             CalendarEvent(title: "Standup", start: at(9.5), end: at(9.75), calendar: "Work"),
             CalendarEvent(title: "Demo call · Svikarr client", start: at(14), end: at(14.75), calendar: "Work"),

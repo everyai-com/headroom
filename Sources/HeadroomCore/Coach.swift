@@ -94,6 +94,9 @@ public struct DayContext: Sendable {
     public var byKind: [(name: String, minutes: Int)]
     public var quests: [QuestStatus]
     public var seasonWeek: [String: Int]        // project (lowercased) → minutes this week
+    /// Last night's sleep estimate, and today's (or, in the morning, yesterday's) journal and check-in.
+    public var sleep: SleepEstimate?
+    public var logs: [DayLog] = []
     public init(now: Date, planner: Planner, events: [CalendarEvent] = [], commits: [Commit] = [],
                 byProject: [(name: String, minutes: Int)] = [], byKind: [(name: String, minutes: Int)] = [],
                 quests: [QuestStatus] = [], seasonWeek: [String: Int] = [:]) {
@@ -123,6 +126,30 @@ public enum Coach {
 
     /// The prompt for `claude -p`. Plain facts, then the ask, then the exact JSON shape wanted back.
     public static func prompt(_ m: Moment, _ c: DayContext, calendar: Calendar = .current) -> String {
+        let today = Planner.key(c.now, calendar: calendar)
+        let tomorrow = Planner.key(daysFrom: c.now, 1, calendar: calendar)
+        var lines = facts(c, calendar: calendar)
+        switch m {
+        case .morning:
+            lines.append("""
+
+            Plan TODAY (\(today)). If sleep was short or energy is low, plan lighter and say so. Pick at most 3 BIG tasks that move the season's main quest and the daily quests the most, \
+            fit around the calendar. Reuse open task titles exactly when one fits; otherwise write new short tasks starting with a verb. \
+            Up to 5 small tasks. In "note", 2–3 sentences: the order to do things and when, naming real times from the calendar.
+            """)
+        case .evening:
+            lines.append("""
+
+            Review TODAY honestly and kindly: what moved, what didn't, where time leaked (name it), in 3–5 sentences in "note". \
+            Then plan TOMORROW (\(tomorrow)): at most 3 BIG tasks and up to 5 small ones, reusing open task titles exactly when one fits.
+            """)
+        }
+        lines.append(#"Reply with ONLY this JSON, no code fence: {"big": ["…"], "tasks": ["…"], "note": "…"}"#)
+        return lines.joined(separator: "\n")
+    }
+
+    /// Plain facts about the day: what every coach prompt starts with.
+    static func facts(_ c: DayContext, calendar: Calendar) -> [String] {
         let today = Planner.key(c.now, calendar: calendar)
         let tomorrow = Planner.key(daysFrom: c.now, 1, calendar: calendar)
         let time = DateFormatter()
@@ -174,27 +201,37 @@ public enum Coach {
         if !c.byKind.isEmpty {
             lines.append("BY KIND: " + c.byKind.prefix(8).map { "\($0.name) \(hm($0.minutes))" }.joined(separator: ", "))
         }
+        if let sl = c.sleep {
+            lines.append("SLEEP (estimated from when the Mac rested): \(clock.string(from: sl.start))–\(clock.string(from: sl.end)), \(hm(sl.minutes))")
+        }
+        for l in c.logs.sorted(by: { $0.day < $1.day }) {
+            var parts: [String] = []
+            if let m = l.mood { parts.append("mood \(m)/5 (\(DayLog.moodWords[m]))") }
+            if let e = l.energy { parts.append("energy \(e)/5 (\(DayLog.energyWords[e]))") }
+            if !l.note.isEmpty { parts.append("journal: \"\(l.note.prefix(1200))\"") }
+            if !parts.isEmpty { lines.append("\(l.day == today ? "TODAY" : l.day): " + parts.joined(separator: "; ")) }
+        }
+        let focus = c.planner.focusMinutes(on: c.now, calendar: calendar)
+        if focus > 0 { lines.append("FOCUS TODAY: \(hm(focus))") }
         if !c.commits.isEmpty {
             let per = Dictionary(grouping: c.commits, by: \.project).map { "\($0.key) \($0.value.count)" }.sorted()
             lines.append("COMMITS TODAY: " + per.joined(separator: ", "))
         }
-        switch m {
-        case .morning:
-            lines.append("""
+        return lines
+    }
 
-            Plan TODAY (\(today)). Pick at most 3 BIG tasks that move the season's main quest and the daily quests the most, \
-            fit around the calendar. Reuse open task titles exactly when one fits; otherwise write new short tasks starting with a verb. \
-            Up to 5 small tasks. In "note", 2–3 sentences: the order to do things and when, naming real times from the calendar.
-            """)
-        case .evening:
-            lines.append("""
 
-            Review TODAY honestly and kindly: what moved, what didn't, where time leaked (name it), in 3–5 sentences in "note". \
-            Then plan TOMORROW (\(tomorrow)): at most 3 BIG tasks and up to 5 small ones, reusing open task titles exactly when one fits.
-            """)
-        }
-        lines.append(#"Reply with ONLY this JSON, no code fence: {"big": ["…"], "tasks": ["…"], "note": "…"}"#)
-        return lines.joined(separator: "\n")
+    /// For the journal's Reflect button: a short, kind reply in plain text, ending with one question.
+    public static func reflectionPrompt(_ c: DayContext, day: String) -> String {
+        var p = facts(c, calendar: .current)
+        p.append("""
+
+        The user just wrote their journal for \(day) (above). Reply to it in plain text, 3–5 sentences, like a wise friend \
+        who knows their goals: notice one thing that went well and connect it to their quests or season, name one pattern \
+        (sleep, energy, where time went) without judging, then ask ONE question that helps them plan tomorrow. \
+        No lists, no headings, no JSON.
+        """)
+        return p.joined(separator: "\n")
     }
 
     /// The JSON object in a reply, even with a code fence or a sentence around it.

@@ -18,6 +18,8 @@ public struct Planner: Codable, Sendable, Equatable {
     public var challenges: [Challenge] = []
     /// The current two weeks' main and side quests (Quests.swift).
     public var season: Season?
+    /// Journal entries and mood/energy check-ins, one per day (LifeLog.swift).
+    public var logs: [DayLog] = []
 
     public init() {}
 
@@ -31,6 +33,7 @@ public struct Planner: Codable, Sendable, Equatable {
         purchases = try c.decodeIfPresent([Purchase].self, forKey: .purchases) ?? []
         challenges = try c.decodeIfPresent([Challenge].self, forKey: .challenges) ?? []
         season = try c.decodeIfPresent(Season.self, forKey: .season)
+        logs = try c.decodeIfPresent([DayLog].self, forKey: .logs) ?? []
     }
 
     /// Only three tasks a day can be big: choosing is the point.
@@ -261,6 +264,8 @@ public struct Habit: Codable, Sendable, Identifiable, Equatable, Hashable {
     /// A daily time target, measured from the timeline and focus sessions (Quests.swift).
     public var minutes: Int?
     public var track: QuotaTrack?
+    /// Checked off by a commit of yours (LifeLog.swift).
+    public var proof: HabitProof?
 
     public init(title: String, identity: String? = nil, cue: String? = nil, twoMinute: String? = nil,
                 weekdays: Set<Int> = [], remindAt: Int? = nil, created: Date = .now) {
@@ -285,6 +290,7 @@ public struct Habit: Codable, Sendable, Identifiable, Equatable, Hashable {
         area = try c.decodeIfPresent(String.self, forKey: .area)
         minutes = try c.decodeIfPresent(Int.self, forKey: .minutes)
         track = try? c.decodeIfPresent(QuotaTrack.self, forKey: .track)
+        proof = try? c.decodeIfPresent(HabitProof.self, forKey: .proof)
     }
 
     /// The planned day before this one (within a week), as a key.

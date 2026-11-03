@@ -5,7 +5,7 @@ import HeadroomCore
 /// (Claude Code) can plan the day without leaving the shell. These write only Headroom's own planner.json,
 /// never a file of yours; the app picks the change up within seconds.
 enum PlannerCommands {
-    static let names: Set<String> = ["today", "add", "done", "later", "habits", "habit", "focus", "rewards", "reward", "buy",
+    static let names: Set<String> = ["journal", "sleep", "today", "add", "done", "later", "habits", "habit", "focus", "rewards", "reward", "buy",
                                      "stats", "challenge", "timeline", "season"]
 
     static func run(_ args: [String], json: Bool) {
@@ -79,6 +79,13 @@ enum PlannerCommands {
                 let avoid = flag("--avoid")
                 let dailyMinutes = option("--minutes").flatMap(Int.init)
                 let trackProject = option("--track")
+                // --commit [project|any]: checked off by your first commit of the day.
+                var commitProof: String?
+                if let i = rest.firstIndex(of: "--commit") {
+                    let next = rest.indices.contains(i + 1) && !rest[i + 1].hasPrefix("--") ? rest[i + 1] : nil
+                    commitProof = next ?? "any"
+                    rest.removeSubrange(i...(next == nil ? i : i + 1))
+                }
                 var at: Int?
                 if let s = option("--at") {
                     guard let m = minutes(s) else { fail("--at wants a time like 21:00") }
@@ -99,6 +106,7 @@ enum PlannerCommands {
                     habit.minutes = dailyMinutes
                     habit.track = trackProject.map { QuotaTrack(project: $0) } ?? QuotaTrack(area: area)
                 }
+                if let commitProof { habit.proof = HabitProof(project: commitProof == "any" ? nil : commitProof) }
                 PlannerStore.mutate { $0.habits.append(habit) }
                 print("New habit\(avoid ? " to break" : ""): \(title)\(identity.map { " — every \(avoid ? "clean day" : "time") is a vote for being \($0)" } ?? "")")
             } else if sub == "slip" {
@@ -214,6 +222,51 @@ enum PlannerCommands {
             let c = outcome.or(ref, what: "habit")
             print("Challenge on: \(c.title) — +\(c.bonus) XP when you get there. Nothing lost if you don't.")
 
+        case "journal":
+            // headroom-cli journal ["text"] [--mood 1-5] [--energy 1-5] [--day YYYY-MM-DD]; no text = show it.
+            let mood = option("--mood").flatMap(Int.init), energy = option("--energy").flatMap(Int.init)
+            let day = option("--day").map(dayKey) ?? today
+            let text = rest.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+            if let m = mood, !(1...5).contains(m) { fail("--mood wants 1 (rough) to 5 (great)") }
+            if let e = energy, !(1...5).contains(e) { fail("--energy wants 1 (drained) to 5 (buzzing)") }
+            var p = PlannerStore.load()
+            if !text.isEmpty || mood != nil || energy != nil {
+                p = PlannerStore.mutate { p in
+                    p.updateLog(day, now: now) { l in
+                        if !text.isEmpty { l.note = l.note.isEmpty ? text : l.note + "\n" + text }
+                        if let mood { l.mood = mood }
+                        if let energy { l.energy = energy }
+                    }
+                }.planner
+            }
+            let log = p.log(on: day)
+            if json {
+                emitJSON(["day": day, "mood": log?.mood ?? NSNull(), "energy": log?.energy ?? NSNull(), "note": log?.note ?? "",
+                          "reflection": log?.reflection ?? NSNull()])
+                return
+            }
+            guard let log else { print("No journal for \(day). headroom-cli journal \"How it went\" --mood 4 --energy 3"); return }
+            var head = [day]
+            if let m = log.mood { head.append("mood \(DayLog.moodWords[m])") }
+            if let e = log.energy { head.append("energy \(DayLog.energyWords[e])") }
+            print(head.joined(separator: " · "))
+            if !log.note.isEmpty { print("\n" + log.note) }
+            if let r = log.reflection { print("\nClaude: " + r) }
+        case "sleep":
+            // Read-only: the last nights as the Mac saw them (rest.json, written by the app).
+            let events = RestStore().load()
+            var nights: [[String: Any]] = []
+            for back in 0..<7 {
+                let day = Planner.key(daysFrom: now, -back)
+                guard let n = Rest.night(endingOn: day, events: events) else { continue }
+                nights.append(["day": day, "start": ISO8601DateFormatter().string(from: n.start), "end": ISO8601DateFormatter().string(from: n.end), "minutes": n.minutes])
+                if !json {
+                    let f = DateFormatter(); f.dateFormat = "HH:mm"
+                    print("\(day)  ~\(n.minutes / 60)h\(String(format: "%02d", n.minutes % 60))  \(f.string(from: n.start))–\(f.string(from: n.end))")
+                }
+            }
+            if json { emitJSON(nights); return }
+            if nights.isEmpty { print("No nights yet: the app notes when the Mac sleeps, locks and wakes (times only).") }
         case "stats":
             let p = PlannerStore.load()
             let level = Planner.level(for: p.xp(now: now))
