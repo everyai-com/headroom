@@ -227,7 +227,7 @@ public enum Rest {
 
     /// Whether one away stretch could be the night's sleep. `midnight` is the start of the day it ends on.
     static func looksLikeSleep(_ a: DateInterval, midnight: Date) -> Bool {
-        // TODO(human): the rule for "this was sleep". Default: 3–14 h away, starting between 18:00 the evening
+        // The rule for "this was sleep": 3–14 h away, starting between 18:00 the evening
         // before and 06:00, and ending between 03:00 and 14:00 that day.
         let hours = a.duration / 3600
         let startsFrom = midnight.addingTimeInterval(-6 * 3600), startsBy = midnight.addingTimeInterval(6 * 3600)
