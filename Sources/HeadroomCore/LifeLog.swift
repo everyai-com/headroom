@@ -12,6 +12,11 @@ public struct DayLog: Codable, Sendable, Equatable, Identifiable {
     public var energy: Int?
     public var note: String = ""
     public var reflection: String?
+    /// The daily sync: how much the day moved (1 little … 4 a massive amount), a read per quest (1 behind,
+    /// 2 some, 3 moved), and the one task the day is for ("the top thing").
+    public var progress: Int?
+    public var goals: [String: Int]?
+    public var top: UUID?
     public var updated: Date
     public var id: String { day }
 
@@ -24,6 +29,9 @@ public struct DayLog: Codable, Sendable, Equatable, Identifiable {
         energy = try c.decodeIfPresent(Int.self, forKey: .energy).map(DayLog.clamp)
         note = try c.decodeIfPresent(String.self, forKey: .note) ?? ""
         reflection = try c.decodeIfPresent(String.self, forKey: .reflection)
+        progress = try c.decodeIfPresent(Int.self, forKey: .progress).map { min(max($0, 1), 4) }
+        goals = try? c.decodeIfPresent([String: Int].self, forKey: .goals)
+        top = try? c.decodeIfPresent(UUID.self, forKey: .top)
         updated = try c.decodeIfPresent(Date.self, forKey: .updated) ?? .now
     }
 
@@ -33,6 +41,8 @@ public struct DayLog: Codable, Sendable, Equatable, Identifiable {
     public static let minimumWords = 5
     public var isJournal: Bool { note.split(whereSeparator: \.isWhitespace).count >= Self.minimumWords }
     public var isCheckIn: Bool { mood != nil && energy != nil }
+    public var isSynced: Bool { progress != nil }
+    public static let progressWords = ["", "Little progress", "Mixed progress", "Solid progress", "A massive amount of progress"]
 
     public static let moodWords = ["", "rough", "low", "okay", "good", "great"]
     public static let energyWords = ["", "drained", "tired", "steady", "high", "buzzing"]
@@ -59,6 +69,7 @@ extension Planner {
             var out: [LedgerEntry] = []
             if l.isJournal { out.append(LedgerEntry(id: "j" + l.day, date: noon, kind: .journal, title: "Journal", xp: 10, coins: 10, area: nil)) }
             if l.isCheckIn { out.append(LedgerEntry(id: "m" + l.day, date: noon, kind: .checkin, title: "Check-in", xp: 5, coins: 5, area: nil)) }
+            if l.isSynced { out.append(LedgerEntry(id: "s" + l.day, date: noon, kind: .sync, title: "Daily sync", xp: 5, coins: 5, area: nil)) }
             return out
         }
     }

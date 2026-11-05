@@ -6,7 +6,8 @@ import HeadroomCore
 /// never a file of yours; the app picks the change up within seconds.
 enum PlannerCommands {
     static let names: Set<String> = ["block", "blocks", "journal", "sleep", "today", "add", "done", "later", "habits", "habit", "focus", "rewards", "reward", "buy",
-                                     "stats", "challenge", "timeline", "season"]
+                                     "stats", "challenge", "timeline", "season",
+                                     "milestones", "milestone", "protect", "stack", "top", "sync", "score", "wrap"]
 
     static func run(_ args: [String], json: Bool) {
         var rest = Array(args.dropFirst())
@@ -390,8 +391,8 @@ enum PlannerCommands {
         case "season":
             // headroom-cli season · season set "<main>" <h/wk> ["<side>" <h/wk>]… [--weeks 2] · season end
             if rest.first == "end" {
-                PlannerStore.mutate { $0.season = nil }
-                print("Season ended.")
+                PlannerStore.mutate { $0.endSeason() }
+                print("Season ended. See it wrapped: headroom-cli wrap")
             } else if rest.first == "set" {
                 rest = Array(rest.dropFirst())
                 let weeks = option("--weeks").flatMap(Int.init) ?? 2
@@ -419,7 +420,136 @@ enum PlannerCommands {
                 let mark: [GoalStatus: String] = [.onTrack: "●", .adjust: "◐", .offTrack: "○", .upcoming: "·"]
                 for row in grid { print("  \(row.quest == s.main ? "★" : "·") \(row.quest.project)  \(row.quest.hoursPerWeek) h/wk  " + row.weeks.map { mark[$0]! }.joined(separator: " ")) }
                 print("  ● on track  ◐ adjust  ○ off track")
+                if let m = s.manifesto { print("\n  “\(m)”\(s.signed.map { "  — signed \(Planner.key($0))" } ?? "")") }
+                if let support = s.support { print("  Support: " + support.joined(separator: ", ")) }
+                if !s.openMilestones.isEmpty { print("\n  Next milestones:"); s.openMilestones.prefix(5).forEach { print("    \($0.pinned == true ? "📌 " : "")\($0.title) (\($0.project))\($0.due.map { " — due \($0)" } ?? "")") } }
             }
+
+        case "milestones", "milestone":
+            // headroom-cli milestones · milestone add "<title>" [--project p] [--due D|--week n] · milestone done|pin <n|words>
+            guard PlannerStore.load().season != nil else { fail("No season. headroom-cli season set \"Main project\" 20") }
+            if args[0] == "milestone", rest.first == "add" {
+                let project = option("--project"), due = option("--due").map(dayKey), week = option("--week").flatMap(Int.init)
+                let title = rest.dropFirst().joined(separator: " ").trimmingCharacters(in: .whitespaces)
+                guard !title.isEmpty else { fail("usage: headroom-cli milestone add \"10 paying clinics\" [--project p] [--due YYYY-MM-DD | --week 6]") }
+                let m = PlannerStore.mutate { p -> Milestone in
+                    let s = p.season!
+                    let day = due ?? week.flatMap { w in Planner.date(s.start).map { Planner.key(daysFrom: $0, min(max(w, 1), s.weekCount) * 7 - 1) } }
+                    let m = Milestone(title: title, project: project ?? s.main.project, due: day)
+                    p.editSeason { $0.milestones = ($0.milestones ?? []) + [m] }
+                    return m
+                }.result
+                print("Milestone for \(m.project): \(m.title)\(m.due.map { " — due \($0)" } ?? "")")
+                return
+            }
+            if args[0] == "milestone", let verb = rest.first, verb == "done" || verb == "pin" {
+                let ref = rest.dropFirst().joined(separator: " ")
+                let (planner, outcome, _) = PlannerStore.mutate { p -> Result<Milestone, Lookup> in
+                    let open = p.season?.openMilestones ?? []
+                    let found = find(ref, numbered: open, in: p.season?.milestones ?? [])
+                    guard case .success(let m) = found else { return found }
+                    if verb == "done" { p.toggleMilestone(m.id) } else { p.editMilestone(m.id) { $0.pinned = $0.pinned == true ? nil : true } }
+                    return .success(m)
+                }
+                let m = outcome.or(ref)
+                let now = planner.season?.milestones?.first { $0.id == m.id }
+                print(verb == "pin" ? "\(now?.pinned == true ? "Pinned" : "Unpinned"): \(m.title)"
+                      : now?.done != nil ? "Milestone done: \(m.title) (+\(Milestone.xp) XP · \(levelLine(planner)))" : "Reopened: \(m.title)")
+                return
+            }
+            let s = PlannerStore.load().season!
+            let all = s.openMilestones + (s.milestones ?? []).filter { $0.done != nil }
+            if json { emitJSON(all.map { ["title": $0.title, "project": $0.project, "due": $0.due ?? NSNull(), "done": $0.done ?? NSNull(), "pinned": $0.pinned ?? false] as [String: Any] }); return }
+            if all.isEmpty { print("No milestones. headroom-cli milestone add \"…\" --week 4"); return }
+            for (i, m) in all.enumerated() {
+                print("\(m.done == nil ? "\(i + 1)." : "✓") \(m.pinned == true ? "📌 " : "")\(m.title)  (\(m.project))\(m.due.map { m.isLate(today: today) ? "  LATE — due \($0)" : "  due \($0)" } ?? "")")
+            }
+
+        case "protect":
+            // headroom-cli protect · protect add "<project>" mon,tue,wed 09:00 11:00 · protect remove <n>
+            guard PlannerStore.load().season != nil else { fail("No season. headroom-cli season set \"Main project\" 20") }
+            let names = ["", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+            if rest.first == "add" {
+                guard rest.count == 5, let days = parseWeekdays(rest[2]), let a = minutes(rest[3]), let b = minutes(rest[4]), b > a else {
+                    fail("usage: headroom-cli protect add \"Connector SaaS\" weekdays 09:00 11:00")
+                }
+                PlannerStore.mutate { $0.editSeason { $0.protected = ($0.protected ?? []) + [ProtectedTime(project: rest[1], weekdays: days, start: a, end: b)] } }
+                print("Protected for \(rest[1]): \(days.sorted().map { names[$0] }.joined(separator: "/")) \(rest[3])–\(rest[4])")
+                return
+            }
+            if rest.first == "remove" {
+                guard let n = rest.last.flatMap(Int.init) else { fail("usage: headroom-cli protect remove <n>") }
+                let ok = PlannerStore.mutate { p -> Bool in
+                    guard let list = p.season?.protected, list.indices.contains(n - 1) else { return false }
+                    p.editSeason { $0.protected?.remove(at: n - 1) }
+                    return true
+                }.result
+                guard ok else { fail("No protected time \(n).") }
+                print("Removed.")
+                return
+            }
+            let list = PlannerStore.load().season?.protected ?? []
+            if list.isEmpty { print("No protected time. headroom-cli protect add \"<project>\" weekdays 09:00 11:00"); return }
+            for (i, p) in list.enumerated() { print("\(i + 1). \(p.project)  \(p.weekdays.sorted().map { names[$0] }.joined(separator: "/")) \(TimeBlock.clock(p.start))–\(TimeBlock.clock(p.end))  (\(p.minutesPerWeek / 60) h/wk)") }
+
+        case "stack":
+            // headroom-cli stack [--keep]: today's tasks without a time, placed into free time (calendar events aren't known here).
+            let keep = flag("--keep")
+            let from = Int(ceil(Double(Calendar.current.component(.hour, from: now) * 60 + Calendar.current.component(.minute, from: now)) / 15) * 15)
+            let placed = PlannerStore.load().stack(on: today, from: from, now: now)
+            if placed.isEmpty { print("Every task for today already has a time (or the day is full)."); return }
+            if keep { PlannerStore.mutate { p in placed.forEach { _ = p.addBlock($0) } } }
+            for b in placed { print("\(TimeBlock.clock(b.start))–\(TimeBlock.clock(b.end))  \(b.title)\(b.project.map { "  (\($0))" } ?? "")") }
+            print(keep ? "\nKept \(placed.count) block\(placed.count == 1 ? "" : "s")." : "\nA suggestion. Keep it: headroom-cli stack --keep (the app's Stack Tasks also sees your calendar)")
+
+        case "top":
+            // headroom-cli top [<n|words>] [--tomorrow]: the one task the day is for.
+            let day = flag("--tomorrow") ? Planner.key(daysFrom: now, 1) : today
+            let ref = rest.joined(separator: " ")
+            if ref.isEmpty {
+                let t = PlannerStore.load().topThing(on: day)
+                print(t.map { "Top thing \(day == today ? "today" : "tomorrow"): \($0.title)\($0.isDone ? " ✓" : "")" } ?? "No top thing yet. headroom-cli top <n|words>")
+                return
+            }
+            let (_, outcome, _) = PlannerStore.mutate { p -> Result<PlannerTask, Lookup> in
+                let numbered = p.today(now).filter { !$0.isDone }
+                let found = find(ref, numbered: numbered, in: numbered + p.inbox + p.upcoming(now))
+                guard case .success(let t) = found else { return found }
+                p.updateLog(day) { $0.top = t.id }
+                return .success(t)
+            }
+            print("Top thing \(day == today ? "today" : "tomorrow"): \(outcome.or(ref).title)")
+
+        case "sync":
+            // headroom-cli sync <1-4> [--note "…"]: rate the day (1 little … 4 massive) — the daily score's last 10%.
+            guard let v = rest.first.flatMap(Int.init), (1...4).contains(v) else {
+                fail("usage: headroom-cli sync <1-4>   (1 little progress, 2 mixed, 3 solid, 4 a massive amount)")
+            }
+            let p = PlannerStore.mutate { $0.updateLog(today) { $0.progress = v } }.planner
+            print("Synced: \(DayLog.progressWords[v]). Daily score \(p.score(on: now).percent)% · \(levelLine(p))")
+
+        case "score":
+            let s = PlannerStore.load().score(on: now)
+            if json { emitJSON(["percent": s.percent, "planned": s.planned, "done": s.done, "synced": s.synced]); return }
+            print("Daily score \(s.percent)% — \(s.done) of \(s.planned) planned done\(s.synced ? ", day synced" : "; sync the day for the last 10%: headroom-cli sync 3")")
+
+        case "wrap":
+            let p = PlannerStore.load()
+            guard let s = p.season ?? p.pastSeasons.last else { fail("No season yet.") }
+            let w = SeasonWrap.of(s, planner: p, previous: p.pastSeasons.last { $0.start < s.start })
+            func hm(_ m: Int) -> String { "\(m / 60) h \(String(format: "%02d", m % 60)) m" }
+            if json {
+                emitJSON(["start": s.start, "days": w.days, "focusMinutes": w.focusMinutes, "focusDays": w.focusDays, "tasksDone": w.tasksDone,
+                          "milestonesDone": w.milestonesDone, "milestones": w.milestones, "onTrackWeeks": w.onTrack, "weeks": w.weeks,
+                          "peak": w.peak?.rawValue ?? NSNull(), "quests": w.quests.map { ["project": $0.project, "minutes": $0.minutes, "target": $0.target] }])
+                return
+            }
+            print("Season \(s.start) · \(w.days) days\(s.ended == nil ? " so far" : "")")
+            print("  \(w.focusDays) days in focus · \(hm(w.focusMinutes)) deep work · \(w.tasksDone) tasks closed · milestones \(w.milestonesDone)/\(w.milestones)")
+            if w.weeks > 0 { print("  \(w.onTrack) of \(w.weeks) quest-weeks on track") }
+            if let peak = w.peak { print("  \(peak.chronotype)") }
+            if let prev = w.previousFocusMinutes { print("  Focus vs last season: \(w.focusMinutes >= prev ? "+" : "−")\(hm(abs(w.focusMinutes - prev)))") }
+            for q in w.quests { print("  \(q.project): \(hm(q.minutes)) of \(q.target / 60) h") }
 
         default:
             break
@@ -590,3 +720,4 @@ protocol Titled: Identifiable where ID == UUID { var title: String { get } }
 extension PlannerTask: Titled {}
 extension Habit: Titled {}
 extension Reward: Titled {}
+extension Milestone: Titled {}

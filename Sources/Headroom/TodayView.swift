@@ -101,7 +101,7 @@ extension AppModel {
     func blockStarting(_ now: Date = .now) -> TimeBlock? {
         let m = Calendar.current.component(.hour, from: now) * 60 + Calendar.current.component(.minute, from: now)
         guard planner.runningSession == nil,
-              let b = planner.blocks(on: Planner.key(now)).first(where: { $0.start <= m && m < $0.start + 2 }) else { return nil }
+              let b = planner.blocks(on: Planner.key(now)).first(where: { $0.done == nil && $0.start - 2 <= m && m < $0.start + 2 }) else { return nil }
         let key = b.id.uuidString
         guard UserDefaults.standard.string(forKey: "lastBlockNotice") != key else { return nil }
         UserDefaults.standard.set(key, forKey: "lastBlockNotice")
@@ -113,9 +113,27 @@ extension AppModel {
         let now = Date(), day = Planner.key(now)
         let from = Int(ceil(Double(Calendar.current.component(.hour, from: now) * 60 + Calendar.current.component(.minute, from: now)) / 15) * 15)
         let busy = LifeCoach.shared.events(on: day).filter { !$0.allDay }.map { DateInterval(start: $0.start, end: max($0.start, $0.end)) }
-        guard let start = planner.firstFree(on: day, from: from, minutes: minutes, busy: busy) else { show("No free \(minutes) minutes left today"); return }
+        guard let start = planner.firstFree(on: day, from: from, minutes: minutes, busy: busy, allow: task.project) else { show("No free \(minutes) minutes left today"); return }
         plan { _ = $0.addBlock(TimeBlock(title: task.title, day: day, start: start, end: start + minutes, project: task.project, taskID: task.id)) }
         show("Blocked \(TimeBlock.clock(start))–\(TimeBlock.clock(start + minutes)) for \(task.title)")
+    }
+
+    /// The stack: today's tasks without a time, placed in free time from the next quarter hour (proposals only).
+    func stackToday() -> [TimeBlock] {
+        let now = Date(), day = Planner.key(now)
+        let from = Int(ceil(Double(Calendar.current.component(.hour, from: now) * 60 + Calendar.current.component(.minute, from: now)) / 15) * 15)
+        let busy = LifeCoach.shared.events(on: day).filter { !$0.allDay }.map { DateInterval(start: $0.start, end: max($0.start, $0.end)) }
+        return planner.stack(on: day, from: from, busy: busy, now: now)
+    }
+
+    /// Changes one block (done, how it felt, whether it's scored); marking one done can earn the day's score.
+    func editBlock(_ id: UUID, _ change: @escaping (inout TimeBlock) -> Void) {
+        plan { p in if let i = p.blocks.firstIndex(where: { $0.id == id }) { change(&p.blocks[i]) } }
+    }
+
+    /// The one task a day is for. Picking it again clears it.
+    func setTopThing(_ task: PlannerTask, day: String) {
+        updateLog(day) { $0.top = $0.top == task.id ? nil : task.id }
     }
 
     /// Today's journal and check-in.
@@ -125,10 +143,31 @@ extension AppModel {
 
     func startFocus(_ title: String, task: PlannerTask? = nil) {
         reward { _ = $0.startFocus(title, taskID: task?.id) } // ending a running session can pay out
+        FocusSound.shared.sync(running: true)
+    }
+
+    /// Ticks a season milestone (+30 XP), or unticks it.
+    func toggleMilestone(_ id: UUID) {
+        reward { $0.toggleMilestone(id) }
     }
 
     func stopFocus() {
+        let running = planner.runningSession
         reward { _ = $0.stopFocus() }
+        FocusSound.shared.sync(running: false)
+        // Ask how it went only for a real session, not a click.
+        if let running, let stopped = planner.sessions.first(where: { $0.id == running.id }), stopped.minutes() >= FocusSession.minMinutes {
+            justStopped = stopped
+        }
+    }
+
+    /// The answers to "Finished this task? How did it feel?".
+    func finishSession(_ id: UUID, feel: Feel?, taskDone: Bool) {
+        plan { p in if let i = p.sessions.firstIndex(where: { $0.id == id }) { p.sessions[i].feel = feel } }
+        if taskDone, let s = planner.sessions.first(where: { $0.id == id }), let t = s.taskID.flatMap({ id in planner.tasks.first { $0.id == id } }), !t.isDone {
+            toggleTask(t)
+        }
+        justStopped = nil
     }
 
     func buy(_ r: Reward) {
@@ -182,6 +221,7 @@ struct TodayView: View {
                         alsoToday
                     }
                     VStack(alignment: .leading, spacing: 14) {
+                        DailySyncCard()
                         DayLogCard()
                         habits
                         later
@@ -192,6 +232,7 @@ struct TodayView: View {
         }
         .overlay(alignment: .top) { RewardBurst(reward: model.plannerReward).padding(.top, 60) }
         .onAppear { model.reloadPlannerIfChanged() }
+        .sheet(item: $model.justStopped) { s in FocusFeelSheet(session: s) }
         .sheet(item: $editingHabit) { draft in
             HabitEditor(draft: draft) { saved in
                 model.plan { p in
@@ -390,6 +431,11 @@ struct TaskRow: View {
             Menu("Block Time Today") {
                 ForEach([30, 60, 90, 120], id: \.self) { m in Button(Minutes.text(Double(m) * 60)) { model.blockTime(for: task, minutes: m) } }
             }
+        }
+        if !task.isDone {
+            let today = Planner.key(.now), tomorrow = Planner.key(daysFrom: .now, 1)
+            Button(model.planner.log(on: today)?.top == task.id ? "Not Today's Top Thing" : "Make Today's Top Thing") { model.setTopThing(task, day: today) }
+            Button(model.planner.log(on: tomorrow)?.top == task.id ? "Not Tomorrow's Top Thing" : "Make Tomorrow's Top Thing") { model.setTopThing(task, day: tomorrow) }
         }
         Picker("Effort", selection: Binding(get: { task.effort }, set: { e in model.plan { $0.update(task.id) { $0.effort = e } } })) {
             Text("Easy  (+10)").tag(1); Text("Medium  (+20)").tag(2); Text("Hard  (+30)").tag(3)
@@ -730,12 +776,38 @@ enum PlannerDemo {
         }
         log[season.weekDays(7).first!] = ["magicteams": 9 * 60 + 40, "headroom": 2 * 60 + 15, "flare-forge": 2 * 60 + 5]
         season.log = log
+        season.support = ["Admin", "Gym 3× a week"]
+        season.manifesto = "This season I get magicteams to 10 paying clinics. Mornings are for selling and shipping; I say no to new side projects until it's done."
+        season.signed = now.addingTimeInterval(-51 * 86_400)
+        func due(_ week: Int) -> String { Planner.key(daysFrom: Planner.date(season.start) ?? now, week * 7 - 1) }
+        var shipped = Milestone(title: "Front desk books from missed calls", project: "magicteams", due: due(3)); shipped.done = due(3)
+        var pricing = Milestone(title: "Pricing page live", project: "magicteams", due: due(8)); pricing.pinned = true
+        var notch = Milestone(title: "Coach in the notch", project: "Headroom", due: due(6)); notch.done = due(6)
+        season.milestones = [shipped, pricing, notch,
+                             Milestone(title: "10 paying clinics", project: "magicteams", due: due(12)),
+                             Milestone(title: "Flare runs on 3 repos", project: "flare-forge", due: due(10))]
+        season.protected = [ProtectedTime(project: "magicteams", weekdays: [2, 3, 4, 5, 6], start: 9 * 60, end: 11 * 60)]
         p.season = season
+        var past = Season(start: Planner.key(daysFrom: now, -135), end: Planner.key(daysFrom: now, -52), main: .init(project: "Headroom", hoursPerWeek: 15))
+        past.ended = past.end
+        p.pastSeasons = [past]
         let m = Calendar.current.component(.hour, from: now) * 60
         for (title, a, len, project) in [("Outreach: 20 clinics", m - 120, 90, "magicteams"), ("Pricing page", m + 60, 90, "magicteams"),
                                          ("Coach card polish", m + 180, 60, "Headroom")] {
             p.addBlock(TimeBlock(title: title, day: today, start: max(0, a), end: max(0, a) + len, project: project))
         }
+        p.blocks[0].done = now; p.blocks[0].feel = .energizing
+        // How sessions felt, for the energy card: mornings lift, late afternoons drain.
+        for back in 1...10 {
+            let day = Calendar.current.startOfDay(for: now.addingTimeInterval(-Double(back) * 86_400))
+            var a = FocusSession(title: "Outreach", start: day.addingTimeInterval(9 * 3600), area: "magicteams")
+            a.end = a.start.addingTimeInterval(80 * 60); a.feel = back % 4 == 0 ? .neutral : .energizing
+            var b = FocusSession(title: "Bug fixing", start: day.addingTimeInterval(16 * 3600), area: "Headroom")
+            b.end = b.start.addingTimeInterval(50 * 60); b.feel = back % 3 == 0 ? .energizing : .draining
+            p.sessions += [a, b]
+        }
+        if let top = p.tasks.first(where: { $0.big && !$0.isDone }) { p.updateLog(today, now: now) { $0.top = top.id } }
+        p.updateLog(Planner.key(daysFrom: now, -1), now: now) { $0.progress = 3 }
         p.challenges = [Challenge(title: "Write 20× in 30 days", habitID: write.id, target: 20, start: Planner.key(daysFrom: now, -12), end: Planner.key(daysFrom: now, 17)),
                         Challenge(title: "Commit something 14× in 14 days", habitID: ship2.id, target: 14, start: Planner.key(daysFrom: now, -16), end: Planner.key(daysFrom: now, -3))]
         return p

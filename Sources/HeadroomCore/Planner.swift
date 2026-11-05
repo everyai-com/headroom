@@ -22,6 +22,8 @@ public struct Planner: Codable, Sendable, Equatable {
     public var logs: [DayLog] = []
     /// Time blocks you (or the coach, once you accept) placed in a day (FocusPlan.swift).
     public var blocks: [TimeBlock] = []
+    /// Seasons you finished, for the season wrap and "compared with last season".
+    public var pastSeasons: [Season] = []
 
     public init() {}
 
@@ -37,6 +39,7 @@ public struct Planner: Codable, Sendable, Equatable {
         season = try c.decodeIfPresent(Season.self, forKey: .season)
         logs = try c.decodeIfPresent([DayLog].self, forKey: .logs) ?? []
         blocks = (try? c.decodeIfPresent([TimeBlock].self, forKey: .blocks)) ?? []
+        pastSeasons = (try? c.decodeIfPresent([Season].self, forKey: .pastSeasons)) ?? []
     }
 
     /// Only three tasks a day can be big: choosing is the point.

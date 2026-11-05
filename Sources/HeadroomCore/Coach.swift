@@ -97,6 +97,9 @@ public struct DayContext: Sendable {
     /// Last night's sleep estimate, and today's (or, in the morning, yesterday's) journal and check-in.
     public var sleep: SleepEstimate?
     public var logs: [DayLog] = []
+    /// What the coach knows about the user (their coach-memory.md), and a brain dump to sort (`.dump`).
+    public var memory = ""
+    public var dump = ""
     public init(now: Date, planner: Planner, events: [CalendarEvent] = [], commits: [Commit] = [],
                 byProject: [(name: String, minutes: Int)] = [], byKind: [(name: String, minutes: Int)] = [],
                 quests: [QuestStatus] = [], seasonWeek: [String: Int] = [:]) {
@@ -113,11 +116,16 @@ public struct CoachPlan: Codable, Sendable, Equatable {
     /// Time blocks for the day (or the rest of the season week), and the weekly review's specific fixes.
     public var blocks: [BlockSuggestion] = []
     public var recommendations: [Recommendation] = []
-    public init(big: [String] = [], tasks: [String] = [], note: String = "", blocks: [BlockSuggestion] = [], recommendations: [Recommendation] = []) {
+    /// Lines worth keeping in the coach's memory, and (evening) the one task tomorrow is for.
+    public var remember: [String] = []
+    public var top: String?
+    public init(big: [String] = [], tasks: [String] = [], note: String = "", blocks: [BlockSuggestion] = [], recommendations: [Recommendation] = [],
+                remember: [String] = [], top: String? = nil) {
         self.big = big; self.tasks = tasks; self.note = note; self.blocks = blocks; self.recommendations = recommendations
+        self.remember = remember; self.top = top
     }
 
-    enum CodingKeys: String, CodingKey { case big, tasks, note, blocks, recommendations }
+    enum CodingKeys: String, CodingKey { case big, tasks, note, blocks, recommendations, remember, top }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         big = (try? c.decodeIfPresent([String].self, forKey: .big)) ?? []
@@ -125,11 +133,13 @@ public struct CoachPlan: Codable, Sendable, Equatable {
         note = (try? c.decodeIfPresent(String.self, forKey: .note)) ?? ""
         blocks = (try? c.decodeIfPresent([BlockSuggestion].self, forKey: .blocks)) ?? []
         recommendations = (try? c.decodeIfPresent([Recommendation].self, forKey: .recommendations)) ?? []
+        remember = (try? c.decodeIfPresent([String].self, forKey: .remember)) ?? []
+        top = (try? c.decodeIfPresent(String.self, forKey: .top)) ?? nil
     }
 }
 
 public enum Coach {
-    public enum Moment: String, Sendable { case morning, evening, week }
+    public enum Moment: String, Sendable { case morning, evening, week, dump }
 
     /// The prompt for `claude -p`. Plain facts, then the ask, then the exact JSON shape wanted back.
     public static func prompt(_ m: Moment, _ c: DayContext, calendar: Calendar = .current) -> String {
@@ -158,12 +168,29 @@ public enum Coach {
 
             Weekly review of the SEASON. For each quest give an honest read (on track, adjust, off track) and why, in "note" \
             (4–6 sentences). Then 2–3 "recommendations": each a specific fix with a short title ("Move X to your mornings") \
-            and "why" grounded in the numbers above (when work actually happened, what keeps slipping). Then "blocks": time \
-            blocks for the rest of this season week (each with its "day" YYYY-MM-DD and "project") that close the unblocked \
-            hours, around calendar events. Leave "big" and "tasks" empty.
+            and "why" grounded in the numbers above (when work actually happened, what keeps slipping, energy patterns). \
+            Check each open milestone: is the work left realistic before its due day? Name any that needs a new date or \
+            splitting. Then "blocks": time blocks for the rest of this season week (each with its "day" YYYY-MM-DD and \
+            "project") that close the unblocked hours, inside protected time where there is some, around calendar events. \
+            Leave "big" and "tasks" empty.
+            """)
+        case .dump:
+            lines.append("""
+
+            The user brain-dumped this (notes, a meeting, a list, half-thoughts):
+            \"\"\"
+            \(c.dump.prefix(6000))
+            \"\"\"
+            Pull out every concrete action as a short task starting with a verb, reusing open task titles exactly when \
+            one matches. Put at most 3 that matter most for the season today in "big" (only if today still has room), \
+            the rest in "tasks". In "remember", 0–3 short facts about how the user works, people or preferences worth \
+            keeping (only ones stated in the dump). In "note", one sentence on what you pulled out.
             """)
         }
-        lines.append(#"Reply with ONLY this JSON, no code fence: {"big": ["…"], "tasks": ["…"], "blocks": [{"title": "…", "day": "YYYY-MM-DD", "start": "HH:mm", "end": "HH:mm", "project": "…"}], "recommendations": [{"title": "…", "why": "…"}], "note": "…"}"#)
+        if m == .evening {
+            lines.append(#"Also set "top": the ONE task (exact title from big) tomorrow is for — the thing that makes tomorrow a success if nothing else gets done."#)
+        }
+        lines.append(#"Reply with ONLY this JSON, no code fence: {"big": ["…"], "tasks": ["…"], "blocks": [{"title": "…", "day": "YYYY-MM-DD", "start": "HH:mm", "end": "HH:mm", "project": "…"}], "recommendations": [{"title": "…", "why": "…"}], "remember": ["…"], "top": "…", "note": "…"}"#)
         return lines.joined(separator: "\n")
     }
 
@@ -180,6 +207,8 @@ public enum Coach {
         func hm(_ minutes: Int) -> String { "\(minutes / 60)h\(String(format: "%02d", minutes % 60))" }
         var lines: [String] = []
         lines.append("You are the user's coach inside Headroom, their life OS. It is \(time.string(from: c.now)).")
+        let memory = c.memory.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !memory.isEmpty { lines.append("\nWHAT YOU KNOW ABOUT THEM (their own notes, trust these):\n" + String(memory.prefix(3000))) }
         if let s = c.planner.season, s.isActive(on: today) {
             let quests = [s.main] + s.sides
             lines.append("\nSEASON until \(s.end) (hours this week / planned per week):")
@@ -192,6 +221,21 @@ public enum Coach {
                     let weeks = row.weeks.enumerated().filter { $0.element != .upcoming }.map { "w\($0.offset + 1) \($0.element.rawValue)" }
                     lines.append("- \(row.quest.project): " + weeks.joined(separator: ", "))
                 }
+            }
+            if let m = s.manifesto, !m.isEmpty { lines.append("THEIR SIGNED SEASON COMMITMENT: \"\(m.prefix(600))\"") }
+            if let support = s.support, !support.isEmpty { lines.append("SUPPORT AREAS (keep up, don't grow): " + support.joined(separator: ", ")) }
+            let open = s.openMilestones
+            if !open.isEmpty {
+                lines.append("OPEN MILESTONES:")
+                open.prefix(12).forEach { m in
+                    lines.append("- \(m.pinned == true ? "[NOW] " : "")\(m.title) (\(m.project))\(m.due.map { m.isLate(today: today) ? " — LATE, was due \($0)" : " — due \($0)" } ?? "")")
+                }
+            }
+            if let protected = s.protected, !protected.isEmpty {
+                let names = ["", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+                lines.append("PROTECTED TIME: " + protected.map { p in
+                    "\(p.project) \(p.weekdays.sorted().map { names[$0] }.joined(separator: "/")) \(TimeBlock.clock(p.start))–\(TimeBlock.clock(p.end))"
+                }.joined(separator: "; "))
             }
             if let strength = PlanStrength.of(c.planner, done: c.seasonWeek, now: c.now, calendar: calendar) {
                 let gaps = strength.gaps.map { "\($0.key) \(hm($0.value))" }.sorted().joined(separator: ", ")
@@ -248,6 +292,19 @@ public enum Coach {
         }
         let focus = c.planner.focusMinutes(on: c.now, calendar: calendar)
         if focus > 0 { lines.append("FOCUS TODAY: \(hm(focus))") }
+        let score = c.planner.score(on: c.now, now: c.now, calendar: calendar)
+        if score.planned > 0 { lines.append("DAILY SCORE so far: \(score.percent)% (\(score.done) of \(score.planned) planned things done)") }
+        for day in [today, tomorrow] {
+            if let t = c.planner.topThing(on: day) { lines.append("TOP THING \(day == today ? "TODAY" : "TOMORROW"): \(t.title)\(t.isDone ? " (done)" : "")") }
+        }
+        for l in c.logs where l.isSynced {
+            lines.append("\(l.day == today ? "TODAY" : l.day) RATED: \(DayLog.progressWords[l.progress ?? 0])")
+        }
+        let energy = EnergyPatterns.lines(c.planner, since: c.now.addingTimeInterval(-30 * 86_400), calendar: calendar)
+        if !energy.isEmpty { lines.append("ENERGY (last 30 days, from how blocks and sessions felt): " + energy.joined(separator: "; ")) }
+        if let peak = DayPart.peak(c.planner.sessions.filter { $0.start > c.now.addingTimeInterval(-30 * 86_400) }, calendar: calendar) {
+            lines.append("MOST FOCUS HAPPENS: \(peak.rawValue)")
+        }
         if !c.commits.isEmpty {
             let per = Dictionary(grouping: c.commits, by: \.project).map { "\($0.key) \($0.value.count)" }.sorted()
             lines.append("COMMITS TODAY: " + per.joined(separator: ", "))
@@ -281,7 +338,9 @@ public enum Coach {
             return e > a && !b.title.trimmingCharacters(in: .whitespaces).isEmpty
         }.prefix(20))
         p.recommendations = Array(p.recommendations.prefix(4))
-        return p.big.isEmpty && p.tasks.isEmpty && p.note.isEmpty && p.blocks.isEmpty && p.recommendations.isEmpty ? nil : p
+        p.remember = Array(p.remember.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.prefix(5))
+        p.top = p.top.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 }
+        return p.big.isEmpty && p.tasks.isEmpty && p.note.isEmpty && p.blocks.isEmpty && p.recommendations.isEmpty && p.remember.isEmpty ? nil : p
     }
 }
 

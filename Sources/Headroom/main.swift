@@ -90,7 +90,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             LifeCoach.shared.update()
             FocusShield.shared.attach(model)
             model.recordSeason(ActivityRecorder.shared.weekProjectMinutes)
-            if model.notificationsEnabled, let b = model.blockStarting() { notify("Time for: \(b.title)", "Your \(Minutes.text(Double(b.minutes) * 60)) block starts now — start a focus session from Today.") }
+            FocusSound.shared.sync(running: model.planner.runningSession != nil) // a session started or stopped from the CLI
+            if model.notificationsEnabled, let b = model.blockStarting() {
+                let soon = b.start > Calendar.current.component(.hour, from: .now) * 60 + Calendar.current.component(.minute, from: .now)
+                notify("\(soon ? "Up next" : "Time for"): \(b.title)", "Your \(Minutes.text(Double(b.minutes) * 60)) block \(soon ? "starts in 2 minutes" : "starts now") — start a focus session from Today.")
+            }
             if LifeCoach.shared.available {
                 model.applyProof(LifeCoach.shared.commits)
                 if ticks % 4 == 0 { LifeCoach.shared.detectFocus(model: model) } // every 2 minutes

@@ -29,7 +29,7 @@ public struct QuotaTrack: Codable, Sendable, Equatable, Hashable {
 }
 
 /// Up to 12 weeks, one main quest, up to two side quests, each with the hours a week you mean to give it.
-public struct Season: Codable, Sendable, Equatable {
+public struct Season: Codable, Sendable, Equatable, Identifiable {
     public struct Quest: Codable, Sendable, Equatable, Hashable, Identifiable {
         public var project: String
         public var hoursPerWeek: Int
@@ -44,12 +44,23 @@ public struct Season: Codable, Sendable, Equatable {
     public var sides: [Quest]
     /// Minutes per quest (project, lowercased) for each season week, keyed by the week's first day.
     public var log: [String: [String: Int]]?
+    /// Areas that still need doing but don't move the season (admin, gym): named so the coach plans around them.
+    public var support: [String]?
+    /// Checkpoints per quest, and the weekly hours you protect for each (SeasonPlan.swift).
+    public var milestones: [Milestone]?
+    public var protected: [ProtectedTime]?
+    /// What you commit to this season, in your words, and when you signed it.
+    public var manifesto: String?
+    public var signed: Date?
+    /// Set when the season was ended (early or on time) and moved to `Planner.pastSeasons`.
+    public var ended: String?
 
     public init(start: String, end: String, main: Quest, sides: [Quest] = []) {
         self.start = start; self.end = end; self.main = main; self.sides = Array(sides.prefix(Self.maxSideQuests))
     }
 
     public var quests: [Quest] { [main] + sides }
+    public var id: String { start }
 
     public func isActive(on day: String) -> Bool { day >= start && day <= end }
 }

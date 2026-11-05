@@ -12,6 +12,8 @@ struct DayPlanCard: View {
     @State private var title = ""
     @State private var start = Calendar.current.date(bySettingHour: Calendar.current.component(.hour, from: .now) + 1, minute: 0, second: 0, of: .now) ?? .now
     @State private var length = 60
+    /// The stack's proposals: today's tasks placed in free time, shown as ghosts until you keep them.
+    @State private var proposals: [TimeBlock] = []
 
     enum Row: Identifiable {
         case event(CalendarEvent), block(TimeBlock)
@@ -27,12 +29,29 @@ struct DayPlanCard: View {
     var body: some View {
         let day = Planner.key(.now)
         let blocks = model.planner.blocks(on: day)
-        let rows = (coach.events(on: day).filter { !$0.allDay }.map(Row.event) + blocks.map(Row.block)).sorted { $0.start < $1.start }
+        let rows = (coach.events(on: day).filter { !$0.allDay }.map(Row.event)
+                    + (blocks + model.planner.protectedBlocks(on: day) + proposals).map(Row.block)).sorted { $0.start < $1.start }
+        let score = model.planner.score()
         let now = Calendar.current.component(.hour, from: .now) * 60 + Calendar.current.component(.minute, from: .now)
         let blocked = blocks.reduce(0) { $0 + $1.minutes }
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                SectionTitle(title: "Day plan", trailing: blocks.isEmpty ? nil : "\(Minutes.text(Double(blocked) * 60)) blocked")
+                HStack(alignment: .firstTextBaseline) {
+                    SectionTitle(title: "Day plan", trailing: blocks.isEmpty ? nil : "\(Minutes.text(Double(blocked) * 60)) blocked")
+                    if score.planned > 0 {
+                        Text("Daily score \(score.percent)%").font(Theme.number(11.5, weight: .semibold))
+                            .foregroundStyle(score.percent >= 90 ? Theme.safe : Theme.textSecondary)
+                            .help("Planned tasks, blocks and habits done count up to 90%; the evening sync is the last 10%. \(score.done) of \(score.planned) done.")
+                    }
+                    if !snapshot {
+                        Button(proposals.isEmpty ? "Stack Tasks" : "Discard") {
+                            proposals = proposals.isEmpty ? model.stackToday() : []
+                            if proposals.isEmpty { model.show("Every task for today already has a time") }
+                        }
+                        .buttonStyle(GhostButtonStyle()).controlSize(.small)
+                        .help("Place today's tasks without a time into free time — a quest's tasks go into its protected time first")
+                    }
+                }
                 if rows.isEmpty {
                     Text("Give your Big 3 a time. Right-click a task › Block Time Today, add one below, or press Plan My Day and the coach blocks the day around your calendar.")
                         .font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
@@ -42,12 +61,33 @@ struct DayPlanCard: View {
                     case .event(let e):
                         line(time: e.start.formatted(date: .omitted, time: .shortened), title: e.title, detail: e.calendar,
                              tint: Theme.textTertiary, symbol: "calendar", past: e.end < .now, current: e.start <= .now && .now < e.end)
+                    case .block(let b) where b.protected == true:
+                        line(time: clock(b.start), title: "Protected for \(b.title)", detail: "\(clock(b.start))–\(clock(b.end)) · kept free for this quest",
+                             tint: Theme.accent.opacity(0.45), symbol: "lock", past: b.end <= now, current: false)
+                            .opacity(0.75)
+                    case .block(let b) where proposals.contains { $0.id == b.id }:
+                        line(time: clock(b.start), title: b.title, detail: "\(Minutes.text(Double(b.minutes) * 60)) · suggested by the stack",
+                             tint: Theme.accent, symbol: "square.dashed", past: false, current: false)
+                            .opacity(0.6)
+                            .overlay(alignment: .trailing) {
+                                HStack(spacing: 4) {
+                                    Button("Keep") { keep([b]) }.buttonStyle(GhostButtonStyle()).controlSize(.small)
+                                    Button { proposals.removeAll { $0.id == b.id } } label: { Image(systemName: "xmark") }
+                                        .buttonStyle(.borderless).help("Discard")
+                                }
+                            }
                     case .block(let b):
                         let current = b.start <= now && now < b.end
-                        line(time: clock(b.start), title: b.title, detail: "\(Minutes.text(Double(b.minutes) * 60))\(b.fromCoach == true ? " · from the coach" : "")",
-                             tint: Theme.accent, symbol: "square.fill", past: b.end <= now, current: current)
+                        let task = b.taskID.flatMap { id in model.planner.tasks.first { $0.id == id } }
+                        let done = b.done != nil || task?.isDone == true
+                        line(time: clock(b.start), title: b.title,
+                             detail: "\(Minutes.text(Double(b.minutes) * 60))\(b.fromCoach == true ? " · from the coach" : "")\(b.feel.map { " · " + $0.title.lowercased() } ?? "")\(b.counts == false ? " · not scored" : "")",
+                             tint: Theme.accent, symbol: "square.fill", past: b.end <= now || done, current: current && !done)
+                            .overlay(alignment: .leading) {
+                                if done { Image(systemName: "checkmark").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.safe).offset(x: 69) }
+                            }
                             .overlay(alignment: .trailing) {
-                                if current && model.planner.runningSession == nil && !snapshot {
+                                if current && !done && model.planner.runningSession == nil && !snapshot {
                                     Button { model.startFocus(b.title, task: b.taskID.flatMap { id in model.planner.tasks.first { $0.id == id } }) } label: {
                                         Label("Focus", systemImage: "timer")
                                     }
@@ -55,13 +95,40 @@ struct DayPlanCard: View {
                                 }
                             }
                             .contextMenu {
+                                if let task {
+                                    Button(task.isDone ? "Mark Task Not Done" : "Mark Task Done") { model.toggleTask(task) }
+                                } else {
+                                    Button(b.done == nil ? "Mark Done" : "Mark Not Done") { model.editBlock(b.id) { $0.done = $0.done == nil ? .now : nil } }
+                                }
+                                Menu("How It Felt") {
+                                    ForEach(Feel.allCases, id: \.self) { f in
+                                        Button { model.editBlock(b.id) { $0.feel = $0.feel == f ? nil : f } } label: {
+                                            Label(f.title, systemImage: b.feel == f ? "checkmark" : f.symbol)
+                                        }
+                                    }
+                                }
+                                if task == nil {
+                                    Button(b.counts == false ? "Count Toward Daily Score" : "Leave Out of Daily Score") {
+                                        model.editBlock(b.id) { $0.counts = $0.counts == false ? nil : false }
+                                    }
+                                }
+                                Divider()
                                 Button("Remove Block", role: .destructive) { model.plan { p in p.blocks.removeAll { $0.id == b.id } } }
                             }
                     }
                 }
+                if proposals.count > 1 && !snapshot {
+                    Button("Keep All \(proposals.count)") { keep(proposals) }.buttonStyle(PrimaryButtonStyle()).controlSize(.small)
+                }
                 if !snapshot { adder(day) }
             }
         }
+    }
+
+    func keep(_ list: [TimeBlock]) {
+        let added = model.plan { p in list.filter { p.addBlock($0) != nil }.count }
+        proposals.removeAll { b in list.contains { $0.id == b.id } }
+        if added < list.count { model.show("\(list.count - added) clashed with something new — left out") }
     }
 
     /// The Mac's own time format, like the calendar rows (9:30 AM or 09:30).
@@ -208,7 +275,13 @@ final class FocusShield {
     /// From app switches, and from the timeline's samples (which know the browser's site).
     func check(_ front: ActivitySpan, pid: pid_t? = nil) {
         guard let model, model.plannerAddOn else { return }
-        let reaction = FocusMode.react(Self.mode, running: model.planner.runningSession, front: front,
+        // The top thing: until today's one task is done, the shield acts as if you were focusing on it.
+        var running = model.planner.runningSession
+        if running == nil, UserDefaults.standard.bool(forKey: "guardTopThing"),
+           let top = model.planner.topThing(on: Planner.key(.now)), !top.isDone {
+            running = FocusSession(title: top.title, start: Calendar.current.startOfDay(for: .now))
+        }
+        let reaction = FocusMode.react(Self.mode, running: running, front: front,
                                        classifier: ActivityRecorder.shared.classifier, lastReminder: lastReminder)
         switch reaction {
         case .none: break
@@ -230,6 +303,8 @@ struct FocusQuality: View {
     @EnvironmentObject var model: AppModel
     @ObservedObject var timeline = ActivityRecorder.shared
     @AppStorage("focusShield") private var shield = FocusMode.Shield.remind.rawValue
+    @AppStorage("guardTopThing") private var guardTop = false
+    @AppStorage(FocusSound.key) private var sound = FocusSound.Kind.off.rawValue
     @Environment(\.snapshotMode) private var snapshot
     var session: FocusSession
 
@@ -239,9 +314,9 @@ struct FocusQuality: View {
                let q = FocusMode.quality(session, spans: timeline.allToday, classifier: timeline.classifier) {
                 Text("\(Int(q * 100))% focused").font(Theme.number(11.5, weight: .semibold))
                     .foregroundStyle(q >= 0.85 ? Theme.safe : Theme.review)
-                    .help("Share of this session not spent on distracting apps and sites (from the timeline)")
+                    .help("\(FocusMode.verdict(q)). Share of this session not spent on distracting apps and sites (from the timeline).")
             }
-            if !snapshot { shieldMenu }
+            if !snapshot { shieldMenu; soundMenu }
         }
     }
 
@@ -253,11 +328,27 @@ struct FocusQuality: View {
                     Text("Hide distracting apps").tag(FocusMode.Shield.hide.rawValue)
                 }
                 .pickerStyle(.inline)
+                Divider()
+                Toggle("Guard Today's Top Thing Until It's Done", isOn: $guardTop)
             } label: {
                 Image(systemName: shield == FocusMode.Shield.off.rawValue ? "shield.slash" : "shield.lefthalf.filled")
             }
             .menuStyle(.borderlessButton).fixedSize()
             .help("Shield: what happens when a distraction comes up during focus")
+    }
+
+    var soundMenu: some View {
+        Menu {
+            Picker("Focus sound", selection: $sound) {
+                ForEach(FocusSound.Kind.allCases, id: \.self) { Text($0.title).tag($0.rawValue) }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            Image(systemName: sound == FocusSound.Kind.off.rawValue ? "speaker.slash" : "waveform")
+        }
+        .menuStyle(.borderlessButton).fixedSize()
+        .onChange(of: sound) { FocusSound.shared.sync(running: model.planner.runningSession != nil) }
+        .help("A sound that plays while you focus — made on this Mac, nothing streamed")
     }
 }
 

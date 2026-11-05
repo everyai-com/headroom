@@ -381,6 +381,7 @@ struct LifeHome: View {
             }
         }
         .sheet(isPresented: $editingSeason) { SeasonEditor(season: p.season, projects: knownProjects) }
+        .sheet(item: $model.wrapSeason) { s in SeasonWrapSheet(season: s) }
     }
 
     var knownProjects: [String] {
@@ -479,6 +480,7 @@ struct LifeHome: View {
                         Button { editingSeason = true } label: { Image(systemName: "pencil") }.buttonStyle(.plain).foregroundStyle(Theme.textTertiary)
                     }
                     SeasonGrid(season: season)
+                    SeasonDetails(season: season)
                     Divider().opacity(0.4)
                     ForEach(season.quests) { q in
                         let have = weekMinutes[q.project.lowercased()] ?? 0
@@ -509,7 +511,13 @@ struct LifeHome: View {
                     SectionTitle(title: "Season", trailing: nil)
                     Text("Many projects, one at a time: pick a main quest and up to two side quests for up to 12 weeks, with the hours each deserves. Each week gets an honest read: on track, adjust or off track.")
                         .font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
-                    Button("Start a Season") { editingSeason = true }.buttonStyle(GhostButtonStyle())
+                    HStack {
+                        Button(p.season == nil ? "Start a Season" : "Plan My Next Season") { editingSeason = true }.buttonStyle(GhostButtonStyle())
+                        if let last = p.season ?? p.pastSeasons.last {
+                            Button { model.wrapSeason = last } label: { Label("Last Season's Wrap", systemImage: "sparkles.rectangle.stack") }
+                                .buttonStyle(GhostButtonStyle())
+                        }
+                    }
                 }
             }
         }
@@ -548,69 +556,5 @@ struct LifeHome: View {
             }
         }
         .frame(maxWidth: .infinity)
-    }
-}
-
-struct SeasonEditor: View {
-    @EnvironmentObject var model: AppModel
-    @Environment(\.dismiss) private var dismiss
-    var projects: [String]
-    @State private var main: String
-    @State private var mainHours: Int
-    @State private var sides: [(String, Int)]
-    @State private var weeks = 12
-
-    init(season: Season?, projects: [String]) {
-        self.projects = projects
-        if let season { _weeks = State(initialValue: min(12, max(1, season.weekCount))) }
-        _main = State(initialValue: season?.main.project ?? "")
-        _mainHours = State(initialValue: season?.main.hoursPerWeek ?? 20)
-        let s = season?.sides.map { ($0.project, $0.hoursPerWeek) } ?? []
-        _sides = State(initialValue: s + Array(repeating: ("", 4), count: Season.maxSideQuests - s.count))
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Your season").font(.system(size: 17, weight: .bold))
-            Text("One main quest gets most of your hours; up to two side quests keep moving. Everything else waits for the next season — that's the point.")
-                .font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
-            row("Main quest", $main, $mainHours)
-            ForEach(sides.indices, id: \.self) { i in
-                row("Side quest \(i + 1)", Binding(get: { sides[i].0 }, set: { sides[i].0 = $0 }), Binding(get: { sides[i].1 }, set: { sides[i].1 = $0 }))
-            }
-            Stepper("Lasts \(weeks) week\(weeks == 1 ? "" : "s")", value: $weeks, in: 1...12)
-            HStack {
-                if model.planner.season != nil {
-                    Button("End Season") { model.plan { $0.season = nil }; dismiss() }.buttonStyle(GhostButtonStyle())
-                }
-                Spacer()
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Start") {
-                    // Editing keeps the start and the weekly record; a new season starts today.
-                    let old = model.planner.season.flatMap { $0.isActive(on: Planner.key(.now)) ? $0 : nil }
-                    let begin = old?.start ?? Planner.key(.now)
-                    var s = Season(start: begin, end: Planner.key(daysFrom: Planner.date(begin) ?? .now, weeks * 7 - 1),
-                                   main: .init(project: main.trimmingCharacters(in: .whitespaces), hoursPerWeek: mainHours),
-                                   sides: sides.filter { !$0.0.trimmingCharacters(in: .whitespaces).isEmpty }.map { .init(project: $0.0.trimmingCharacters(in: .whitespaces), hoursPerWeek: $0.1) })
-                    s.log = old?.log
-                    model.plan { $0.season = s }
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction).disabled(main.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-        }
-        .padding(22).frame(width: 460)
-    }
-
-    func row(_ label: String, _ name: Binding<String>, _ hours: Binding<Int>) -> some View {
-        HStack(spacing: 10) {
-            Text(label).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.textSecondary).frame(width: 90, alignment: .leading)
-            TextField("Project", text: name).textFieldStyle(.roundedBorder)
-            Menu {
-                ForEach(projects, id: \.self) { p in Button(p) { name.wrappedValue = p } }
-            } label: { Image(systemName: "chevron.down") }
-                .menuStyle(.borderlessButton).fixedSize().disabled(projects.isEmpty)
-            Stepper("\(hours.wrappedValue) h/wk", value: hours, in: 1...60).fixedSize()
-        }
     }
 }

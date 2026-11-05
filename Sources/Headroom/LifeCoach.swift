@@ -21,6 +21,8 @@ final class LifeCoach: ObservableObject {
     @Published private(set) var sleep: SleepEstimate?
     /// The day whose journal Claude is reflecting on.
     @Published private(set) var reflecting: String?
+    /// A season draft is being written (the editor waits for it).
+    @Published private(set) var drafting = false
 
     struct Suggestion: Identifiable {
         let id = UUID()
@@ -133,11 +135,12 @@ final class LifeCoach: ObservableObject {
 
     // MARK: Coach
 
-    func ask(_ moment: Coach.Moment, model: AppModel) {
+    func ask(_ moment: Coach.Moment, model: AppModel, dump: String = "") {
         guard asking == nil else { return }
         asking = moment
         failure = nil
         var context = context(model: model)
+        context.dump = dump
         if moment != .week {
             let days = [Planner.key(.now), Planner.key(daysFrom: .now, 1)]
             context.events = context.events.filter { days.contains(Planner.key($0.start)) }
@@ -179,7 +182,28 @@ final class LifeCoach: ObservableObject {
                                  quests: quests, seasonWeek: timeline.weekProjectMinutes)
         context.sleep = sleep
         context.logs = [Planner.key(daysFrom: .now, -1), Planner.key(.now)].compactMap { model.planner.log(on: $0) }
+        context.memory = CoachMemory().load()
         return context
+    }
+
+    /// The season editor's "Draft with Claude": goals, milestones and a commitment from what you wrote.
+    func draftSeason(_ dump: String, weeks: Int, model: AppModel, done: @escaping @MainActor (SeasonDraft) -> Void) {
+        guard !drafting else { return }
+        drafting = true
+        failure = nil
+        let prompt = Coach.seasonPrompt(dump: dump, weeks: weeks, context(model: model))
+        Task.detached(priority: .userInitiated) {
+            let reply = ClaudeCLI.ask(prompt)
+            let draft = reply.flatMap(Coach.parseSeason)
+            await MainActor.run {
+                LifeCoach.shared.drafting = false
+                guard let draft else {
+                    LifeCoach.shared.failure = reply == nil ? "Claude didn't answer (is `claude` signed in?)." : "Claude's answer wasn't a season. Try again."
+                    return
+                }
+                done(draft)
+            }
+        }
     }
 
     /// The journal's Reflect button: Claude reads the day (and the entry) and answers in a few sentences,
@@ -260,6 +284,8 @@ struct CoachCard: View {
     @EnvironmentObject var model: AppModel
     @ObservedObject var coach = LifeCoach.shared
     @Environment(\.snapshotMode) private var snapshot
+    @State private var dumping = false
+    @State private var editingMemory = false
 
     var body: some View {
         let today = Planner.key(.now)
@@ -271,7 +297,7 @@ struct CoachCard: View {
                     if coach.hasClaude || snapshot {
                         if let m = coach.asking {
                             ProgressView().controlSize(.small)
-                            Text(m == .morning ? "Planning your day…" : m == .week ? "Reviewing your season…" : "Reviewing your day…")
+                            Text(m == .morning ? "Planning your day…" : m == .week ? "Reviewing your season…" : m == .dump ? "Sorting your brain dump…" : "Reviewing your day…")
                                 .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
                         } else if evening {
                             Button { coach.ask(.evening, model: model) } label: { Label("Review My Day", systemImage: "moon.stars") }
@@ -288,6 +314,15 @@ struct CoachCard: View {
                         }
                     } else {
                         Text("Install Claude Code to get a plan and a review").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
+                    }
+                    Spacer()
+                    if !snapshot {
+                        if coach.hasClaude {
+                            Button { dumping = true } label: { Image(systemName: "tray.and.arrow.down") }
+                                .buttonStyle(.borderless).help("Brain dump: paste notes, a meeting or a list — the coach pulls out the tasks")
+                        }
+                        Button { editingMemory = true } label: { Image(systemName: "brain") }
+                            .buttonStyle(.borderless).help("What the coach knows about you")
                     }
                 }
                 if let f = coach.failure {
@@ -306,6 +341,8 @@ struct CoachCard: View {
             }
         }
         .sheet(item: $coach.suggestion) { s in CoachSheet(suggestion: s) }
+        .sheet(isPresented: $dumping) { BrainDumpSheet() }
+        .sheet(isPresented: $editingMemory) { CoachMemorySheet() }
     }
 
     @ViewBuilder var weekButton: some View {
@@ -367,12 +404,15 @@ struct CoachSheet: View {
     var suggestion: LifeCoach.Suggestion
     @State private var picked: Set<String> = []
     @State private var pickedBlocks: Set<BlockSuggestion> = []
+    @State private var pickedMemory: Set<String> = []
+    @State private var setTop = true
 
     var body: some View {
         let plan = suggestion.plan
         let tomorrow = suggestion.day != Planner.key(.now)
         VStack(alignment: .leading, spacing: 16) {
-            Text(suggestion.moment == .morning ? "Your plan for today" : suggestion.moment == .week ? "Your week, honestly" : "Today, and tomorrow's plan")
+            Text(suggestion.moment == .morning ? "Your plan for today" : suggestion.moment == .week ? "Your week, honestly"
+                 : suggestion.moment == .dump ? "From your brain dump" : "Today, and tomorrow's plan")
                 .font(.system(size: 18, weight: .bold, design: .rounded))
             if !plan.note.isEmpty {
                 Text(plan.note).font(.system(size: 13)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
@@ -405,6 +445,23 @@ struct CoachSheet: View {
                     }
                 }
             }
+            if let top = plan.top {
+                Toggle(isOn: $setTop) {
+                    Text("Make **\(top)** \(tomorrow ? "tomorrow's" : "today's") top thing").font(.system(size: 13))
+                }
+                .toggleStyle(.checkbox)
+            }
+            if !plan.remember.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionTitle(title: "Remember about you")
+                    ForEach(plan.remember, id: \.self) { line in
+                        Toggle(isOn: Binding(get: { pickedMemory.contains(line) }, set: { if $0 { pickedMemory.insert(line) } else { pickedMemory.remove(line) } })) {
+                            Text(line).font(.system(size: 13))
+                        }
+                        .toggleStyle(.checkbox)
+                    }
+                }
+            }
             HStack {
                 Button("Not Now") { dismiss() }.keyboardShortcut(.cancelAction)
                 Spacer()
@@ -414,13 +471,19 @@ struct CoachSheet: View {
                         p.accept(big: plan.big.filter(picked.contains), tasks: plan.tasks.filter(picked.contains), day: suggestion.day)
                         placed = p.acceptBlocks(plan.blocks.filter(pickedBlocks.contains), day: suggestion.day)
                     }
+                    if !pickedMemory.isEmpty { CoachMemory().remember(plan.remember.filter(pickedMemory.contains)) }
+                    if setTop, let top = plan.top,
+                       let task = model.planner.tasks.first(where: { !$0.isDone && $0.title.caseInsensitiveCompare(top) == .orderedSame }),
+                       model.planner.log(on: suggestion.day)?.top != task.id {
+                        model.setTopThing(task, day: suggestion.day)
+                    }
                     let skipped = pickedBlocks.count - placed
                     model.show("Added \(picked.count + placed)" + (skipped > 0 ? " · \(skipped) block\(skipped == 1 ? "" : "s") clashed and stayed out" : ""))
                     dismiss()
                 }
                 .buttonStyle(PrimaryButtonStyle())
                 .keyboardShortcut(.defaultAction)
-                .disabled(picked.isEmpty && pickedBlocks.isEmpty)
+                .disabled(picked.isEmpty && pickedBlocks.isEmpty && pickedMemory.isEmpty)
             }
         }
         .padding(24)
@@ -429,7 +492,7 @@ struct CoachSheet: View {
     }
 
     func addLabel(tomorrow: Bool) -> String {
-        let n = picked.count + pickedBlocks.count
+        let n = picked.count + pickedBlocks.count + pickedMemory.count
         if suggestion.moment == .week { return "Add \(n) to the Week" }
         return "Add \(n) to \(tomorrow ? "Tomorrow" : "Today")"
     }

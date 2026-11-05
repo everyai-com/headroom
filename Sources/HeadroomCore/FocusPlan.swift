@@ -18,6 +18,13 @@ public struct TimeBlock: Codable, Sendable, Identifiable, Equatable, Hashable {
     public var project: String?
     public var taskID: UUID?
     public var fromCoach: Bool?
+    /// Marked done (a block for a task is done when its task is), how it felt, and whether it counts toward
+    /// the day's focus score (nil = yes).
+    public var done: Date?
+    public var feel: Feel?
+    public var counts: Bool?
+    /// Drawn from the season's protected time, never stored.
+    public var protected: Bool?
 
     public init(title: String, day: String, start: Int, end: Int, project: String? = nil, taskID: UUID? = nil) {
         self.title = title; self.day = day
@@ -60,11 +67,15 @@ extension Planner {
         return blocks.first { $0.day == day && $0.start <= m && m < $0.end }
     }
 
-    /// The first free slot of `minutes` on a day at or after `from`, around blocks and calendar events (busy).
+    /// The first free slot of `minutes` on a day at or after `from`, around blocks, calendar events (busy) and
+    /// protected time — except the protected time of `allow`, the project the slot is for.
     public func firstFree(on day: String, from: Int, minutes: Int, busy: [DateInterval] = [], until: Int = 22 * 60,
-                          calendar: Calendar = .current) -> Int? {
+                          allow: String? = nil, calendar: Calendar = .current) -> Int? {
         guard let midnight = Self.date(day, calendar: calendar) else { return nil }
         var taken = blocks(on: day).map { ($0.start, $0.end) }
+        for p in protectedBlocks(on: day, calendar: calendar) where allow.map({ p.project?.caseInsensitiveCompare($0) != .orderedSame }) ?? true {
+            taken.append((p.start, p.end))
+        }
         for b in busy {
             let s = Int(b.start.timeIntervalSince(midnight) / 60), e = Int(b.end.timeIntervalSince(midnight) / 60)
             if e > 0 && s < 24 * 60 { taken.append((max(0, s), min(24 * 60, e))) }
@@ -113,7 +124,7 @@ extension Season {
         let expected = Double(hoursPerWeek * 60) * min(1, elapsed)
         guard expected > 0 else { return .onTrack }
         let pace = Double(minutes) / expected
-        // TODO(human): where "on track" ends. Default: 90% of the pace or better is on track, 60% needs adjusting.
+        // 90% of the pace or better is on track, 60% needs adjusting.
         if pace >= 0.9 { return .onTrack }
         if pace >= 0.6 { return .adjust }
         return .offTrack
@@ -134,7 +145,13 @@ extension Season {
                     let hour = Double(calendar.component(.hour, from: now)) / 24
                     elapsed = (done + hour) / Double(max(1, days.count))
                 }
-                return Self.status(minutes: minutes, hoursPerWeek: q.hoursPerWeek, elapsed: elapsed)
+                let status = Self.status(minutes: minutes, hoursPerWeek: q.hoursPerWeek, elapsed: elapsed)
+                // A milestone due that week and missed: the hours alone don't make it on track.
+                let days = Set(weekDays(i, calendar: calendar))
+                let late = (milestones ?? []).contains { m in
+                    m.project.caseInsensitiveCompare(q.project) == .orderedSame && m.due.map(days.contains) == true && m.isLate(today: today)
+                }
+                return late && status == .onTrack ? .adjust : status
             })
         }
     }
@@ -170,7 +187,8 @@ public struct PlanStrength: Sendable, Equatable {
     public static func of(_ planner: Planner, done: [String: Int], now: Date = .now, calendar: Calendar = .current) -> PlanStrength? {
         guard let s = planner.season, let i = s.weekIndex(on: Planner.key(now, calendar: calendar), calendar: calendar) else { return nil }
         let days = Set(s.weekDays(i, calendar: calendar))
-        let ahead = planner.blocks.filter { days.contains($0.day) && ($0.interval(calendar: calendar)?.end ?? .distantPast) > now }
+        let ahead = (planner.blocks + days.flatMap { planner.protectedBlocks(on: $0, calendar: calendar) })
+            .filter { days.contains($0.day) && ($0.interval(calendar: calendar)?.end ?? .distantPast) > now }
         var needed = 0, covered = 0
         var gaps: [String: Int] = [:]
         for q in s.quests {

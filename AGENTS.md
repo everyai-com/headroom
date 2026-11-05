@@ -25,7 +25,9 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   `journal ["how it went"] [--mood 1-5 --energy 1-5]` appends to today's entry (no text = show it); `sleep` (read-only) lists
   the nights the Mac saw; `habit add "Commit something" --commit [project]` is checked off by the first commit of the day.
   `blocks [--day D]` · `block add "<title>" 09:30 11:00 [--project p]` · `block remove <n>` are time blocks (planner.json only);
-  `season` prints the week-by-week grid (● on track ◐ adjust ○ off track); `season set … --weeks 1-12`.
+  `season` prints the week-by-week grid (● on track ◐ adjust ○ off track); `season set … --weeks 1-12`; `season end` keeps it for `wrap`.
+  `milestones` · `milestone add "…" [--project p] [--due D|--week n]` · `milestone done|pin <n|words>` · `protect [add "<project>" weekdays
+  09:00 11:00 | remove <n>]` · `stack [--keep]` (today's tasks into free time) · `top [<n|words>] [--tomorrow]` · `sync <1-4>` · `score` · `wrap`.
   — the only CLI commands that write, and only Headroom's own `planner.json`. Use them to plan the user's day from a session.
 - distribution signing: `HEADROOM_SIGN_ID="Developer ID Application: …" HEADROOM_NOTARY_PROFILE=<profile> ./scripts/bundle.sh`
   (version from `VERSION`; Developer ID builds keep Full Disk Access across rebuilds, ad-hoc ones don't)
@@ -175,6 +177,15 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   is the share of a session not on distractions (timeline). The shield (off / remind / hide, default remind) acts only during a
   running session: `FocusMode.react` is pure; hiding is `NSRunningApplication.hide()` for apps — never quit, never a browser
   for one tab — reminders at most every 5 min. No website blocking (that would need /etc/hosts or admin rights).
+- Season plan (`SeasonPlan.swift` in Core, `SeasonViews.swift` in the app; the rest of Superfocus): milestones per quest (+30 XP
+  when ticked, derived by the ledger; a milestone due in a week and done late or not at all turns that week's on track into
+  adjust), protected weekly hours per quest (drawn as blocks, never stored; nothing else lands in them; they count toward plan
+  strength), support areas, a signed commitment, and `pastSeasons` for the wrap (`endSeason`). Daily score = planned tasks,
+  unlinked blocks and build habits done × 90% + the daily sync (`DayLog.progress`, +5 XP) × 10%. `DayLog.top` is the day's one
+  task; the shield guards it only when "Guard today's top thing" is on. How sessions/blocks felt (`Feel`) feeds `EnergyPatterns`
+  and the coach. The stack (`Planner.stack`) only proposes blocks — kept when you press Keep. The coach's memory is the user's
+  own `coach-memory.md`, sent with every prompt; coach `remember` lines and season drafts (`Coach.seasonPrompt` → `SeasonDraft`)
+  are applied only when ticked/saved. Focus sound is noise generated on the Mac (`AVAudioSourceNode`), nothing streamed.
 - Battery add-on (`Battery.swift` + `BatteryView`, Settings → Add-ons, on by default, hidden without a battery) is read-only:
   `AppleSmartBattery` properties from IOKit, never SMC writes, a helper or `pmset` — Headroom never changes charging; tips point
   to System Settings › Battery. Health = `AppleRawMaxCapacity / DesignCapacity` (`MaxCapacity` is a % on Apple silicon). Readings

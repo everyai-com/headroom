@@ -81,6 +81,7 @@ struct JourneyView: View {
                     VStack(alignment: .leading, spacing: 14) {
                         areas
                         HabitMonthCard()
+                        EnergyPatternsCard()
                         challenges
                     }
                     VStack(alignment: .leading, spacing: 14) {
@@ -320,6 +321,8 @@ struct JourneyView: View {
         case .purchase: "gift"
         case .journal: "book"
         case .checkin: "face.smiling"
+        case .sync: "sun.horizon"
+        case .milestone: "flag.checkered"
         }
     }
 }

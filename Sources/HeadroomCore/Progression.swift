@@ -18,6 +18,8 @@ public struct FocusSession: Codable, Sendable, Identifiable, Equatable, Hashable
     public var area: String?
     /// Found in the timeline (40+ minutes in one project), not started by hand.
     public var detected: Bool?
+    /// How it felt, asked when you stop it.
+    public var feel: Feel?
 
     /// At most this much of one session counts (a timer left running overnight isn't a night of work).
     public static let maxMinutes = 180
@@ -87,7 +89,7 @@ public struct Challenge: Codable, Sendable, Identifiable, Equatable, Hashable {
 
 /// One line of "what earned what".
 public struct LedgerEntry: Sendable, Equatable, Identifiable {
-    public enum Kind: String, Sendable { case task, habit, clean, focus, challenge, purchase, journal, checkin }
+    public enum Kind: String, Sendable { case task, habit, clean, focus, challenge, purchase, journal, checkin, sync, milestone }
     public var id: String
     public var date: Date
     public var kind: Kind
@@ -164,6 +166,7 @@ extension Planner {
                                    title: c.title, xp: c.bonus, coins: c.bonus, area: h?.area))
         }
         out += logEntries(calendar: calendar)
+        out += milestoneEntries(calendar: calendar)
         for p in purchases {
             out.append(LedgerEntry(id: "p" + p.id.uuidString, date: p.date, kind: .purchase, title: p.title, xp: 0, coins: -p.cost, area: nil))
         }

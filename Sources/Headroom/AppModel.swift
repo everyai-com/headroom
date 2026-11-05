@@ -358,6 +358,10 @@ final class AppModel: ObservableObject {
     var plannerRead: Date? = PlannerStore.modified()
     /// The XP just earned, shown for a moment where it was earned.
     @Published var plannerReward: PlannerReward?
+    /// The focus session you just stopped, for "Finished this task? How did it feel?".
+    @Published var justStopped: FocusSession?
+    /// The season whose wrap is showing (after End Season, or from the season card).
+    @Published var wrapSeason: Season?
 
     // MARK: Keep awake + energy
 
