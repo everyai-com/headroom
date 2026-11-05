@@ -248,20 +248,18 @@ struct TodayView: View {
 
     var header: some View {
         let level = Planner.level(for: p.xp())
-        let today = p.today()
-        let build = p.habitsDue().filter { $0.kind == .build }
-        let doneCount = today.filter(\.isDone).count + build.filter { $0.isDone() }.count
-        let total = today.count + build.count
+        let score = p.score()
         return Card {
             HStack(alignment: .center, spacing: 22) {
                 ZStack {
-                    GaugeRing(fraction: total > 0 ? Double(doneCount) / Double(total) : 0, tint: Theme.safe, lineWidth: 10)
+                    GaugeRing(fraction: score.value, tint: Theme.safe, lineWidth: 10)
                     VStack(spacing: 0) {
-                        Text("\(doneCount)/\(total)").font(Theme.number(20, weight: .bold))
-                        Text("done").font(.system(size: 10.5)).foregroundStyle(Theme.textTertiary)
+                        Text("\(score.percent)%").font(Theme.number(20, weight: .bold))
+                        Text("\(score.done)/\(score.planned) done").font(.system(size: 10.5)).foregroundStyle(Theme.textTertiary)
                     }
                 }
                 .frame(width: 86, height: 86)
+                .help("Daily score: planned tasks, blocks and habits done count up to 90%; the evening sync is the last 10%.")
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
                         Text("Level \(level.number)").font(.system(size: 22, weight: .bold, design: .rounded))

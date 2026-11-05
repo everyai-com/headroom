@@ -31,18 +31,12 @@ struct DayPlanCard: View {
         let blocks = model.planner.blocks(on: day)
         let rows = (coach.events(on: day).filter { !$0.allDay }.map(Row.event)
                     + (blocks + model.planner.protectedBlocks(on: day) + proposals).map(Row.block)).sorted { $0.start < $1.start }
-        let score = model.planner.score()
         let now = Calendar.current.component(.hour, from: .now) * 60 + Calendar.current.component(.minute, from: .now)
         let blocked = blocks.reduce(0) { $0 + $1.minutes }
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .firstTextBaseline) {
                     SectionTitle(title: "Day plan", trailing: blocks.isEmpty ? nil : "\(Minutes.text(Double(blocked) * 60)) blocked")
-                    if score.planned > 0 {
-                        Text("Daily score \(score.percent)%").font(Theme.number(11.5, weight: .semibold))
-                            .foregroundStyle(score.percent >= 90 ? Theme.safe : Theme.textSecondary)
-                            .help("Planned tasks, blocks and habits done count up to 90%; the evening sync is the last 10%. \(score.done) of \(score.planned) done.")
-                    }
                     if !snapshot {
                         Button(proposals.isEmpty ? "Stack Tasks" : "Discard") {
                             proposals = proposals.isEmpty ? model.stackToday() : []

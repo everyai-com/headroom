@@ -14,15 +14,27 @@ struct DailySyncCard: View {
     @EnvironmentObject var model: AppModel
     @ObservedObject var coach = LifeCoach.shared
     @Environment(\.snapshotMode) private var snapshot
+    @State private var open = false
 
     var body: some View {
         let day = Planner.key(.now), tomorrow = Planner.key(daysFrom: .now, 1)
         let log = model.planner.log(on: day)
-        let score = model.planner.score()
+        let evening = Calendar.current.component(.hour, from: .now) >= 16
         Card {
             VStack(alignment: .leading, spacing: 12) {
-                SectionTitle(title: "Daily sync", trailing: score.planned > 0 || score.synced ? "score \(score.percent)%" : nil)
-                topRow(day: day, label: "Today's top thing")
+                SectionTitle(title: "Top thing", trailing: log?.isSynced == true ? "day synced ✓" : nil)
+                topRow(day: day, label: "Today")
+                if evening || open || log?.isSynced == true { sync(day: day, tomorrow: tomorrow, log: log) }
+                else if !snapshot {
+                    Button { withAnimation(.easeOut(duration: 0.2)) { open = true } } label: { Label("Sync My Day", systemImage: "sun.horizon") }
+                        .buttonStyle(GhostButtonStyle()).controlSize(.small)
+                        .help("Two minutes at the end of the day: how it moved, a read per quest, tomorrow's top thing. It opens by itself after 4 pm.")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder func sync(day: String, tomorrow: String, log: DayLog?) -> some View {
                 Divider().opacity(0.4)
                 Text("How much did today move?").font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.textTertiary)
                 HStack(spacing: 5) {
@@ -54,15 +66,16 @@ struct DailySyncCard: View {
                         }
                     }
                 }
-                topRow(day: tomorrow, label: "Tomorrow's top thing")
-                if !snapshot && coach.hasClaude && LifeCoach.shared.available {
-                    Button { coach.ask(.evening, model: model) } label: { Label("Plan Tomorrow with the Coach", systemImage: "moon.stars") }
-                        .buttonStyle(GhostButtonStyle()).disabled(coach.asking != nil)
+                topRow(day: tomorrow, label: "Tomorrow")
+                HStack {
+                    Text(log?.isSynced == true ? "+5 XP · the last 10% of today's score" : "Rate the day to finish it at 100% (+5 XP)")
+                        .font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
+                    Spacer()
+                    if !snapshot && coach.hasClaude && LifeCoach.shared.available {
+                        Button { coach.ask(.evening, model: model) } label: { Label("Plan Tomorrow", systemImage: "moon.stars") }
+                            .buttonStyle(GhostButtonStyle()).controlSize(.small).disabled(coach.asking != nil)
+                    }
                 }
-                Text(log?.isSynced == true ? "Synced · +5 XP · the last 10% of today's score" : "Rate the day to finish it at 100% (+5 XP)")
-                    .font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
-            }
-        }
     }
 
     @ViewBuilder func topRow(day: String, label: String) -> some View {
@@ -72,7 +85,7 @@ struct DailySyncCard: View {
                 .foregroundStyle(top?.isDone == true ? Theme.safe : Theme.accent)
             VStack(alignment: .leading, spacing: 1) {
                 Text(label).font(.system(size: 10.5, weight: .semibold)).foregroundStyle(Theme.textTertiary)
-                Text(top?.title ?? "Not picked — the one task that makes the day a success").font(.system(size: 12.5, weight: top == nil ? .regular : .semibold))
+                Text(top?.title ?? "Pick the one task that makes the day a success").font(.system(size: top == nil ? 12.5 : 14, weight: top == nil ? .regular : .semibold))
                     .foregroundStyle(top == nil ? Theme.textTertiary : Theme.textPrimary).lineLimit(2)
             }
             Spacer(minLength: 0)
@@ -159,7 +172,7 @@ struct EnergyPatternsCard: View {
         HStack(spacing: 8) {
             Text(label).font(.system(size: 12)).lineLimit(1).frame(width: 110, alignment: .leading)
             SegmentedBar(segments: [.init(id: "e", value: Double(t.energizing), color: Theme.safe),
-                                    .init(id: "d", value: Double(t.draining), color: Theme.review)],
+                                    .init(id: "d", value: Double(t.draining), color: Theme.review)].filter { $0.value > 0 },
                          total: Double(max(1, t.energizing + t.draining)), height: 7)
             Text("\(t.energizing)↑ \(t.draining)↓").font(Theme.number(11, weight: .medium)).foregroundStyle(Theme.textSecondary)
                 .frame(width: 52, alignment: .trailing)
@@ -179,8 +192,8 @@ struct SeasonDetails: View {
         VStack(alignment: .leading, spacing: 8) {
             if let m = season.manifesto, !m.isEmpty {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("“\(m)”").font(.system(size: 12.5, design: .serif).italic()).foregroundStyle(Theme.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text("“\(m)”").font(.system(size: 12.5, design: .serif).italic()).foregroundStyle(Theme.textSecondary)
+                        .lineLimit(2).help(m)
                     if let signed = season.signed {
                         Text("Signed \(signed.formatted(date: .abbreviated, time: .shortened))").font(.system(size: 10.5)).foregroundStyle(Theme.textTertiary)
                     }
@@ -188,8 +201,8 @@ struct SeasonDetails: View {
             }
             let all = season.milestones ?? []
             if !all.isEmpty {
-                Text("Milestones · \(all.filter { $0.done != nil }.count) of \(all.count)").font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.textTertiary)
-                ForEach(season.openMilestones.prefix(6) + all.filter { $0.done != nil }.suffix(2)) { m in
+                Text("Next milestones · \(all.filter { $0.done != nil }.count) of \(all.count) done").font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.textTertiary)
+                ForEach(season.openMilestones.prefix(3)) { m in
                     HStack(spacing: 8) {
                         Button { model.toggleMilestone(m.id) } label: {
                             Image(systemName: m.done != nil ? "checkmark.circle.fill" : "circle").foregroundStyle(m.done != nil ? Theme.safe : Theme.textTertiary)
@@ -214,12 +227,15 @@ struct SeasonDetails: View {
                     }
                 }
             }
-            if let support = season.support, !support.isEmpty {
-                Text("Support: " + support.joined(separator: " · ")).font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
-            }
-            if !snapshot {
-                Button { model.wrapSeason = season } label: { Label("Season Wrap", systemImage: "sparkles.rectangle.stack") }
-                    .buttonStyle(GhostButtonStyle()).controlSize(.small)
+            HStack {
+                if let support = season.support, !support.isEmpty {
+                    Text("Support: " + support.joined(separator: " · ")).font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary).lineLimit(1)
+                }
+                Spacer()
+                if !snapshot {
+                    Button { model.wrapSeason = season } label: { Label("Season Wrap", systemImage: "sparkles.rectangle.stack") }
+                        .buttonStyle(.borderless).font(.system(size: 11.5))
+                }
             }
         }
     }

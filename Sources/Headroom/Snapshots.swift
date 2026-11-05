@@ -29,7 +29,10 @@ enum Snapshots {
             if only.contains(.drives) { Self.fill(drives) }
             for scheme in [ColorScheme.dark, .light] {
                 for screen in only {
-                    save(MainView(screen: screen, override: screen == .drives ? AnyView(DrivesView(model: drives)) : nil).environmentObject(model).environmentObject(library), size: CGSize(width: 1180, height: 780),
+                    // HEADROOM_RENDER_SCROLL=600 draws each screen scrolled down that far (design review below the fold).
+                    let scroll = ProcessInfo.processInfo.environment["HEADROOM_RENDER_SCROLL"].flatMap(Double.init).map { CGFloat($0) } ?? 0
+                    save(MainView(screen: screen, override: screen == .drives ? AnyView(DrivesView(model: drives)) : nil).environment(\.snapshotScroll, scroll)
+                            .environmentObject(model).environmentObject(library), size: CGSize(width: 1180, height: 780),
                          to: dir.appendingPathComponent("\(screen.rawValue.lowercased().replacingOccurrences(of: " ", with: "-"))\(scheme == .light ? "-light" : "").png"),
                          scheme: scheme)
                     // The battery's monthly card sits below the fold.
