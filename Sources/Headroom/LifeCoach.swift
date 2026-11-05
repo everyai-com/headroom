@@ -110,8 +110,9 @@ final class LifeCoach: ObservableObject {
         let start = Calendar.current.startOfDay(for: .now)
         guard let end = Calendar.current.date(byAdding: .day, value: 7, to: start) else { return }
         let predicate = store.predicateForEvents(withStart: start, end: end, calendars: nil)
+        let own = UserDefaults.standard.string(forKey: Self.calendarKey)
         events = store.events(matching: predicate)
-            .filter { $0.status != .canceled }
+            .filter { $0.status != .canceled && $0.calendar?.calendarIdentifier != own } // our own blocks aren't "busy"
             .map { CalendarEvent(title: $0.title ?? "Busy", start: $0.startDate, end: $0.endDate,
                                  calendar: $0.calendar?.title ?? "", allDay: $0.isAllDay) }
             .sorted { $0.start < $1.start }
@@ -119,6 +120,111 @@ final class LifeCoach: ObservableObject {
 
     func events(on day: String) -> [CalendarEvent] {
         events.filter { Planner.key($0.start) == day }
+    }
+
+    // MARK: Blocks on your calendar
+
+    /// Your time blocks, copied into a calendar of Headroom's own called "Headroom" (so they reach your phone).
+    /// Only that calendar is ever written; turning it off removes only the events Headroom put there.
+    static let mirrorKey = "blocksOnCalendar", calendarKey = "headroomCalendarID", mappedKey = "mirroredBlocks"
+    @Published private(set) var mirrorOn = UserDefaults.standard.bool(forKey: LifeCoach.mirrorKey)
+    private var lastMirror = Date.distantPast
+
+    func setMirror(_ on: Bool, model: AppModel) {
+        mirrorOn = on
+        UserDefaults.standard.set(on, forKey: Self.mirrorKey)
+        if on {
+            if calendarConnected { mirror(model: model, force: true) }
+            else {
+                Task {
+                    let granted = (try? await store.requestFullAccessToEvents()) ?? false
+                    calendarConnected = granted
+                    if granted { refreshCalendar(force: true); mirror(model: model, force: true) }
+                    else { failure = "Headroom needs calendar access to show your blocks there (System Settings › Privacy & Security › Calendars)." }
+                }
+            }
+        } else {
+            unmirror()
+        }
+    }
+
+    /// From the tick (at most once a minute) and right after a change: brings the Headroom calendar in line
+    /// with the blocks for today and the next 7 days.
+    func mirror(model: AppModel, force: Bool = false) {
+        guard available, !AppModel.demoMode, mirrorOn, calendarConnected, force || Date().timeIntervalSince(lastMirror) > 60 else { return }
+        lastMirror = .now
+        guard let cal = headroomCalendar() else {
+            failure = "Couldn't make a “Headroom” calendar. Check Calendar › Settings › Accounts that one account allows new calendars."
+            return
+        }
+        let start = Calendar.current.startOfDay(for: .now)
+        guard let end = Calendar.current.date(byAdding: .day, value: 8, to: start) else { return }
+        let days = Set((0..<8).map { Planner.key(daysFrom: start, $0) })
+        let blocks = model.planner.blocks.filter { days.contains($0.day) }
+        var mapped: [UUID: String] = [:]
+        for (k, v) in (UserDefaults.standard.dictionary(forKey: Self.mappedKey) as? [String: String] ?? [:]) {
+            if let id = UUID(uuidString: k) { mapped[id] = v }
+        }
+        let found = store.events(matching: store.predicateForEvents(withStart: start, end: end, calendars: [cal]))
+        var existing: [String: CalendarMirror.Event] = [:]
+        for e in found { existing[e.calendarItemIdentifier] = .init(title: e.title ?? "", start: e.startDate, end: e.endDate) }
+        let plan = CalendarMirror.plan(blocks: blocks, mapped: mapped, existing: existing)
+        guard !plan.isEmpty else { return }
+        for b in plan.create {
+            guard let iv = b.interval() else { continue }
+            let e = EKEvent(eventStore: store)
+            e.title = b.title; e.startDate = iv.start; e.endDate = iv.end; e.calendar = cal
+            e.notes = "Time block from Headroom\(b.project.map { " · \($0)" } ?? ""). Change it in Headroom — edits here are replaced."
+            if (try? store.save(e, span: .thisEvent, commit: false)) != nil { mapped[b.id] = e.calendarItemIdentifier }
+        }
+        for (id, target) in plan.update {
+            guard let e = store.calendarItem(withIdentifier: id) as? EKEvent, e.calendar?.calendarIdentifier == cal.calendarIdentifier else { continue }
+            e.title = target.title; e.startDate = target.start; e.endDate = target.end
+            try? store.save(e, span: .thisEvent, commit: false)
+        }
+        for id in plan.delete {
+            if let e = store.calendarItem(withIdentifier: id) as? EKEvent, e.calendar?.calendarIdentifier == cal.calendarIdentifier {
+                try? store.remove(e, span: .thisEvent, commit: false)
+            }
+        }
+        try? store.commit()
+        // Forget what's gone or in the past (past events stay on the calendar as a record).
+        let live = Set(model.planner.blocks.filter { $0.day >= Planner.key(start) }.map(\.id))
+        let keep = mapped.filter { live.contains($0.key) && !plan.delete.contains($0.value) }
+        UserDefaults.standard.set(Dictionary(uniqueKeysWithValues: keep.map { ($0.key.uuidString, $0.value) }), forKey: Self.mappedKey)
+    }
+
+    /// Removes the events Headroom made (today on), and nothing else.
+    private func unmirror() {
+        guard calendarConnected, let id = UserDefaults.standard.string(forKey: Self.calendarKey), let cal = store.calendar(withIdentifier: id) else { return }
+        let mapped = Set((UserDefaults.standard.dictionary(forKey: Self.mappedKey) as? [String: String] ?? [:]).values)
+        for value in mapped {
+            if let e = store.calendarItem(withIdentifier: value) as? EKEvent, e.calendar?.calendarIdentifier == cal.calendarIdentifier,
+               e.endDate > Calendar.current.startOfDay(for: .now) {
+                try? store.remove(e, span: .thisEvent, commit: false)
+            }
+        }
+        try? store.commit()
+        UserDefaults.standard.removeObject(forKey: Self.mappedKey)
+    }
+
+    /// The "Headroom" calendar, made once in the account new events go to (else iCloud, else On My Mac).
+    private func headroomCalendar() -> EKCalendar? {
+        if let id = UserDefaults.standard.string(forKey: Self.calendarKey), let c = store.calendar(withIdentifier: id) { return c }
+        let sources = [store.defaultCalendarForNewEvents?.source].compactMap { $0 }
+            + store.sources.filter { $0.sourceType == .calDAV && $0.title.localizedCaseInsensitiveContains("icloud") }
+            + store.sources.filter { $0.sourceType == .local }
+        for source in sources {
+            let c = EKCalendar(for: .event, eventStore: store)
+            c.title = "Headroom"
+            c.cgColor = NSColor.systemGreen.cgColor
+            c.source = source
+            if (try? store.saveCalendar(c, commit: true)) != nil {
+                UserDefaults.standard.set(c.calendarIdentifier, forKey: Self.calendarKey)
+                return c
+            }
+        }
+        return nil
     }
 
     // MARK: Proof
@@ -362,6 +468,13 @@ struct CoachCard: View {
                     .font(.system(size: 11)).foregroundStyle(Theme.textTertiary).fixedSize(horizontal: false, vertical: true)
             } else if events.isEmpty {
                 Text("Nothing on the calendar today").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
+            }
+            if !snapshot {
+                Toggle(isOn: Binding(get: { coach.mirrorOn }, set: { coach.setMirror($0, model: model) })) {
+                    Text("Show my time blocks in Calendar").font(.system(size: 11.5))
+                }
+                .toggleStyle(.checkbox)
+                .help("Copies today's and the next 7 days' blocks into a calendar called “Headroom”, so they reach your phone. Only that calendar is written; turning this off removes the events it made.")
             }
             ForEach(Array(events.prefix(6).enumerated()), id: \.offset) { _, e in
                 HStack(spacing: 8) {

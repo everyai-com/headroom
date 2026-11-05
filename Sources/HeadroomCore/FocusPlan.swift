@@ -274,3 +274,44 @@ extension Planner {
         }
     }
 }
+
+// MARK: - Blocks on your calendar
+
+/// Time blocks mirrored into Headroom's own calendar (so they show on your phone). Pure: the app reads what's
+/// in that calendar, asks this what to change, and writes only there — never to any other calendar.
+public enum CalendarMirror {
+    public struct Event: Sendable, Equatable {
+        public var title: String
+        public var start: Date
+        public var end: Date
+        public init(title: String, start: Date, end: Date) { self.title = title; self.start = start; self.end = end }
+    }
+
+    public struct Plan: Sendable, Equatable {
+        public var create: [TimeBlock] = []
+        /// Event id → what it should become.
+        public var update: [String: Event] = [:]
+        public var delete: [String] = []
+        public var isEmpty: Bool { create.isEmpty && update.isEmpty && delete.isEmpty }
+    }
+
+    /// `blocks` are the ones to show (days in the window); `mapped` is block id → event id from earlier syncs;
+    /// `existing` is what's in Headroom's calendar now. An event we made whose block is gone is removed; one
+    /// the user deleted in Calendar is made again only if its block still exists.
+    public static func plan(blocks: [TimeBlock], mapped: [UUID: String], existing: [String: Event], calendar: Calendar = .current) -> Plan {
+        var p = Plan()
+        let wanted = Set(blocks.map(\.id))
+        for b in blocks {
+            guard let iv = b.interval(calendar: calendar) else { continue }
+            let target = Event(title: b.title, start: iv.start, end: iv.end)
+            if let id = mapped[b.id], let now = existing[id] {
+                if now != target { p.update[id] = target }
+            } else {
+                p.create.append(b)
+            }
+        }
+        for (block, event) in mapped where !wanted.contains(block) && existing[event] != nil { p.delete.append(event) }
+        p.delete.sort()
+        return p
+    }
+}

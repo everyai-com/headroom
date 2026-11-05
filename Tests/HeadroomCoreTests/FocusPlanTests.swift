@@ -112,3 +112,25 @@ final class FocusPlanTests: XCTestCase {
         XCTAssertTrue(week.contains("recommendations"))
     }
 }
+
+final class CalendarMirrorTests: XCTestCase {
+    func testMirrorAddsChangesAndRemovesOnlyItsOwnEvents() {
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "UTC")!
+        let a = TimeBlock(title: "Outreach", day: "2026-11-05", start: 540, end: 600)
+        var b = TimeBlock(title: "Pricing page", day: "2026-11-05", start: 660, end: 720)
+        let gone = UUID()
+        let ivA = a.interval(calendar: cal)!, ivB = b.interval(calendar: cal)!
+        let existing = ["e1": CalendarMirror.Event(title: "Outreach", start: ivA.start, end: ivA.end),
+                        "e2": CalendarMirror.Event(title: "Pricing page", start: ivB.start, end: ivB.end),
+                        "e3": CalendarMirror.Event(title: "Old", start: ivA.start, end: ivA.end),
+                        "mine": CalendarMirror.Event(title: "Something I typed in Calendar", start: ivA.start, end: ivA.end)]
+        b.end = 750
+        let plan = CalendarMirror.plan(blocks: [a, b], mapped: [a.id: "e1", b.id: "e2", gone: "e3"], existing: existing, calendar: cal)
+        XCTAssertTrue(plan.create.isEmpty)
+        XCTAssertEqual(plan.update["e2"]?.end, b.interval(calendar: cal)!.end, "moved block → event follows")
+        XCTAssertNil(plan.update["e1"], "unchanged: left alone")
+        XCTAssertEqual(plan.delete, ["e3"], "only events Headroom made for a block that's gone")
+        let again = CalendarMirror.plan(blocks: [a], mapped: [a.id: "deleted-in-calendar"], existing: [:], calendar: cal)
+        XCTAssertEqual(again.create.map(\.id), [a.id], "deleted in Calendar but the block is still planned: made again")
+    }
+}

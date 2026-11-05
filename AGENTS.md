@@ -154,7 +154,11 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   Timed habits (`minutes` + `track`) are checked off by `Planner.applyQuotas` on the tick — never unchecked. A season is one
   main + at most 2 side projects with hours/week, compared to the week's tracked minutes.
 - Coach (`Coach.swift` in Core, `LifeCoach` + `CoachCard`/`CoachSheet` on Today; full edition only): the calendar is read
-  through EventKit only after the user presses Connect Calendar (never prompted from the tick), never written. Proof is your
+  through EventKit only after the user presses Connect Calendar (never prompted from the tick). The only write is the opt-in
+  "Show my time blocks in Calendar" (`CalendarMirror.plan` is pure; `LifeCoach.mirror` applies it): blocks for today + 7 days
+  are copied into a calendar Headroom makes called "Headroom" (its id in UserDefaults), at most once a minute — never any other
+  calendar, never an event it didn't make (block → event ids in UserDefaults `mirroredBlocks`); past events stay as a record;
+  turning it off removes only its own events from today on. Events in that calendar are left out of "busy" reading. Proof is your
   own commits (`git log --author=<repo user.email>`, optional locks off) in the repositories behind Claude Code projects —
   read-only like `Git.status`. The coach runs the user's own `claude -p` ONLY when they press Plan/Review, with `--tools ""
   --strict-mcp-config --no-session-persistence` (no tools, no MCP, no log that would count as timeline time); its reply is a
@@ -171,7 +175,7 @@ README screenshots are rendered with `--demo` so no personal projects or files a
 - Focus plan (`FocusPlan.swift` in Core, `DayPlanCard`/`SeasonGrid`/`FocusShield`/`FocusQuality` in the app; after
   Superfocus): seasons run 1–12 weeks in 7-day weeks from their first day; `Season.log` keeps each week's minutes per quest
   (written only when changed) so the grid outlives the timeline's 30 days; `Season.status` judges the current week on pace.
-  Time blocks live in planner.json — the calendar is still never written — and never overlap (`addBlock` returns nil). Plan
+  Time blocks live in planner.json (mirrored to the "Headroom" calendar only when that's switched on) and never overlap (`addBlock` returns nil). Plan
   strength = hours still needed this season week that have a block ahead. Coach replies may carry `blocks` and
   `recommendations` (`.week` review); blocks land only when ticked and Added (`acceptBlocks`, clashes skipped). Focus quality
   is the share of a session not on distractions (timeline). The shield (off / remind / hide, default remind) acts only during a

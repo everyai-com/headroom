@@ -89,6 +89,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             model.applyQuests(model.questMinutes(ActivityRecorder.shared))
             LifeCoach.shared.update()
             FocusShield.shared.attach(model)
+            LifeCoach.shared.mirror(model: model)
             model.recordSeason(ActivityRecorder.shared.weekProjectMinutes)
             FocusSound.shared.sync(running: model.planner.runningSession != nil) // a session started or stopped from the CLI
             if model.notificationsEnabled, let b = model.blockStarting() {
