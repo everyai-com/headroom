@@ -24,6 +24,8 @@ public struct Planner: Codable, Sendable, Equatable {
     public var blocks: [TimeBlock] = []
     /// Seasons you finished, for the season wrap and "compared with last season".
     public var pastSeasons: [Season] = []
+    /// What you want to have, do and become (Vision.swift).
+    public var vision: Vision?
 
     public init() {}
 
@@ -40,6 +42,7 @@ public struct Planner: Codable, Sendable, Equatable {
         logs = try c.decodeIfPresent([DayLog].self, forKey: .logs) ?? []
         blocks = (try? c.decodeIfPresent([TimeBlock].self, forKey: .blocks)) ?? []
         pastSeasons = (try? c.decodeIfPresent([Season].self, forKey: .pastSeasons)) ?? []
+        vision = try? c.decodeIfPresent(Vision.self, forKey: .vision)
     }
 
     /// Only three tasks a day can be big: choosing is the point.

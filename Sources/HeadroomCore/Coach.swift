@@ -69,8 +69,12 @@ public struct CalendarEvent: Sendable, Equatable, Codable, Hashable {
     public var end: Date
     public var calendar: String
     public var allDay: Bool
-    public init(title: String, start: Date, end: Date, calendar: String, allDay: Bool = false) {
+    /// The event's notes and who's invited (names only) — what meeting prep reads.
+    public var notes: String?
+    public var people: [String]?
+    public init(title: String, start: Date, end: Date, calendar: String, allDay: Bool = false, notes: String? = nil, people: [String]? = nil) {
         self.title = title; self.start = start; self.end = end; self.calendar = calendar; self.allDay = allDay
+        self.notes = notes; self.people = people
     }
     public var minutes: Int { allDay ? 0 : max(0, Int(end.timeIntervalSince(start) / 60)) }
 }
@@ -100,6 +104,8 @@ public struct DayContext: Sendable {
     /// What the coach knows about the user (their coach-memory.md), and a brain dump to sort (`.dump`).
     public var memory = ""
     public var dump = ""
+    /// The meeting to prepare for (`.meeting`).
+    public var meeting: CalendarEvent?
     public init(now: Date, planner: Planner, events: [CalendarEvent] = [], commits: [Commit] = [],
                 byProject: [(name: String, minutes: Int)] = [], byKind: [(name: String, minutes: Int)] = [],
                 quests: [QuestStatus] = [], seasonWeek: [String: Int] = [:]) {
@@ -139,7 +145,7 @@ public struct CoachPlan: Codable, Sendable, Equatable {
 }
 
 public enum Coach {
-    public enum Moment: String, Sendable { case morning, evening, week, dump }
+    public enum Moment: String, Sendable { case morning, evening, week, dump, meeting }
 
     /// The prompt for `claude -p`. Plain facts, then the ask, then the exact JSON shape wanted back.
     public static func prompt(_ m: Moment, _ c: DayContext, calendar: Calendar = .current) -> String {
@@ -186,6 +192,18 @@ public enum Coach {
             the rest in "tasks". In "remember", 0–3 short facts about how the user works, people or preferences worth \
             keeping (only ones stated in the dump). In "note", one sentence on what you pulled out.
             """)
+        case .meeting:
+            let e = c.meeting
+            lines.append("""
+
+            Prepare the user for this meeting: "\(e?.title ?? "")" at \(e.map { TimeBlock.clock(calendar.component(.hour, from: $0.start) * 60 + calendar.component(.minute, from: $0.start)) } ?? "") \
+            (\(e?.minutes ?? 0) min)\(e?.people.map { $0.isEmpty ? "" : " with " + $0.prefix(12).joined(separator: ", ") } ?? "").
+            \(e?.notes.map { "Its notes:\n\"\"\"\n\($0.prefix(3000))\n\"\"\"" } ?? "It has no notes.")
+            In "note": the goal of the meeting in one line, then 3–5 short agenda points and 2–3 questions to ask, \
+            tied to the season, open tasks and milestones above when they relate (plain text, one item per line, "- " bullets). \
+            In "tasks": 0–3 things to do before or right after it, starting with a verb. In "remember": 0–2 facts about \
+            these people worth keeping, only if stated above. Leave "big" and "blocks" empty.
+            """)
         }
         if m == .evening {
             lines.append(#"Also set "top": the ONE task (exact title from big) tomorrow is for — the thing that makes tomorrow a success if nothing else gets done."#)
@@ -209,6 +227,15 @@ public enum Coach {
         lines.append("You are the user's coach inside Headroom, their life OS. It is \(time.string(from: c.now)).")
         let memory = c.memory.trimmingCharacters(in: .whitespacesAndNewlines)
         if !memory.isEmpty { lines.append("\nWHAT YOU KNOW ABOUT THEM (their own notes, trust these):\n" + String(memory.prefix(3000))) }
+        if let v = c.planner.vision, !v.isEmpty {
+            lines.append("\nTHEIR VISION (what they want, held as already theirs):")
+            if !v.become.isEmpty { lines.append("- become: " + v.become.joined(separator: "; ")) }
+            if !v.doing.isEmpty { lines.append("- do: " + v.doing.joined(separator: "; ")) }
+            if !v.have.isEmpty { lines.append("- have: " + v.have.joined(separator: "; ")) }
+            if !v.picture.isEmpty { lines.append("- picture: \"\(v.picture.prefix(800))\"") }
+            if !v.waiting.isEmpty { lines.append("- decisions they're waiting on: " + v.waiting.map { "\($0.title) (decide from \($0.ready(calendar: calendar)))" }.joined(separator: "; ")) }
+            lines.append("They follow The Science of Getting Rich: speak in terms of increase, never lack; plan today's work, not tomorrow's emergencies; no hurry.")
+        }
         if let s = c.planner.season, s.isActive(on: today) {
             let quests = [s.main] + s.sides
             lines.append("\nSEASON until \(s.end) (hours this week / planned per week):")
@@ -288,6 +315,8 @@ public enum Coach {
             if let m = l.mood { parts.append("mood \(m)/5 (\(DayLog.moodWords[m]))") }
             if let e = l.energy { parts.append("energy \(e)/5 (\(DayLog.energyWords[e]))") }
             if !l.note.isEmpty { parts.append("journal: \"\(l.note.prefix(1200))\"") }
+            if let g = l.gratitude, !g.isEmpty { parts.append("grateful for: " + g.joined(separator: "; ")) }
+            if let v = l.gave, !v.isEmpty { parts.append("gave value: \(v)") }
             if !parts.isEmpty { lines.append("\(l.day == today ? "TODAY" : l.day): " + parts.joined(separator: "; ")) }
         }
         let focus = c.planner.focusMinutes(on: c.now, calendar: calendar)

@@ -7,7 +7,7 @@ import HeadroomCore
 enum PlannerCommands {
     static let names: Set<String> = ["block", "blocks", "journal", "sleep", "today", "add", "done", "later", "habits", "habit", "focus", "rewards", "reward", "buy",
                                      "stats", "challenge", "timeline", "season",
-                                     "milestones", "milestone", "protect", "stack", "top", "sync", "score", "wrap"]
+                                     "milestones", "milestone", "protect", "stack", "top", "sync", "score", "wrap", "vision", "grateful", "gave", "way"]
 
     static func run(_ args: [String], json: Bool) {
         var rest = Array(args.dropFirst())
@@ -527,6 +527,68 @@ enum PlannerCommands {
             }
             let p = PlannerStore.mutate { $0.updateLog(today) { $0.progress = v } }.planner
             print("Synced: \(DayLog.progressWords[v]). Daily score \(p.score(on: now).percent)% · \(levelLine(p))")
+
+        case "vision":
+            // headroom-cli vision [become|do|have "…"] [picture "…"] [wait "…"]: what you want, from The Science of Getting Rich.
+            let text = rest.dropFirst().joined(separator: " ").trimmingCharacters(in: .whitespaces)
+            if let field = rest.first, !text.isEmpty {
+                PlannerStore.mutate { p in
+                    var v = p.vision ?? Vision()
+                    switch field {
+                    case "become": v.become.append(text)
+                    case "do": v.doing.append(text)
+                    case "have": v.have.append(text)
+                    case "picture": v.picture = text
+                    case "wait": v.waiting.append(Decision(title: text, parked: today))
+                    default: break
+                    }
+                    v.updated = now
+                    p.vision = v
+                }
+            } else if let field = rest.first, field == "read" {
+                PlannerStore.mutate { $0.updateLog(today) { $0.visioned = true } }
+            }
+            let v = PlannerStore.load().vision ?? Vision()
+            if json { emitJSON(["become": v.become, "do": v.doing, "have": v.have, "picture": v.picture,
+                                "waiting": v.waiting.map { ["title": $0.title, "ready": $0.ready()] }]); return }
+            if v.isEmpty { print("No vision yet. headroom-cli vision become|do|have \"…\", vision picture \"…\""); return }
+            if !v.picture.isEmpty { print(v.picture + "\n") }
+            for (title, items) in [("Become", v.become), ("Do", v.doing), ("Have", v.have)] where !items.isEmpty {
+                print(title + ":"); items.forEach { print("  • " + $0) }
+            }
+            if !v.waiting.isEmpty { print("Waiting on:"); v.waiting.forEach { print("  ◷ \($0.title) — decide from \($0.ready())") } }
+
+        case "grateful":
+            // headroom-cli grateful "a" "b" "c": today's three (adds to what's there, keeps the latest three per line count).
+            guard !rest.isEmpty else {
+                let g = PlannerStore.load().log(on: today)?.gratitude ?? []
+                print(g.isEmpty ? "Nothing yet today. headroom-cli grateful \"…\" \"…\" \"…\"" : g.map { "• " + $0 }.joined(separator: "\n"))
+                return
+            }
+            let p = PlannerStore.mutate { $0.updateLog(today) { $0.gratitude = ($0.gratitude ?? []) + rest } }.planner
+            let n = p.log(on: today)?.gratitude?.count ?? 0
+            print(n >= DayLog.gratitudeCount ? "Thankful for \(n) things today (+5 XP) · \(levelLine(p))" : "\(n) of \(DayLog.gratitudeCount) — keep going")
+
+        case "gave":
+            // headroom-cli gave "…": who got more use value from you than they paid today.
+            let text = rest.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+            guard !text.isEmpty else { fail("usage: headroom-cli gave \"who got more value than they paid\"") }
+            let p = PlannerStore.mutate { $0.updateLog(today) { $0.gave = text } }.planner
+            print("Gave more than you took (+5 XP) · \(levelLine(p))")
+
+        case "way":
+            // headroom-cli way [check <item>]: the day in the certain way.
+            if rest.first == "check", let raw = rest.dropFirst().first, let item = CertainWay.Item(rawValue: raw), item.isSelfReported {
+                PlannerStore.mutate { $0.updateLog(today) { l in l.ways = Array(Set((l.ways ?? []) + [raw])).sorted() } }
+            } else if rest.first == "check" {
+                fail("usage: headroom-cli way check " + CertainWay.Item.allCases.filter(\.isSelfReported).map(\.rawValue).joined(separator: "|"))
+            }
+            let p = PlannerStore.load()
+            let met = CertainWay.met(p.log(on: today), score: p.score(on: now))
+            if json { emitJSON(Dictionary(uniqueKeysWithValues: CertainWay.Item.allCases.map { ($0.rawValue, met.contains($0)) })); return }
+            for item in CertainWay.Item.allCases {
+                print("\(met.contains(item) ? "●" : "○") \(item.title)\(item.isSelfReported ? "  [\(item.rawValue)]" : "")")
+            }
 
         case "score":
             let s = PlannerStore.load().score(on: now)

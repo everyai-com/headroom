@@ -17,6 +17,13 @@ public struct DayLog: Codable, Sendable, Equatable, Identifiable {
     public var progress: Int?
     public var goals: [String: Int]?
     public var top: UUID?
+    /// Three things you're thankful for, who you gave more use value than you took today, and whether you read
+    /// your vision (Vision.swift).
+    public var gratitude: [String]?
+    public var gave: String?
+    public var visioned: Bool?
+    /// The certain-way practices you ticked for the day (`CertainWay.Item` raw values).
+    public var ways: [String]?
     public var updated: Date
     public var id: String { day }
 
@@ -32,6 +39,10 @@ public struct DayLog: Codable, Sendable, Equatable, Identifiable {
         progress = try c.decodeIfPresent(Int.self, forKey: .progress).map { min(max($0, 1), 4) }
         goals = try? c.decodeIfPresent([String: Int].self, forKey: .goals)
         top = try? c.decodeIfPresent(UUID.self, forKey: .top)
+        gratitude = try? c.decodeIfPresent([String].self, forKey: .gratitude)
+        gave = try? c.decodeIfPresent(String.self, forKey: .gave)
+        visioned = try? c.decodeIfPresent(Bool.self, forKey: .visioned)
+        ways = try? c.decodeIfPresent([String].self, forKey: .ways)
         updated = try c.decodeIfPresent(Date.self, forKey: .updated) ?? .now
     }
 

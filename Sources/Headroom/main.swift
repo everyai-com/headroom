@@ -49,6 +49,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             }
         }
         UNUserNotificationCenter.current().delegate = self
+        UNUserNotificationCenter.current().setNotificationCategories([
+            UNNotificationCategory(identifier: "routine", actions: [UNNotificationAction(identifier: "go", title: "Start with the Coach", options: [.foreground])],
+                                   intentIdentifiers: []),
+            UNNotificationCategory(identifier: "meeting", actions: [UNNotificationAction(identifier: "go", title: "Prep", options: [.foreground])],
+                                   intentIdentifiers: []),
+        ])
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
 
         // The library (seconds) doesn't wait for the reclaim scan (can be a minute on a full disk).
@@ -101,6 +107,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 if ticks % 4 == 0 { LifeCoach.shared.detectFocus(model: model) } // every 2 minutes
             }
             if model.notificationsEnabled, let n = LifeCoach.shared.nudge(model: model) { notify(n.title, n.body) }
+            if model.notificationsEnabled {
+                for r in LifeCoach.shared.dueRoutines(model: model) {
+                    notify(r.kind.title, r.kind.body, category: "routine", info: ["routine": r.kind.rawValue])
+                }
+                if let e = LifeCoach.shared.meetingHeadsUp() {
+                    notify("In \(max(1, Int(e.start.timeIntervalSinceNow / 60) + 1)) min: \(e.title)", "Prep gives you an agenda and questions to ask.",
+                           category: "meeting", info: ["meeting": MeetingPrep.key(e)])
+                }
+            }
         }
         nudgeHabits()
         updateStatusItem()
@@ -261,16 +276,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         if let url = model.update?.url { NSWorkspace.shared.open(url) }
     }
 
-    private func notify(_ title: String, _ body: String) {
+    private func notify(_ title: String, _ body: String, category: String? = nil, info: [String: String] = [:]) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = .default
+        if let category { content.categoryIdentifier = category; content.userInfo = info }
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
     }
 
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
-        await MainActor.run { openWindow() }
+        let info = response.notification.request.content.userInfo as? [String: String] ?? [:]
+        let go = response.actionIdentifier == "go"
+        await MainActor.run {
+            // A routine or meeting opens Today; its button (pressed by you) also starts the coach.
+            if info["routine"] != nil || info["meeting"] != nil {
+                library.requestedScreen = .today
+                openWindow()
+                NotificationCenter.default.post(name: .headroomShowScreen, object: Screen.today)
+            } else {
+                openWindow()
+            }
+            guard go else { return }
+            if let kind = info["routine"].flatMap(Routine.Kind.init(rawValue:)) { LifeCoach.shared.run(kind, model: model) }
+            if let key = info["meeting"] { LifeCoach.shared.prep(key, model: model) }
+        }
     }
 
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,

@@ -181,6 +181,19 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   is the share of a session not on distractions (timeline). The shield (off / remind / hide, default remind) acts only during a
   running session: `FocusMode.react` is pure; hiding is `NSRunningApplication.hide()` for apps — never quit, never a browser
   for one tab — reminders at most every 5 min. No website blocking (that would need /etc/hosts or admin rights).
+  The shield's pause mode (`PauseCard`) is friction instead: a card over the screen for a distracting app or site — Back to
+  Work hides an app (a browser: Headroom comes forward), or a 10 s wait buys 5 minutes of that site/app (in memory only).
+  Nothing is closed or blocked.
+- Vision and the certain way (`Vision.swift` in Core, `VisionCard`/`VisionSheet`/`VisionEditor` on Today, after Wattles' "The
+  Science of Getting Rich"): `Planner.vision` (have/do/become, the picture, decisions parked 2 days — "when in doubt, wait"),
+  `DayLog.gratitude` (3 lines, +5), `gave` (use value given, +5), `visioned` (+5), `ways` (self-ticked practices; 3+ = +10).
+  `CertainWay.met` reads vision/gratitude/value/all-planned-done from the day — those can't be ticked by hand. All derived by the
+  ledger. CLI: `vision [become|do|have|picture|wait "…" | read]`, `grateful "…"`, `gave "…"`, `way [check <item>]`.
+- Routines and meeting prep (`Routines.swift` in Core, `RoutinesSheet` from the Coach card's alarm button): a notification at
+  the morning/evening/weekly times (once a day each, within 2 h, the evening one skipped once the day is rated) and 10 min
+  before a timed calendar event. Only the notification's button or the card's Prep/Plan buttons run the coach — a nudge
+  never does on its own. Meeting prep reads the event's notes and attendee names (EventKit, read-only); its agenda stays in
+  the sheet (Copy Agenda), never the day's note.
 - Season plan (`SeasonPlan.swift` in Core, `SeasonViews.swift` in the app; the rest of Superfocus): milestones per quest (+30 XP
   when ticked, derived by the ledger; a milestone due in a week and done late or not at all turns that week's on track into
   adjust), protected weekly hours per quest (drawn as blocks, never stored; nothing else lands in them; they count toward plan

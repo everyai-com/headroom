@@ -239,7 +239,7 @@ struct SeasonGrid: View {
 }
 
 /// Focus mode's shield: while a focus session runs, a distracting app coming to the front is hidden (or you get
-/// a reminder), and a distracting site gets a reminder. Hiding never quits anything — ⌘Tab brings it back.
+/// a reminder), and a distracting site gets a reminder — or, in pause mode, either one gets the pause card. Hiding never quits anything — ⌘Tab brings it back.
 @MainActor
 final class FocusShield {
     static let shared = FocusShield()
@@ -275,10 +275,16 @@ final class FocusShield {
            let top = model.planner.topThing(on: Planner.key(.now)), !top.isDone {
             running = FocusSession(title: top.title, start: Calendar.current.startOfDay(for: .now))
         }
-        let reaction = FocusMode.react(Self.mode, running: running, front: front,
-                                       classifier: ActivityRecorder.shared.classifier, lastReminder: lastReminder)
+        guard !PauseCard.shared.isShowing else { return }
+        let reaction = FocusMode.react(Self.mode, running: running, front: front, classifier: ActivityRecorder.shared.classifier,
+                                       lastReminder: lastReminder, allowed: PauseCard.shared.allowed)
         switch reaction {
         case .none: break
+        case .pause(let text):
+            let app = pid.flatMap(NSRunningApplication.init(processIdentifier:)) ?? NSWorkspace.shared.frontmostApplication
+            guard app?.bundleIdentifier != Bundle.main.bundleIdentifier else { return }
+            PauseCard.shared.show(text, source: FocusMode.source(front), pid: app?.processIdentifier,
+                                  isBrowser: Classifier.browsers.contains(front.app), model: model)
         case .hide:
             if let pid, let app = NSRunningApplication(processIdentifier: pid), app.bundleIdentifier != Bundle.main.bundleIdentifier {
                 app.hide()
@@ -320,6 +326,7 @@ struct FocusQuality: View {
                     Text("Don't watch").tag(FocusMode.Shield.off.rawValue)
                     Text("Remind me").tag(FocusMode.Shield.remind.rawValue)
                     Text("Hide distracting apps").tag(FocusMode.Shield.hide.rawValue)
+                    Text("Pause screen for apps and sites").tag(FocusMode.Shield.pause.rawValue)
                 }
                 .pickerStyle(.inline)
                 Divider()

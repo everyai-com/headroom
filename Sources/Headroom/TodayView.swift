@@ -221,6 +221,7 @@ struct TodayView: View {
                         alsoToday
                     }
                     VStack(alignment: .leading, spacing: 14) {
+                        VisionCard()
                         DailySyncCard()
                         DayLogCard()
                         habits
@@ -806,6 +807,16 @@ enum PlannerDemo {
         }
         if let top = p.tasks.first(where: { $0.big && !$0.isDone }) { p.updateLog(today, now: now) { $0.top = top.id } }
         p.updateLog(Planner.key(daysFrom: now, -1), now: now) { $0.progress = 3 }
+        var vision = Vision(have: ["A studio at home with morning light", "Two years of runway in the bank"],
+                            doing: ["Running magicteams full time with a small, happy team", "A month in Japan with family"],
+                            become: ["A calm founder who ships every week"],
+                            picture: "I open the studio at 7, coffee in hand. Forty clinics book through us every day; the team ships without me chasing it.")
+        vision.waiting = [Decision(title: "Hire a second engineer now or after 10 clinics", parked: Planner.key(daysFrom: now, -1))]
+        p.vision = vision
+        p.updateLog(today, now: now) {
+            $0.gratitude = ["Ana's patience on the pricing call", "A morning that went to plan", "Dinner with family"]
+            $0.ways = ["wellDone", "now"]
+        }
         p.challenges = [Challenge(title: "Write 20× in 30 days", habitID: write.id, target: 20, start: Planner.key(daysFrom: now, -12), end: Planner.key(daysFrom: now, 17)),
                         Challenge(title: "Commit something 14× in 14 days", habitID: ship2.id, target: 14, start: Planner.key(daysFrom: now, -16), end: Planner.key(daysFrom: now, -3))]
         return p

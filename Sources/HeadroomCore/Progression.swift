@@ -89,7 +89,7 @@ public struct Challenge: Codable, Sendable, Identifiable, Equatable, Hashable {
 
 /// One line of "what earned what".
 public struct LedgerEntry: Sendable, Equatable, Identifiable {
-    public enum Kind: String, Sendable { case task, habit, clean, focus, challenge, purchase, journal, checkin, sync, milestone }
+    public enum Kind: String, Sendable { case task, habit, clean, focus, challenge, purchase, journal, checkin, sync, milestone, gratitude, value, vision }
     public var id: String
     public var date: Date
     public var kind: Kind
@@ -166,6 +166,7 @@ extension Planner {
                                    title: c.title, xp: c.bonus, coins: c.bonus, area: h?.area))
         }
         out += logEntries(calendar: calendar)
+        out += visionEntries(calendar: calendar)
         out += milestoneEntries(calendar: calendar)
         for p in purchases {
             out.append(LedgerEntry(id: "p" + p.id.uuidString, date: p.date, kind: .purchase, title: p.title, xp: 0, coins: -p.cost, area: nil))

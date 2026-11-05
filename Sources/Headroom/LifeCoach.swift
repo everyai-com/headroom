@@ -29,6 +29,7 @@ final class LifeCoach: ObservableObject {
         var moment: Coach.Moment
         var day: String
         var plan: CoachPlan
+        var meeting: CalendarEvent? = nil
     }
 
     var available: Bool { !Edition.appStore }
@@ -113,13 +114,67 @@ final class LifeCoach: ObservableObject {
         let own = UserDefaults.standard.string(forKey: Self.calendarKey)
         events = store.events(matching: predicate)
             .filter { $0.status != .canceled && $0.calendar?.calendarIdentifier != own } // our own blocks aren't "busy"
-            .map { CalendarEvent(title: $0.title ?? "Busy", start: $0.startDate, end: $0.endDate,
-                                 calendar: $0.calendar?.title ?? "", allDay: $0.isAllDay) }
+            .map { e in
+                let people = (e.attendees ?? []).filter { !$0.isCurrentUser }.compactMap(\.name)
+                return CalendarEvent(title: e.title ?? "Busy", start: e.startDate, end: e.endDate, calendar: e.calendar?.title ?? "",
+                                     allDay: e.isAllDay, notes: e.notes.flatMap { $0.isEmpty ? nil : $0 }, people: people.isEmpty ? nil : people)
+            }
             .sorted { $0.start < $1.start }
     }
 
     func events(on day: String) -> [CalendarEvent] {
         events.filter { Planner.key($0.start) == day }
+    }
+
+    /// From the tick: the meeting starting in the next 10 minutes, once per meeting.
+    func meetingHeadsUp() -> CalendarEvent? {
+        guard available, !AppModel.demoMode else { return nil }
+        let today = Planner.key(.now)
+        var nudged = UserDefaults.standard.dictionary(forKey: "meetingNudged") as? [String: String] ?? [:]
+        guard let e = MeetingPrep.upcoming(events, now: .now, nudged: Set(nudged.keys)) else { return nil }
+        nudged[MeetingPrep.key(e)] = today
+        UserDefaults.standard.set(nudged.filter { $0.value == today }, forKey: "meetingNudged")
+        return e
+    }
+
+    // MARK: Routines
+
+    static let routinesKey = "routines"
+    @Published var routines: [Routine] = {
+        guard let data = UserDefaults.standard.data(forKey: LifeCoach.routinesKey),
+              let saved = try? JSONDecoder().decode([Routine].self, from: data) else { return Routines.defaults }
+        // Routines added in a later version join with their defaults.
+        return saved + Routines.defaults.filter { d in !saved.contains { $0.kind == d.kind } }
+    }() {
+        didSet { UserDefaults.standard.set(try? JSONEncoder().encode(routines), forKey: Self.routinesKey) }
+    }
+
+    /// From the tick: routines whose time came, once a day each. The evening one is skipped once the day is rated.
+    func dueRoutines(model: AppModel) -> [Routine] {
+        guard available, !AppModel.demoMode else { return [] }
+        let today = Planner.key(.now)
+        var nudged = UserDefaults.standard.dictionary(forKey: "routineNudged") as? [String: String] ?? [:]
+        let log = model.planner.log(on: today)
+        var done: Set<Routine.Kind> = []
+        if log?.isSynced == true { done.insert(.evening) }
+        if log?.visioned == true { done.insert(.vision) }
+        let due = Routines.due(routines, now: .now, nudged: nudged, done: done)
+        due.forEach { nudged[$0.kind.rawValue] = today }
+        if !due.isEmpty { UserDefaults.standard.set(nudged, forKey: "routineNudged") }
+        return due
+    }
+
+    /// A routine's button (in the card or on its notification): the coach moment it stands for.
+    func run(_ kind: Routine.Kind, model: AppModel) {
+        if kind == .vision { readingVision = true; return }
+        ask(kind == .morning ? .morning : kind == .evening ? .evening : .week, model: model)
+    }
+
+    /// The vision sheet is open (from its card, or the evening routine's button).
+    @Published var readingVision = false
+
+    func prep(_ key: String, model: AppModel) {
+        if let e = events.first(where: { MeetingPrep.key($0) == key }) { ask(.meeting, model: model, meeting: e) }
     }
 
     // MARK: Blocks on your calendar
@@ -241,12 +296,13 @@ final class LifeCoach: ObservableObject {
 
     // MARK: Coach
 
-    func ask(_ moment: Coach.Moment, model: AppModel, dump: String = "") {
+    func ask(_ moment: Coach.Moment, model: AppModel, dump: String = "", meeting: CalendarEvent? = nil) {
         guard asking == nil else { return }
         asking = moment
         failure = nil
         var context = context(model: model)
         context.dump = dump
+        context.meeting = meeting
         if moment != .week {
             let days = [Planner.key(.now), Planner.key(daysFrom: .now, 1)]
             context.events = context.events.filter { days.contains(Planner.key($0.start)) }
@@ -263,8 +319,9 @@ final class LifeCoach: ObservableObject {
                     coach.failure = reply == nil ? "Claude didn't answer (is `claude` signed in?)." : "Claude's answer wasn't a plan. Try again."
                     return
                 }
-                if !plan.note.isEmpty { coach.remember(moment, plan.note) }
-                coach.suggestion = Suggestion(moment: moment, day: day, plan: plan)
+                // A meeting's agenda stays in its sheet; it isn't the day's note.
+                if !plan.note.isEmpty && moment != .meeting { coach.remember(moment, plan.note) }
+                coach.suggestion = Suggestion(moment: moment, day: day, plan: plan, meeting: meeting)
             }
         }
     }
@@ -392,6 +449,7 @@ struct CoachCard: View {
     @Environment(\.snapshotMode) private var snapshot
     @State private var dumping = false
     @State private var editingMemory = false
+    @State private var editingRoutines = false
 
     var body: some View {
         let today = Planner.key(.now)
@@ -403,7 +461,8 @@ struct CoachCard: View {
                     if coach.hasClaude || snapshot {
                         if let m = coach.asking {
                             ProgressView().controlSize(.small)
-                            Text(m == .morning ? "Planning your day…" : m == .week ? "Reviewing your season…" : m == .dump ? "Sorting your brain dump…" : "Reviewing your day…")
+                            Text(m == .morning ? "Planning your day…" : m == .week ? "Reviewing your season…" : m == .dump ? "Sorting your brain dump…"
+                                 : m == .meeting ? "Preparing your meeting…" : "Reviewing your day…")
                                 .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
                         } else if evening {
                             Button { coach.ask(.evening, model: model) } label: { Label("Review My Day", systemImage: "moon.stars") }
@@ -429,6 +488,8 @@ struct CoachCard: View {
                         }
                         Button { editingMemory = true } label: { Image(systemName: "brain") }
                             .buttonStyle(.borderless).help("What the coach knows about you")
+                        Button { editingRoutines = true } label: { Image(systemName: "alarm") }
+                            .buttonStyle(.borderless).help("Routines: a nudge to plan the morning, sync the evening and review the week")
                     }
                 }
                 if let f = coach.failure {
@@ -449,6 +510,7 @@ struct CoachCard: View {
         .sheet(item: $coach.suggestion) { s in CoachSheet(suggestion: s) }
         .sheet(isPresented: $dumping) { BrainDumpSheet() }
         .sheet(isPresented: $editingMemory) { CoachMemorySheet() }
+        .sheet(isPresented: $editingRoutines) { RoutinesSheet() }
     }
 
     @ViewBuilder var weekButton: some View {
@@ -476,12 +538,20 @@ struct CoachCard: View {
                 .toggleStyle(.checkbox)
                 .help("Copies today's and the next 7 days' blocks into a calendar called “Headroom”, so they reach your phone. Only that calendar is written; turning this off removes the events it made.")
             }
+            let next = MeetingPrep.next(events, now: .now)
             ForEach(Array(events.prefix(6).enumerated()), id: \.offset) { _, e in
                 HStack(spacing: 8) {
                     Text(e.allDay ? "all day" : e.start.formatted(date: .omitted, time: .shortened))
                         .font(Theme.number(11.5, weight: .semibold)).foregroundStyle(e.end < .now ? Theme.textTertiary : Theme.accent)
                         .frame(width: 64, alignment: .leading)
                     Text(e.title).font(.system(size: 12.5)).lineLimit(1).foregroundStyle(e.end < .now ? Theme.textTertiary : Theme.textPrimary)
+                    if e == next, coach.hasClaude, !snapshot {
+                        Spacer(minLength: 4)
+                        Button("Prep") { coach.ask(.meeting, model: model, meeting: e) }
+                            .buttonStyle(.borderless).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.accent)
+                            .disabled(coach.asking != nil)
+                            .help("An agenda, questions to ask and anything to do first — from the event's notes and your season")
+                    }
                 }
             }
         }
@@ -525,7 +595,8 @@ struct CoachSheet: View {
         let tomorrow = suggestion.day != Planner.key(.now)
         VStack(alignment: .leading, spacing: 16) {
             Text(suggestion.moment == .morning ? "Your plan for today" : suggestion.moment == .week ? "Your week, honestly"
-                 : suggestion.moment == .dump ? "From your brain dump" : "Today, and tomorrow's plan")
+                 : suggestion.moment == .dump ? "From your brain dump" : suggestion.moment == .meeting ? "Before \(suggestion.meeting?.title ?? "your meeting")"
+                 : "Today, and tomorrow's plan")
                 .font(.system(size: 18, weight: .bold, design: .rounded))
             if !plan.note.isEmpty {
                 Text(plan.note).font(.system(size: 13)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
@@ -577,6 +648,13 @@ struct CoachSheet: View {
             }
             HStack {
                 Button("Not Now") { dismiss() }.keyboardShortcut(.cancelAction)
+                if suggestion.moment == .meeting, !plan.note.isEmpty {
+                    Button("Copy Agenda") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(plan.note, forType: .string)
+                        model.show("Agenda copied")
+                    }
+                }
                 Spacer()
                 Button(addLabel(tomorrow: tomorrow)) {
                     var placed = 0

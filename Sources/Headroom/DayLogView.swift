@@ -9,6 +9,8 @@ struct DayLogCard: View {
     @Environment(\.snapshotMode) private var snapshot
     @State private var draft = ""
     @State private var loadedDay = ""
+    @State private var thanks = ["", "", ""]
+    @State private var gave = ""
 
     var body: some View {
         let day = Planner.key(.now)
@@ -18,6 +20,8 @@ struct DayLogCard: View {
                 SectionTitle(title: "Check-in", trailing: sleepText)
                 scale("Mood", value: log?.mood, words: DayLog.moodWords) { v in model.updateLog { $0.mood = v } }
                 scale("Energy", value: log?.energy, words: DayLog.energyWords) { v in model.updateLog { $0.energy = v } }
+                Divider().opacity(0.4)
+                gratitude(day, log)
                 Divider().opacity(0.4)
                 Text("Journal").font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.textTertiary)
                 if snapshot {
@@ -37,7 +41,7 @@ struct DayLogCard: View {
                             }
                         }
                     HStack(spacing: 8) {
-                        let changed = draft != (log?.note ?? "")
+                        let changed = draft != (log?.note ?? "") || thanksChanged(log)
                         Button("Save") { save(day) }.buttonStyle(GhostButtonStyle()).disabled(!changed)
                         if coach.hasClaude {
                             if coach.reflecting == day {
@@ -80,13 +84,47 @@ struct DayLogCard: View {
     }
 
     func load(_ day: String) {
-        draft = model.planner.log(on: day)?.note ?? ""
+        let log = model.planner.log(on: day)
+        draft = log?.note ?? ""
+        let g = log?.gratitude ?? []
+        thanks = (0..<DayLog.gratitudeCount).map { $0 < g.count ? g[$0] : "" }
+        gave = log?.gave ?? ""
         loadedDay = day
     }
 
     func save(_ day: String) {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        model.updateLog(day) { $0.note = text }
+        let g = thanks.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        let v = gave.trimmingCharacters(in: .whitespacesAndNewlines)
+        model.updateLog(day) { $0.note = text; $0.gratitude = g.isEmpty ? nil : g; $0.gave = v.isEmpty ? nil : v }
+    }
+
+    func thanksChanged(_ log: DayLog?) -> Bool {
+        thanks.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } != (log?.gratitude ?? [])
+            || gave.trimmingCharacters(in: .whitespacesAndNewlines) != (log?.gave ?? "")
+    }
+
+    /// Three things you're thankful for (+5 XP), and who you gave more than you took (+5 XP).
+    @ViewBuilder func gratitude(_ day: String, _ log: DayLog?) -> some View {
+        HStack {
+            Text("Thankful for").font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.textTertiary)
+            Spacer()
+            Text(log?.isGrateful == true ? "+5 XP today" : "three things: +5 XP").font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
+        }
+        if snapshot {
+            let g = log?.gratitude ?? []
+            Text(g.isEmpty ? "Three good things, however small" : g.map { "• " + $0 }.joined(separator: "\n"))
+                .font(.system(size: 12.5)).foregroundStyle(g.isEmpty ? Theme.textTertiary : Theme.textPrimary)
+            if let v = log?.gave { Text("Gave more than I took: " + v).font(.system(size: 12.5)) }
+        } else {
+            ForEach(0..<DayLog.gratitudeCount, id: \.self) { i in
+                TextField(["The people I work with", "A morning that went to plan", "This body that carries me"][i], text: $thanks[i])
+                    .textFieldStyle(.roundedBorder).font(.system(size: 12.5)).onSubmit { save(day) }
+            }
+            TextField("Who got more use value from you than they paid?", text: $gave)
+                .textFieldStyle(.roundedBorder).font(.system(size: 12.5)).onSubmit { save(day) }
+                .help("The book's rule for every dealing: give more in use value than you take in cash value.")
+        }
     }
 
     func scale(_ label: String, value: Int?, words: [String], set: @escaping (Int?) -> Void) -> some View {

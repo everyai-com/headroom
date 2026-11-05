@@ -226,15 +226,25 @@ public enum FocusMode {
     }
 
     /// What the shield does when a distraction comes to the front during a focus session.
-    public enum Shield: String, Codable, Sendable, CaseIterable { case off, remind, hide }
+    /// `pause` covers the screen with a pause card (Back to work, or a few minutes after a short wait) — friction
+    /// instead of blocking, for apps and sites alike, with no admin rights and nothing closed.
+    public enum Shield: String, Codable, Sendable, CaseIterable { case off, remind, hide, pause }
 
-    public enum Reaction: Equatable, Sendable { case none, remind(String), hide }
+    public enum Reaction: Equatable, Sendable { case none, remind(String), hide, pause(String) }
+
+    /// What a "few more minutes" is remembered by: the site, else the app.
+    public static func source(_ front: ActivitySpan) -> String { front.host ?? front.app }
 
     /// Pure: what to do about the front app (and site) right now. Reminds at most every `quiet` seconds;
-    /// hiding is for apps only (a browser isn't hidden for one tab — that gets a reminder).
+    /// hiding is for apps only (a browser isn't hidden for one tab — that gets a reminder). `allowed` holds what
+    /// the pause card let through, until when.
     public static func react(_ mode: Shield, running: FocusSession?, front: ActivitySpan, classifier: Classifier,
-                             lastReminder: Date?, now: Date = .now, quiet: TimeInterval = 5 * 60) -> Reaction {
+                             lastReminder: Date?, allowed: [String: Date] = [:], now: Date = .now, quiet: TimeInterval = 5 * 60) -> Reaction {
         guard mode != .off, let running, classifier.classify(front).category.isDistraction else { return .none }
+        if mode == .pause {
+            if let until = allowed[source(front)], until > now { return .none }
+            return .pause("You're focusing on \(running.title). \(front.host ?? front.appName) can wait.")
+        }
         if mode == .hide && front.host == nil { return .hide }
         if let last = lastReminder, now.timeIntervalSince(last) < quiet { return .none }
         return .remind("You're focusing on \(running.title) — \(front.host ?? front.appName) can wait.")

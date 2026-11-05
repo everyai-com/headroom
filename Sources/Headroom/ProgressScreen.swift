@@ -323,6 +323,9 @@ struct JourneyView: View {
         case .checkin: "face.smiling"
         case .sync: "sun.horizon"
         case .milestone: "flag.checkered"
+        case .gratitude: "heart"
+        case .value: "gift"
+        case .vision: "eye"
         }
     }
 }
