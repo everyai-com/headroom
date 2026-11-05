@@ -466,13 +466,13 @@ struct CoachCard: View {
                                 .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
                         } else if evening {
                             Button { coach.ask(.evening, model: model) } label: { Label("Review My Day", systemImage: "moon.stars") }
-                                .buttonStyle(PrimaryButtonStyle())
+                                .buttonStyle(GhostButtonStyle())
                             Button { coach.ask(.morning, model: model) } label: { Label("Plan Today", systemImage: "sun.max") }
                                 .buttonStyle(GhostButtonStyle())
                             weekButton
                         } else {
                             Button { coach.ask(.morning, model: model) } label: { Label("Plan My Day", systemImage: "sun.max") }
-                                .buttonStyle(PrimaryButtonStyle())
+                                .buttonStyle(GhostButtonStyle())
                             Button { coach.ask(.evening, model: model) } label: { Label("Review", systemImage: "moon.stars") }
                                 .buttonStyle(GhostButtonStyle())
                             weekButton

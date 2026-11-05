@@ -213,6 +213,8 @@ struct TodayView: View {
         Scrolling {
             VStack(alignment: .leading, spacing: 14) {
                 header
+                DayPathCard()
+                SetupCard()
                 if LifeCoach.shared.available { CoachCard() }
                 HStack(alignment: .top, spacing: 14) {
                     VStack(alignment: .leading, spacing: 14) {
@@ -234,6 +236,7 @@ struct TodayView: View {
         .overlay(alignment: .top) { RewardBurst(reward: model.plannerReward).padding(.top, 60) }
         .onAppear { model.reloadPlannerIfChanged() }
         .sheet(item: $model.justStopped) { s in FocusFeelSheet(session: s) }
+        .sheet(isPresented: $model.closingDay) { EveningSheet() }
         .sheet(item: $editingHabit) { draft in
             HabitEditor(draft: draft) { saved in
                 model.plan { p in

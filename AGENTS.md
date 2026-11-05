@@ -190,6 +190,10 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   `DayLog.gratitude` (3 lines, +5), `gave` (use value given, +5), `visioned` (+5), `ways` (self-ticked practices; 3+ = +10).
   `CertainWay.met` reads vision/gratitude/value/all-planned-done from the day — those can't be ticked by hand. All derived by the
   ledger. CLI: `vision [become|do|have|picture|wait "…" | read]`, `grateful "…"`, `gave "…"`, `way [check <item>]`.
+- Today's spine (`DayPath.swift` in Core, `PathViews.swift` in the app): `DayPath` reads ten steps (vision, Big 3, top thing,
+  blocks, focus; three thanks, value given, rating, journal, tomorrow's top thing) from planner.json and offers exactly one next
+  step for the time of day — the only primary button on Today. `SetupCard` lists what's left of the system setup (vision,
+  season, calendar, blocks on the phone, routines, pause shield) until done or hidden. `EveningSheet` closes the day in one place.
 - Routines and meeting prep (`Routines.swift` in Core, `RoutinesSheet` from the Coach card's alarm button): a notification at
   the morning/evening/weekly times (once a day each, within 2 h, the evening one skipped once the day is rated) and 10 min
   before a timed calendar event. Only the notification's button or the card's Prep/Plan buttons run the coach — a nudge

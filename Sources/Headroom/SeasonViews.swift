@@ -22,34 +22,32 @@ struct DailySyncCard: View {
         let evening = Calendar.current.component(.hour, from: .now) >= 16
         Card {
             VStack(alignment: .leading, spacing: 12) {
-                SectionTitle(title: "Top thing", trailing: log?.isSynced == true ? "day synced ✓" : nil)
+                SectionTitle(title: "Top thing", trailing: log?.isSynced == true ? "day closed ✓" : nil)
                 topRow(day: day, label: "Today")
-                if evening || open || log?.isSynced == true { sync(day: day, tomorrow: tomorrow, log: log) }
-                else if !snapshot {
-                    Button { withAnimation(.easeOut(duration: 0.2)) { open = true } } label: { Label("Sync My Day", systemImage: "sun.horizon") }
-                        .buttonStyle(GhostButtonStyle()).controlSize(.small)
-                        .help("Two minutes at the end of the day: how it moved, a read per quest, tomorrow's top thing. It opens by itself after 4 pm.")
+                if evening || log?.isSynced == true { topRow(day: tomorrow, label: "Tomorrow") }
+                if open || log?.isSynced == true, let season = model.planner.season, season.isActive(on: day) { questReads(day: day, log: log, season: season) }
+                if !snapshot {
+                    HStack {
+                        Button { model.closingDay = true } label: { Label(log?.isSynced == true ? "Edit Today's Close" : "Close the Day…", systemImage: "moon.stars") }
+                            .buttonStyle(GhostButtonStyle()).controlSize(.small)
+                            .help("Five minutes: how it moved, three thanks, value given, a few lines, tomorrow's top thing.")
+                        if model.planner.season?.isActive(on: day) == true && log?.isSynced != true {
+                            Button(open ? "Hide Quests" : "Rate Quests") { withAnimation(.easeOut(duration: 0.2)) { open.toggle() } }
+                                .buttonStyle(.borderless).font(.system(size: 11.5))
+                        }
+                        Spacer()
+                        if coach.hasClaude && LifeCoach.shared.available && evening {
+                            Button { coach.ask(.evening, model: model) } label: { Label("Plan Tomorrow", systemImage: "sparkles") }
+                                .buttonStyle(.borderless).font(.system(size: 11.5)).disabled(coach.asking != nil)
+                        }
+                    }
                 }
             }
         }
     }
 
-    @ViewBuilder func sync(day: String, tomorrow: String, log: DayLog?) -> some View {
-                Divider().opacity(0.4)
-                Text("How much did today move?").font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.textTertiary)
-                HStack(spacing: 5) {
-                    ForEach([4, 3, 2, 1], id: \.self) { v in
-                        let on = log?.progress == v
-                        Button { model.updateLog { $0.progress = on ? nil : v } } label: {
-                            Text(["", "Little", "Mixed", "Solid", "Massive"][v]).font(.system(size: 11.5, weight: on ? .semibold : .regular))
-                                .padding(.horizontal, 9).frame(height: 24)
-                                .background(Capsule().fill(on ? Theme.accent.opacity(0.85) : Theme.fill(0.05)))
-                                .foregroundStyle(on ? Theme.onAccent : Theme.textSecondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                if let season = model.planner.season, season.isActive(on: day) {
+    /// A read per season quest for the day (behind / some / moved) — fed to the coach.
+    @ViewBuilder func questReads(day: String, log: DayLog?, season: Season) -> some View {
                     ForEach(season.quests) { q in
                         HStack(spacing: 5) {
                             Text(q.project).font(.system(size: 12)).foregroundStyle(Theme.textSecondary).lineLimit(1).frame(width: 110, alignment: .leading)
@@ -65,17 +63,6 @@ struct DailySyncCard: View {
                             }
                         }
                     }
-                }
-                topRow(day: tomorrow, label: "Tomorrow")
-                HStack {
-                    Text(log?.isSynced == true ? "+5 XP · the last 10% of today's score" : "Rate the day to finish it at 100% (+5 XP)")
-                        .font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
-                    Spacer()
-                    if !snapshot && coach.hasClaude && LifeCoach.shared.available {
-                        Button { coach.ask(.evening, model: model) } label: { Label("Plan Tomorrow", systemImage: "moon.stars") }
-                            .buttonStyle(GhostButtonStyle()).controlSize(.small).disabled(coach.asking != nil)
-                    }
-                }
     }
 
     @ViewBuilder func topRow(day: String, label: String) -> some View {

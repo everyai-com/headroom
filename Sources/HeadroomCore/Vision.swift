@@ -81,6 +81,21 @@ public enum CertainWay {
             case .now: "Acted now, where I am, not waiting for a better place"
             }
         }
+        /// A few words, for chips.
+        public var short: String {
+            switch self {
+            case .vision: "read my vision"
+            case .gratitude: "gave thanks"
+            case .allDone: "did all I could"
+            case .value: "gave more than I took"
+            case .wellDone: "did each thing well"
+            case .noHurry: "never hurried"
+            case .creative: "created, didn't compete"
+            case .attention: "guarded my attention"
+            case .increase: "spoke of increase"
+            case .now: "acted now"
+            }
+        }
         public var isSelfReported: Bool { ![.vision, .gratitude, .allDone, .value].contains(self) }
     }
 

@@ -362,6 +362,8 @@ final class AppModel: ObservableObject {
     @Published var justStopped: FocusSession?
     /// The season whose wrap is showing (after End Season, or from the season card).
     @Published var wrapSeason: Season?
+    /// The evening ritual sheet is open (from the day path or the top-thing card).
+    @Published var closingDay = false
 
     // MARK: Keep awake + energy
 

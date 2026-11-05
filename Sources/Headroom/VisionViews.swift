@@ -20,7 +20,7 @@ struct VisionCard: View {
                 if vision.isEmpty {
                     Text("Write down what you want to have, do and become — clearly enough to picture it.")
                         .font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
-                    Button("Write My Vision…") { editing = true }.buttonStyle(PrimaryButtonStyle())
+                    Button("Write My Vision…") { editing = true }.buttonStyle(GhostButtonStyle())
                 } else {
                     if let line = vision.headline {
                         Text(line).font(.system(size: 15, weight: .semibold, design: .rounded)).fixedSize(horizontal: false, vertical: true)
@@ -34,7 +34,7 @@ struct VisionCard: View {
                         Button { coach.readingVision = true } label: {
                             Label(log?.visioned == true ? "Read Today" : "Read It", systemImage: log?.visioned == true ? "checkmark" : "eye")
                         }
-                        .buttonStyle(log?.visioned == true ? AnyButtonStyle(GhostButtonStyle()) : AnyButtonStyle(PrimaryButtonStyle()))
+                        .buttonStyle(GhostButtonStyle())
                         Button("Edit") { editing = true }.buttonStyle(GhostButtonStyle())
                         Spacer()
                     }
@@ -59,40 +59,35 @@ struct VisionCard: View {
                     }
                 }
                 Divider().opacity(0.4)
-                ForEach(CertainWay.Item.allCases, id: \.self) { item in
-                    let on = met.contains(item)
-                    Button {
-                        guard item.isSelfReported else { return }
-                        model.updateLog(day) { l in
-                            var ways = Set(l.ways ?? [])
-                            if on { ways.remove(item.rawValue) } else { ways.insert(item.rawValue) }
-                            l.ways = ways.sorted()
+                // The certain way as chips: the first four are read from the day, the rest are yours to tick.
+                FlowLayout(spacing: 6) {
+                    ForEach(CertainWay.Item.allCases, id: \.self) { item in
+                        let on = met.contains(item)
+                        Button {
+                            guard item.isSelfReported else { return }
+                            model.updateLog(day) { l in
+                                var ways = Set(l.ways ?? [])
+                                if on { ways.remove(item.rawValue) } else { ways.insert(item.rawValue) }
+                                l.ways = ways.sorted()
+                            }
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: on ? "checkmark.circle.fill" : "circle").font(.system(size: 10.5))
+                                Text(item.short).font(.system(size: 11.5))
+                            }
+                            .padding(.horizontal, 9).frame(height: 26)
+                            .background(Capsule().fill(on ? Theme.accent.opacity(0.18) : Theme.fill(0.05)))
+                            .foregroundStyle(on ? Theme.accent : Theme.textSecondary)
                         }
-                    } label: {
-                        HStack(alignment: .top, spacing: 8) {
-                            Image(systemName: on ? "checkmark.circle.fill" : "circle").font(.system(size: 12))
-                                .foregroundStyle(on ? Theme.safe : Theme.textTertiary)
-                            Text(item.title).font(.system(size: 12)).foregroundStyle(on ? Theme.textPrimary : Theme.textSecondary)
-                                .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
-                            Spacer(minLength: 0)
-                        }
-                        .contentShape(Rectangle())
+                        .buttonStyle(.plain)
+                        .help(item.title + (item.isSelfReported ? "" : " — read from your day"))
                     }
-                    .buttonStyle(.plain)
-                    .help(item.isSelfReported ? "Tick it if it's true of today" : "Read from your day")
                 }
             }
         }
         .sheet(isPresented: $editing) { VisionEditor(vision: vision) }
         .sheet(isPresented: $coach.readingVision) { VisionSheet() }
     }
-}
-
-/// Erases a button style so a ternary can pick one.
-struct AnyButtonStyle: ButtonStyle {
-    private let make: (Configuration) -> AnyView
-    init<S: ButtonStyle>(_ style: S) { make = { AnyView(style.makeBody(configuration: $0)) } }
-    func makeBody(configuration: Configuration) -> some View { make(configuration) }
 }
 
 /// Reading the vision: the picture, the lists, the book's summary, and "I read it" (+5 XP, once a day).

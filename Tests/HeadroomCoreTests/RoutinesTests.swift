@@ -90,3 +90,28 @@ final class VisionTests: XCTestCase {
         XCTAssertTrue(Coach.prompt(.morning, c).contains("- become: A calm founder"))
     }
 }
+
+/// The day path: one next step, read from what's already in the planner.
+final class DayPathTests: XCTestCase {
+    func testThereIsAlwaysOneNextStepForTheTimeOfDay() {
+        var p = Planner()
+        let day = "2026-11-05"
+        func at(_ h: Int) -> Date { Planner.date(day)!.addingTimeInterval(TimeInterval(h * 3600)) }
+        XCTAssertEqual(DayPath.next(p, now: at(8)), .vision)
+        p.updateLog(day, now: at(8)) { $0.visioned = true }
+        XCTAssertEqual(DayPath.next(p, now: at(8)), .plan)
+        let t = p.add("Ship the API", day: day, big: true, now: at(8))
+        p.updateLog(day, now: at(8)) { $0.top = t.id }
+        XCTAssertEqual(DayPath.next(p, now: at(8)), .block)
+        XCTAssertEqual(DayPath.next(p, now: at(13)), .block, "the morning's steps carry into the day")
+        p.addBlock(TimeBlock(title: "API", day: day, start: 14 * 60, end: 16 * 60, taskID: t.id))
+        XCTAssertEqual(DayPath.next(p, now: at(13)), .focus)
+        XCTAssertEqual(DayPath.next(p, now: at(9)), nil, "nothing from the day before noon once the morning is done")
+        XCTAssertEqual(DayPath.next(p, now: at(19)), .gratitude, "the evening skips focus — it's tomorrow's turn")
+        p.updateLog(day, now: at(19)) { $0.gratitude = ["a", "b", "c"]; $0.gave = "Ana"; $0.progress = 3; $0.note = "Shipped it and it felt good" }
+        XCTAssertEqual(DayPath.next(p, now: at(19)), .tomorrow)
+        p.updateLog("2026-11-06", now: at(19)) { $0.top = t.id }
+        XCTAssertNil(DayPath.next(p, now: at(19)))
+        XCTAssertEqual(DayPath.done(p, now: at(19)).count, 9, "everything but focus")
+    }
+}
