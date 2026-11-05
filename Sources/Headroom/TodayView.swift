@@ -831,23 +831,25 @@ struct NotchTodayView: View {
 
     var body: some View {
         let p = model.planner
-        let tasks = p.today()
-        // Three rows fit: the Big 3 first, then whatever else is open today.
+        let top = p.topThing(on: Planner.key(.now))
+        // The top thing leads, then the Big 3, then whatever else is open today.
+        let tasks = p.today().filter { $0.id == top?.id } + p.today().filter { $0.id != top?.id }
+        // Three rows fit.
         let shown = Array(tasks.prefix(3))
         let more = tasks.count - shown.count
         let habits = p.habitsDue()
         let shownHabits = Array(habits.prefix(3))
         let level = Planner.level(for: p.xp())
-        let build = habits.filter { $0.kind == .build }
-        let done = p.today().filter(\.isDone).count + build.filter { $0.isDone() }.count
-        let total = p.today().count + build.count
+        // The same daily score as Today's ring.
+        let score = p.score(on: .now)
         VStack(alignment: .leading, spacing: 10) {
             Spacer().frame(height: notchHeight - 4)
             HStack(spacing: 10) {
-                GaugeRing(fraction: total > 0 ? Double(done) / Double(total) : 0, tint: Theme.safe, lineWidth: 4)
+                GaugeRing(fraction: Double(score.percent) / 100, tint: Theme.safe, lineWidth: 4)
                     .frame(width: 26, height: 26)
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(total == 0 ? "Nothing planned yet" : "\(done) of \(total) done today").font(.system(size: 13, weight: .semibold))
+                    Text(score.planned == 0 ? "Nothing planned yet" : "\(score.percent)% · \(score.done) of \(score.planned) done today")
+                        .font(.system(size: 13, weight: .semibold))
                     if let s = p.runningSession {
                         HStack(spacing: 4) {
                             Image(systemName: "timer").font(.system(size: 9.5, weight: .bold))
@@ -881,7 +883,9 @@ struct NotchTodayView: View {
                             CheckCircle(on: t.isDone, tint: t.big ? Theme.review : Theme.accent)
                             Text(t.title).font(.system(size: 12.5, weight: .medium)).lineLimit(1)
                                 .strikethrough(t.isDone).foregroundStyle(t.isDone ? Theme.textTertiary : Theme.textPrimary)
-                            if t.big { Image(systemName: "star.fill").font(.system(size: 8)).foregroundStyle(Theme.review) }
+                            if t.id == top?.id {
+                                Text("TOP").font(.system(size: 8.5, weight: .heavy)).foregroundStyle(Theme.accent)
+                            } else if t.big { Image(systemName: "star.fill").font(.system(size: 8)).foregroundStyle(Theme.review) }
                             Spacer(minLength: 0)
                         }
                         .frame(height: 22).contentShape(Rectangle())

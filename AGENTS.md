@@ -28,6 +28,7 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   `season` prints the week-by-week grid (● on track ◐ adjust ○ off track); `season set … --weeks 1-12`; `season end` keeps it for `wrap`.
   `milestones` · `milestone add "…" [--project p] [--due D|--week n]` · `milestone done|pin <n|words>` · `protect [add "<project>" weekdays
   09:00 11:00 | remove <n>]` · `stack [--keep]` (today's tasks into free time) · `top [<n|words>] [--tomorrow]` · `sync <1-4>` · `score` · `wrap`.
+  `vision [become|do|have|picture|wait "…" | read]` · `grateful "…" …` · `gave "…"` · `way [check <item>]` (the certain way).
   — the only CLI commands that write, and only Headroom's own `planner.json`. Use them to plan the user's day from a session.
 - distribution signing: `HEADROOM_SIGN_ID="Developer ID Application: …" HEADROOM_NOTARY_PROFILE=<profile> ./scripts/bundle.sh`
   (version from `VERSION`; Developer ID builds keep Full Disk Access across rebuilds, ad-hoc ones don't)

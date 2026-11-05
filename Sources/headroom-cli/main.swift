@@ -211,7 +211,7 @@ Task {
               "temperature": b.temperature, "batteryWatts": b.batteryWatts, "systemWatts": b.systemWatts as Any,
               "adapterWatts": b.adapterWatts as Any, "readings": log.samples.count])
     default:
-        print("usage: headroom-cli [status|reclaim|projects|apps|map|files|growth [hours]|activity|library|search \"query\"|battery|today|add|done|later|habits|habit|focus|rewards|reward|buy|challenge|stats|blocks|block|journal|sleep|timeline|season] [--json]")
+        print("usage: headroom-cli [status|reclaim|projects|apps|map|files|growth [hours]|activity|library|search \"query\"|battery|today|add|done|later|habits|habit|focus|rewards|reward|buy|challenge|stats|blocks|block|journal|sleep|timeline|season|milestones|milestone|protect|stack|top|sync|score|wrap|vision|grateful|gave|way] [--json]")
     }
 }
 semaphore.wait()
