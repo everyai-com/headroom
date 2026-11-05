@@ -20,6 +20,8 @@ public struct Planner: Codable, Sendable, Equatable {
     public var season: Season?
     /// Journal entries and mood/energy check-ins, one per day (LifeLog.swift).
     public var logs: [DayLog] = []
+    /// Time blocks you (or the coach, once you accept) placed in a day (FocusPlan.swift).
+    public var blocks: [TimeBlock] = []
 
     public init() {}
 
@@ -34,6 +36,7 @@ public struct Planner: Codable, Sendable, Equatable {
         challenges = try c.decodeIfPresent([Challenge].self, forKey: .challenges) ?? []
         season = try c.decodeIfPresent(Season.self, forKey: .season)
         logs = try c.decodeIfPresent([DayLog].self, forKey: .logs) ?? []
+        blocks = (try? c.decodeIfPresent([TimeBlock].self, forKey: .blocks)) ?? []
     }
 
     /// Only three tasks a day can be big: choosing is the point.

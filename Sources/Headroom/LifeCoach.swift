@@ -8,7 +8,7 @@ import HeadroomCore
 final class LifeCoach: ObservableObject {
     static let shared = LifeCoach()
 
-    /// Today's and tomorrow's events.
+    /// The next seven days' events (the weekly review plans around all of them).
     @Published private(set) var events: [CalendarEvent] = []
     @Published private(set) var calendarConnected = false
     @Published private(set) var commits: [Commit] = []
@@ -106,7 +106,7 @@ final class LifeCoach: ObservableObject {
         guard calendarConnected, force || Date().timeIntervalSince(lastCalendar) > 5 * 60 else { return }
         lastCalendar = .now
         let start = Calendar.current.startOfDay(for: .now)
-        guard let end = Calendar.current.date(byAdding: .day, value: 2, to: start) else { return }
+        guard let end = Calendar.current.date(byAdding: .day, value: 7, to: start) else { return }
         let predicate = store.predicateForEvents(withStart: start, end: end, calendars: nil)
         events = store.events(matching: predicate)
             .filter { $0.status != .canceled }
@@ -137,9 +137,13 @@ final class LifeCoach: ObservableObject {
         guard asking == nil else { return }
         asking = moment
         failure = nil
-        let context = context(model: model)
+        var context = context(model: model)
+        if moment != .week {
+            let days = [Planner.key(.now), Planner.key(daysFrom: .now, 1)]
+            context.events = context.events.filter { days.contains(Planner.key($0.start)) }
+        }
         let prompt = Coach.prompt(moment, context)
-        let day = moment == .morning ? Planner.key(.now) : Planner.key(daysFrom: .now, 1)
+        let day = moment == .evening ? Planner.key(daysFrom: .now, 1) : Planner.key(.now)
         Task.detached(priority: .userInitiated) {
             let reply = ClaudeCLI.ask(prompt)
             let plan = reply.flatMap(Coach.parse)
@@ -267,18 +271,20 @@ struct CoachCard: View {
                     if coach.hasClaude || snapshot {
                         if let m = coach.asking {
                             ProgressView().controlSize(.small)
-                            Text(m == .morning ? "Planning your day…" : "Reviewing your day…")
+                            Text(m == .morning ? "Planning your day…" : m == .week ? "Reviewing your season…" : "Reviewing your day…")
                                 .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
                         } else if evening {
                             Button { coach.ask(.evening, model: model) } label: { Label("Review My Day", systemImage: "moon.stars") }
                                 .buttonStyle(PrimaryButtonStyle())
                             Button { coach.ask(.morning, model: model) } label: { Label("Plan Today", systemImage: "sun.max") }
                                 .buttonStyle(GhostButtonStyle())
+                            weekButton
                         } else {
                             Button { coach.ask(.morning, model: model) } label: { Label("Plan My Day", systemImage: "sun.max") }
                                 .buttonStyle(PrimaryButtonStyle())
                             Button { coach.ask(.evening, model: model) } label: { Label("Review", systemImage: "moon.stars") }
                                 .buttonStyle(GhostButtonStyle())
+                            weekButton
                         }
                     } else {
                         Text("Install Claude Code to get a plan and a review").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
@@ -289,7 +295,7 @@ struct CoachCard: View {
                 }
                 if let n = coach.note {
                     HStack(alignment: .top, spacing: 10) {
-                        Image(systemName: n.moment == .morning ? "sun.max.fill" : "moon.stars.fill").foregroundStyle(Theme.accent)
+                        Image(systemName: n.moment == .morning ? "sun.max.fill" : n.moment == .week ? "flag.checkered" : "moon.stars.fill").foregroundStyle(Theme.accent)
                         Text(n.text).font(.system(size: 13)).foregroundStyle(Theme.textPrimary).fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -300,6 +306,14 @@ struct CoachCard: View {
             }
         }
         .sheet(item: $coach.suggestion) { s in CoachSheet(suggestion: s) }
+    }
+
+    @ViewBuilder var weekButton: some View {
+        if model.planner.season != nil {
+            Button { coach.ask(.week, model: model) } label: { Label("Week", systemImage: "flag.checkered") }
+                .buttonStyle(GhostButtonStyle())
+                .help("Weekly review: an honest read on each season quest, specific fixes, and time blocks for the rest of the week")
+        }
     }
 
     func calendar(_ events: [CalendarEvent]) -> some View {
@@ -352,36 +366,72 @@ struct CoachSheet: View {
     @Environment(\.dismiss) private var dismiss
     var suggestion: LifeCoach.Suggestion
     @State private var picked: Set<String> = []
+    @State private var pickedBlocks: Set<BlockSuggestion> = []
 
     var body: some View {
         let plan = suggestion.plan
         let tomorrow = suggestion.day != Planner.key(.now)
         VStack(alignment: .leading, spacing: 16) {
-            Text(suggestion.moment == .morning ? "Your plan for today" : "Today, and tomorrow's plan")
+            Text(suggestion.moment == .morning ? "Your plan for today" : suggestion.moment == .week ? "Your week, honestly" : "Today, and tomorrow's plan")
                 .font(.system(size: 18, weight: .bold, design: .rounded))
             if !plan.note.isEmpty {
                 Text(plan.note).font(.system(size: 13)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
             }
+            if !plan.recommendations.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    SectionTitle(title: "Recommendations")
+                    ForEach(plan.recommendations, id: \.self) { r in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(r.title).font(.system(size: 13, weight: .semibold))
+                            Text(r.why).font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
             if !plan.big.isEmpty { group("Big 3", plan.big, big: true) }
             if !plan.tasks.isEmpty { group("Also", plan.tasks, big: false) }
+            if !plan.blocks.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionTitle(title: "Time blocks")
+                    ForEach(plan.blocks, id: \.self) { b in
+                        Toggle(isOn: Binding(get: { pickedBlocks.contains(b) }, set: { if $0 { pickedBlocks.insert(b) } else { pickedBlocks.remove(b) } })) {
+                            HStack(spacing: 8) {
+                                Text("\(b.day.flatMap { Planner.date($0)?.formatted(.dateTime.weekday(.abbreviated)) }.map { $0 + " " } ?? "")\(b.start)–\(b.end)")
+                                    .font(Theme.number(12, weight: .semibold)).foregroundStyle(Theme.accent)
+                                Text(b.title).font(.system(size: 13))
+                            }
+                        }
+                        .toggleStyle(.checkbox)
+                    }
+                }
+            }
             HStack {
                 Button("Not Now") { dismiss() }.keyboardShortcut(.cancelAction)
                 Spacer()
-                Button("Add \(picked.count) to \(tomorrow ? "Tomorrow" : "Today")") {
+                Button(addLabel(tomorrow: tomorrow)) {
+                    var placed = 0
                     model.plan { p in
                         p.accept(big: plan.big.filter(picked.contains), tasks: plan.tasks.filter(picked.contains), day: suggestion.day)
+                        placed = p.acceptBlocks(plan.blocks.filter(pickedBlocks.contains), day: suggestion.day)
                     }
-                    model.show("Added \(picked.count) to \(tomorrow ? "tomorrow" : "today")")
+                    let skipped = pickedBlocks.count - placed
+                    model.show("Added \(picked.count + placed)" + (skipped > 0 ? " · \(skipped) block\(skipped == 1 ? "" : "s") clashed and stayed out" : ""))
                     dismiss()
                 }
                 .buttonStyle(PrimaryButtonStyle())
                 .keyboardShortcut(.defaultAction)
-                .disabled(picked.isEmpty)
+                .disabled(picked.isEmpty && pickedBlocks.isEmpty)
             }
         }
         .padding(24)
-        .frame(width: 480)
-        .onAppear { picked = Set(plan.big + plan.tasks) }
+        .frame(width: 520)
+        .onAppear { picked = Set(plan.big + plan.tasks); pickedBlocks = Set(plan.blocks) }
+    }
+
+    func addLabel(tomorrow: Bool) -> String {
+        let n = picked.count + pickedBlocks.count
+        if suggestion.moment == .week { return "Add \(n) to the Week" }
+        return "Add \(n) to \(tomorrow ? "Tomorrow" : "Today")"
     }
 
     func group(_ title: String, _ items: [String], big: Bool) -> some View {

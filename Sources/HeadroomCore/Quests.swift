@@ -28,7 +28,7 @@ public struct QuotaTrack: Codable, Sendable, Equatable, Hashable {
     }
 }
 
-/// Two weeks, one main quest, up to two side quests, each with the hours a week you mean to give it.
+/// Up to 12 weeks, one main quest, up to two side quests, each with the hours a week you mean to give it.
 public struct Season: Codable, Sendable, Equatable {
     public struct Quest: Codable, Sendable, Equatable, Hashable, Identifiable {
         public var project: String
@@ -42,6 +42,8 @@ public struct Season: Codable, Sendable, Equatable {
     public var end: String
     public var main: Quest
     public var sides: [Quest]
+    /// Minutes per quest (project, lowercased) for each season week, keyed by the week's first day.
+    public var log: [String: [String: Int]]?
 
     public init(start: String, end: String, main: Quest, sides: [Quest] = []) {
         self.start = start; self.end = end; self.main = main; self.sides = Array(sides.prefix(Self.maxSideQuests))

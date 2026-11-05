@@ -89,6 +89,35 @@ extension AppModel {
         if let first = added.first { show("Focus found: \(first.minutes()) min on \(first.title.replacingOccurrences(of: "Deep work · ", with: ""))") }
     }
 
+    /// Keeps the season's weekly record current (written only when the minutes changed).
+    func recordSeason(_ minutes: [String: Int]) {
+        guard !Self.demoMode, !minutes.isEmpty else { return }
+        var copy = planner
+        guard copy.recordSeasonWeek(minutes) else { return }
+        plan { _ = $0.recordSeasonWeek(minutes) }
+    }
+
+    /// A block starting this minute, once each (for the tick's notification).
+    func blockStarting(_ now: Date = .now) -> TimeBlock? {
+        let m = Calendar.current.component(.hour, from: now) * 60 + Calendar.current.component(.minute, from: now)
+        guard planner.runningSession == nil,
+              let b = planner.blocks(on: Planner.key(now)).first(where: { $0.start <= m && m < $0.start + 2 }) else { return nil }
+        let key = b.id.uuidString
+        guard UserDefaults.standard.string(forKey: "lastBlockNotice") != key else { return nil }
+        UserDefaults.standard.set(key, forKey: "lastBlockNotice")
+        return b
+    }
+
+    /// A block for a task in today's first free slot (from now, around blocks and calendar events).
+    func blockTime(for task: PlannerTask, minutes: Int) {
+        let now = Date(), day = Planner.key(now)
+        let from = Int(ceil(Double(Calendar.current.component(.hour, from: now) * 60 + Calendar.current.component(.minute, from: now)) / 15) * 15)
+        let busy = LifeCoach.shared.events(on: day).filter { !$0.allDay }.map { DateInterval(start: $0.start, end: max($0.start, $0.end)) }
+        guard let start = planner.firstFree(on: day, from: from, minutes: minutes, busy: busy) else { show("No free \(minutes) minutes left today"); return }
+        plan { _ = $0.addBlock(TimeBlock(title: task.title, day: day, start: start, end: start + minutes, project: task.project, taskID: task.id)) }
+        show("Blocked \(TimeBlock.clock(start))–\(TimeBlock.clock(start + minutes)) for \(task.title)")
+    }
+
     /// Today's journal and check-in.
     func updateLog(_ day: String = Planner.key(.now), _ change: (inout DayLog) -> Void) {
         reward { $0.updateLog(day, change) }
@@ -148,6 +177,7 @@ struct TodayView: View {
                 if LifeCoach.shared.available { CoachCard() }
                 HStack(alignment: .top, spacing: 14) {
                     VStack(alignment: .leading, spacing: 14) {
+                        DayPlanCard()
                         bigThree
                         alsoToday
                     }
@@ -357,6 +387,9 @@ struct TaskRow: View {
         Divider()
         if !task.isDone && model.planner.runningSession?.taskID != task.id {
             Button("Focus on This") { model.startFocus(task.title, task: task) }
+            Menu("Block Time Today") {
+                ForEach([30, 60, 90, 120], id: \.self) { m in Button(Minutes.text(Double(m) * 60)) { model.blockTime(for: task, minutes: m) } }
+            }
         }
         Picker("Effort", selection: Binding(get: { task.effort }, set: { e in model.plan { $0.update(task.id) { $0.effort = e } } })) {
             Text("Easy  (+10)").tag(1); Text("Medium  (+20)").tag(2); Text("Hard  (+30)").tag(3)
@@ -687,9 +720,22 @@ enum PlannerDemo {
             l.note = "Good morning on outreach, the demo call went well. Slumped after lunch and lost 40 minutes to YouTube."
             l.reflection = "The demo landing right after a focused outreach block isn't luck — your best days start with marketing before noon. The afternoon slump follows short nights; last night was 6h10. What would make tomorrow's first two hours as protected as today's?"
         }
-        p.season = Season(start: Planner.key(daysFrom: now, -3), end: Planner.key(daysFrom: now, 10),
-                          main: .init(project: "magicteams", hoursPerWeek: 20),
-                          sides: [.init(project: "Headroom", hoursPerWeek: 8), .init(project: "flare-forge", hoursPerWeek: 4)])
+        var season = Season(start: Planner.key(daysFrom: now, -51), end: Planner.key(daysFrom: now, 32),
+                            main: .init(project: "magicteams", hoursPerWeek: 20),
+                            sides: [.init(project: "Headroom", hoursPerWeek: 8), .init(project: "flare-forge", hoursPerWeek: 4)])
+        var log: [String: [String: Int]] = [:]
+        for w in 0..<7 {
+            log[season.weekDays(w).first!] = ["magicteams": [1250, 1180, 900, 1300, 1220, 640, 1260][w],
+                                              "headroom": [500, 420, 510, 300, 480, 470, 520][w], "flare-forge": [260, 100, 90, 250, 240, 230, 120][w]]
+        }
+        log[season.weekDays(7).first!] = ["magicteams": 9 * 60 + 40, "headroom": 2 * 60 + 15, "flare-forge": 2 * 60 + 5]
+        season.log = log
+        p.season = season
+        let m = Calendar.current.component(.hour, from: now) * 60
+        for (title, a, len, project) in [("Outreach: 20 clinics", m - 120, 90, "magicteams"), ("Pricing page", m + 60, 90, "magicteams"),
+                                         ("Coach card polish", m + 180, 60, "Headroom")] {
+            p.addBlock(TimeBlock(title: title, day: today, start: max(0, a), end: max(0, a) + len, project: project))
+        }
         p.challenges = [Challenge(title: "Write 20× in 30 days", habitID: write.id, target: 20, start: Planner.key(daysFrom: now, -12), end: Planner.key(daysFrom: now, 17)),
                         Challenge(title: "Commit something 14× in 14 days", habitID: ship2.id, target: 14, start: Planner.key(daysFrom: now, -16), end: Planner.key(daysFrom: now, -3))]
         return p

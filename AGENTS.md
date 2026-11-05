@@ -24,6 +24,8 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   reloads it on its next tick. Project rules apply last, to the project a span ended up with.
   `journal ["how it went"] [--mood 1-5 --energy 1-5]` appends to today's entry (no text = show it); `sleep` (read-only) lists
   the nights the Mac saw; `habit add "Commit something" --commit [project]` is checked off by the first commit of the day.
+  `blocks [--day D]` · `block add "<title>" 09:30 11:00 [--project p]` · `block remove <n>` are time blocks (planner.json only);
+  `season` prints the week-by-week grid (● on track ◐ adjust ○ off track); `season set … --weeks 1-12`.
   — the only CLI commands that write, and only Headroom's own `planner.json`. Use them to plan the user's day from a session.
 - distribution signing: `HEADROOM_SIGN_ID="Developer ID Application: …" HEADROOM_NOTARY_PROFILE=<profile> ./scripts/bundle.sh`
   (version from `VERSION`; Developer ID builds keep Full Disk Access across rebuilds, ad-hoc ones don't)
@@ -164,6 +166,15 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   stretches only; recorded as `FocusSession(detected: true)` never over an existing session, split at the 3 h cap. Sleep is an
   estimate from `rest.json` (sleep/wake/lock/unlock/screen times only, 30 days) — `Rest.night`, longest overnight rest, short
   wake-ups under 20 min joined; never `pmset`. The month view is a mirror: missed days are outlined, never red.
+- Focus plan (`FocusPlan.swift` in Core, `DayPlanCard`/`SeasonGrid`/`FocusShield`/`FocusQuality` in the app; after
+  Superfocus): seasons run 1–12 weeks in 7-day weeks from their first day; `Season.log` keeps each week's minutes per quest
+  (written only when changed) so the grid outlives the timeline's 30 days; `Season.status` judges the current week on pace.
+  Time blocks live in planner.json — the calendar is still never written — and never overlap (`addBlock` returns nil). Plan
+  strength = hours still needed this season week that have a block ahead. Coach replies may carry `blocks` and
+  `recommendations` (`.week` review); blocks land only when ticked and Added (`acceptBlocks`, clashes skipped). Focus quality
+  is the share of a session not on distractions (timeline). The shield (off / remind / hide, default remind) acts only during a
+  running session: `FocusMode.react` is pure; hiding is `NSRunningApplication.hide()` for apps — never quit, never a browser
+  for one tab — reminders at most every 5 min. No website blocking (that would need /etc/hosts or admin rights).
 - Battery add-on (`Battery.swift` + `BatteryView`, Settings → Add-ons, on by default, hidden without a battery) is read-only:
   `AppleSmartBattery` properties from IOKit, never SMC writes, a helper or `pmset` — Headroom never changes charging; tips point
   to System Settings › Battery. Health = `AppleRawMaxCapacity / DesignCapacity` (`MaxCapacity` is a % on Apple silicon). Readings

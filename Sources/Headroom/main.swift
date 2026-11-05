@@ -88,6 +88,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         if model.plannerAddOn {
             model.applyQuests(model.questMinutes(ActivityRecorder.shared))
             LifeCoach.shared.update()
+            FocusShield.shared.attach(model)
+            model.recordSeason(ActivityRecorder.shared.weekProjectMinutes)
+            if model.notificationsEnabled, let b = model.blockStarting() { notify("Time for: \(b.title)", "Your \(Minutes.text(Double(b.minutes) * 60)) block starts now — start a focus session from Today.") }
             if LifeCoach.shared.available {
                 model.applyProof(LifeCoach.shared.commits)
                 if ticks % 4 == 0 { LifeCoach.shared.detectFocus(model: model) } // every 2 minutes

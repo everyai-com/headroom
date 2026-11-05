@@ -5,7 +5,7 @@ import HeadroomCore
 /// (Claude Code) can plan the day without leaving the shell. These write only Headroom's own planner.json,
 /// never a file of yours; the app picks the change up within seconds.
 enum PlannerCommands {
-    static let names: Set<String> = ["journal", "sleep", "today", "add", "done", "later", "habits", "habit", "focus", "rewards", "reward", "buy",
+    static let names: Set<String> = ["block", "blocks", "journal", "sleep", "today", "add", "done", "later", "habits", "habit", "focus", "rewards", "reward", "buy",
                                      "stats", "challenge", "timeline", "season"]
 
     static func run(_ args: [String], json: Bool) {
@@ -222,6 +222,37 @@ enum PlannerCommands {
             let c = outcome.or(ref, what: "habit")
             print("Challenge on: \(c.title) — +\(c.bonus) XP when you get there. Nothing lost if you don't.")
 
+        case "blocks", "block":
+            // headroom-cli blocks [--day D] · block add "<title>" 09:30 11:00 [--day D] [--project p] · block remove <n>
+            let day = option("--day").map(dayKey) ?? today
+            if args[0] == "block", rest.first == "add" {
+                let project = option("--project")
+                rest = Array(rest.dropFirst())
+                guard rest.count >= 3, let a = TimeBlock.minute(rest[rest.count - 2]), let b = TimeBlock.minute(rest[rest.count - 1]), b > a else {
+                    fail("usage: headroom-cli block add \"Write the launch post\" 09:30 11:00 [--day YYYY-MM-DD] [--project p]")
+                }
+                let title = rest.dropLast(2).joined(separator: " ")
+                let added = PlannerStore.mutate { $0.addBlock(TimeBlock(title: title, day: day, start: a, end: b, project: project)) }.result
+                guard added != nil else { fail("That clashes with another block on \(day).") }
+                print("Blocked \(TimeBlock.clock(a))–\(TimeBlock.clock(b)) on \(day): \(title)")
+                return
+            }
+            if args[0] == "block", rest.first == "remove" {
+                guard let n = rest.last.flatMap(Int.init) else { fail("usage: headroom-cli block remove <n> [--day D]") }
+                let removed = PlannerStore.mutate { p -> TimeBlock? in
+                    let list = p.blocks(on: day)
+                    guard list.indices.contains(n - 1) else { return nil }
+                    p.blocks.removeAll { $0.id == list[n - 1].id }
+                    return list[n - 1]
+                }.result
+                guard let removed else { fail("No block \(n) on \(day).") }
+                print("Removed \(removed.title)")
+                return
+            }
+            let list = PlannerStore.load().blocks(on: day)
+            if json { emitJSON(list.map { b -> [String: Any] in ["title": b.title, "day": b.day, "start": TimeBlock.clock(b.start), "end": TimeBlock.clock(b.end), "project": b.project ?? NSNull()] }); return }
+            if list.isEmpty { print("No time blocks on \(day). headroom-cli block add \"…\" 09:30 11:00"); return }
+            for (i, b) in list.enumerated() { print("\(i + 1). \(TimeBlock.clock(b.start))–\(TimeBlock.clock(b.end))  \(b.title)\(b.project.map { "  (\($0))" } ?? "")") }
         case "journal":
             // headroom-cli journal ["text"] [--mood 1-5] [--energy 1-5] [--day YYYY-MM-DD]; no text = show it.
             let mood = option("--mood").flatMap(Int.init), energy = option("--energy").flatMap(Int.init)
@@ -367,7 +398,7 @@ enum PlannerCommands {
                 var quests: [Season.Quest] = []
                 var i = 0
                 while i + 1 < rest.count, let h = Int(rest[i + 1]) { quests.append(.init(project: rest[i], hoursPerWeek: h)); i += 2 }
-                guard let main = quests.first, i == rest.count, (1...6).contains(weeks) else {
+                guard let main = quests.first, i == rest.count, (1...12).contains(weeks) else {
                     fail("usage: headroom-cli season set \"Main project\" 20 [\"Side\" 8] [\"Side\" 4] [--weeks 2]")
                 }
                 if quests.count > 1 + Season.maxSideQuests { fail("A season has one main quest and at most \(Season.maxSideQuests) side quests — that's the point.") }
@@ -377,12 +408,17 @@ enum PlannerCommands {
             } else {
                 let p = PlannerStore.load()
                 guard let s = p.season else { print("No season. headroom-cli season set \"Main project\" 20 \"Side\" 8"); return }
+                let grid = s.grid(now: now)
                 if json {
-                    emitJSON(["start": s.start, "end": s.end, "quests": s.quests.map { ["project": $0.project, "hoursPerWeek": $0.hoursPerWeek, "main": $0 == s.main] }])
+                    emitJSON(["start": s.start, "end": s.end, "day": s.dayNumber(on: today) ?? NSNull(), "days": s.days,
+                              "quests": grid.map { ["project": $0.quest.project, "hoursPerWeek": $0.quest.hoursPerWeek, "main": $0.quest == s.main,
+                                                    "weeks": $0.weeks.map(\.rawValue)] }])
                     return
                 }
-                print("Season \(s.start) → \(s.end)")
-                for q in s.quests { print("  \(q == s.main ? "★" : "·") \(q.project)  \(q.hoursPerWeek) h/wk") }
+                print("Season \(s.start) → \(s.end)\(s.dayNumber(on: today).map { " · day \($0) of \(s.days)" } ?? "")")
+                let mark: [GoalStatus: String] = [.onTrack: "●", .adjust: "◐", .offTrack: "○", .upcoming: "·"]
+                for row in grid { print("  \(row.quest == s.main ? "★" : "·") \(row.quest.project)  \(row.quest.hoursPerWeek) h/wk  " + row.weeks.map { mark[$0]! }.joined(separator: " ")) }
+                print("  ● on track  ◐ adjust  ○ off track")
             }
 
         default:

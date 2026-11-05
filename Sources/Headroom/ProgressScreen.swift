@@ -14,6 +14,7 @@ struct FocusBar: View {
                 Image(systemName: "timer").foregroundStyle(Theme.safe)
                 Text(s.title).font(.system(size: 12.5, weight: .medium)).lineLimit(1)
                 FocusClock(start: s.start).foregroundStyle(Theme.safe)
+                FocusQuality(session: s)
                 Button("Stop") { model.stopFocus() }.buttonStyle(GhostButtonStyle()).controlSize(.small)
             }
         } else {

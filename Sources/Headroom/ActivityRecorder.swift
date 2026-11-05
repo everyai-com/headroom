@@ -21,7 +21,7 @@ final class ActivityRecorder: ObservableObject {
     @Published private(set) var projects: [String] = []
     @Published private(set) var titlesAllowed = AXIsProcessTrusted()
     @Published private(set) var browsersAllowed: [String: Bool] = [:]
-    /// Minutes per project (lowercased) this week, Monday on — for the season card. Refreshed every 10 minutes.
+    /// Minutes per project (lowercased) this week — the season's week while one runs, else Monday on. Refreshed every 10 minutes.
     @Published private(set) var weekProjectMinutes: [String: Int] = [:]
     private var lastWeek = Date.distantPast
 
@@ -113,6 +113,9 @@ final class ActivityRecorder: ObservableObject {
         guard Self.idleSeconds() < limit else { return }
         recorder.record(sample, at: now, interval: Self.interval)
         today = recorder.spans
+        if sample.host != nil { // the app switch already covered apps; the timeline knows the site
+            FocusShield.shared.check(ActivitySpan(start: now, end: now, app: bundle, appName: name, host: sample.host))
+        }
         if now.timeIntervalSince(lastSave) > 60 { save() }
         refreshClaude()
     }
@@ -169,9 +172,12 @@ final class ActivityRecorder: ObservableObject {
         guard !AppModel.demoMode, force || Date().timeIntervalSince(lastWeek) > 10 * 60 else { return }
         lastWeek = .now
         let today = day, todaySpans = allToday, classifier = classifier, store = store
+        // During a season its own weeks count (7 days from its first day), so the weekly grid lines up.
+        let season = PlannerStore.load().season
+        let week = season.flatMap { s in s.weekIndex(on: today).map { s.weekDays($0) } } ?? Planner.week(of: .now)
         Task.detached(priority: .utility) {
             var spans = todaySpans
-            for d in Planner.week(of: .now) where d < today {
+            for d in week where d < today {
                 spans += store.load(d) + ClaudeCodeActivity.spans(on: d)
             }
             let minutes = Quests.minutesByProject(spans: spans, classifier: classifier)

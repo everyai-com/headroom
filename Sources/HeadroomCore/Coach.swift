@@ -110,19 +110,26 @@ public struct CoachPlan: Codable, Sendable, Equatable {
     public var big: [String]
     public var tasks: [String]
     public var note: String
-    public init(big: [String] = [], tasks: [String] = [], note: String = "") { self.big = big; self.tasks = tasks; self.note = note }
+    /// Time blocks for the day (or the rest of the season week), and the weekly review's specific fixes.
+    public var blocks: [BlockSuggestion] = []
+    public var recommendations: [Recommendation] = []
+    public init(big: [String] = [], tasks: [String] = [], note: String = "", blocks: [BlockSuggestion] = [], recommendations: [Recommendation] = []) {
+        self.big = big; self.tasks = tasks; self.note = note; self.blocks = blocks; self.recommendations = recommendations
+    }
 
-    enum CodingKeys: String, CodingKey { case big, tasks, note }
+    enum CodingKeys: String, CodingKey { case big, tasks, note, blocks, recommendations }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         big = (try? c.decodeIfPresent([String].self, forKey: .big)) ?? []
         tasks = (try? c.decodeIfPresent([String].self, forKey: .tasks)) ?? []
         note = (try? c.decodeIfPresent(String.self, forKey: .note)) ?? ""
+        blocks = (try? c.decodeIfPresent([BlockSuggestion].self, forKey: .blocks)) ?? []
+        recommendations = (try? c.decodeIfPresent([Recommendation].self, forKey: .recommendations)) ?? []
     }
 }
 
 public enum Coach {
-    public enum Moment: String, Sendable { case morning, evening }
+    public enum Moment: String, Sendable { case morning, evening, week }
 
     /// The prompt for `claude -p`. Plain facts, then the ask, then the exact JSON shape wanted back.
     public static func prompt(_ m: Moment, _ c: DayContext, calendar: Calendar = .current) -> String {
@@ -135,16 +142,28 @@ public enum Coach {
 
             Plan TODAY (\(today)). If sleep was short or energy is low, plan lighter and say so. Pick at most 3 BIG tasks that move the season's main quest and the daily quests the most, \
             fit around the calendar. Reuse open task titles exactly when one fits; otherwise write new short tasks starting with a verb. \
-            Up to 5 small tasks. In "note", 2–3 sentences: the order to do things and when, naming real times from the calendar.
+            Up to 5 small tasks. Time-block the rest of today in "blocks" (HH:mm, after \(TimeBlock.clock(calendar.component(.hour, from: c.now) * 60 + calendar.component(.minute, from: c.now))), never over \
+            calendar events or existing blocks, hardest work first, a break between long blocks). In "note", 2–3 sentences: \
+            the order to do things and when, naming real times from the calendar.
             """)
         case .evening:
             lines.append("""
 
             Review TODAY honestly and kindly: what moved, what didn't, where time leaked (name it), in 3–5 sentences in "note". \
-            Then plan TOMORROW (\(tomorrow)): at most 3 BIG tasks and up to 5 small ones, reusing open task titles exactly when one fits.
+            Then plan TOMORROW (\(tomorrow)): at most 3 BIG tasks and up to 5 small ones, reusing open task titles exactly when one fits, \
+            and time-block tomorrow in "blocks" (day "\(tomorrow)", around its calendar events).
+            """)
+        case .week:
+            lines.append("""
+
+            Weekly review of the SEASON. For each quest give an honest read (on track, adjust, off track) and why, in "note" \
+            (4–6 sentences). Then 2–3 "recommendations": each a specific fix with a short title ("Move X to your mornings") \
+            and "why" grounded in the numbers above (when work actually happened, what keeps slipping). Then "blocks": time \
+            blocks for the rest of this season week (each with its "day" YYYY-MM-DD and "project") that close the unblocked \
+            hours, around calendar events. Leave "big" and "tasks" empty.
             """)
         }
-        lines.append(#"Reply with ONLY this JSON, no code fence: {"big": ["…"], "tasks": ["…"], "note": "…"}"#)
+        lines.append(#"Reply with ONLY this JSON, no code fence: {"big": ["…"], "tasks": ["…"], "blocks": [{"title": "…", "day": "YYYY-MM-DD", "start": "HH:mm", "end": "HH:mm", "project": "…"}], "recommendations": [{"title": "…", "why": "…"}], "note": "…"}"#)
         return lines.joined(separator: "\n")
     }
 
@@ -167,6 +186,22 @@ public enum Coach {
             for (i, q) in quests.enumerated() {
                 lines.append("- \(i == 0 ? "MAIN" : "side"): \(q.project) \(hm(c.seasonWeek[q.project.lowercased()] ?? 0)) / \(q.hoursPerWeek)h")
             }
+            if let day = s.dayNumber(on: today, calendar: calendar) {
+                lines.append("Day \(day) of \(s.days). Week by week (on track / adjust / off track):")
+                for row in s.grid(now: c.now, calendar: calendar) {
+                    let weeks = row.weeks.enumerated().filter { $0.element != .upcoming }.map { "w\($0.offset + 1) \($0.element.rawValue)" }
+                    lines.append("- \(row.quest.project): " + weeks.joined(separator: ", "))
+                }
+            }
+            if let strength = PlanStrength.of(c.planner, done: c.seasonWeek, now: c.now, calendar: calendar) {
+                let gaps = strength.gaps.map { "\($0.key) \(hm($0.value))" }.sorted().joined(separator: ", ")
+                lines.append("PLAN STRENGTH this season week: \(Int(strength.score * 100))% of the hours still needed have a time block\(gaps.isEmpty ? "" : "; unblocked: " + gaps)")
+            }
+        }
+        let blocks = c.planner.blocks.filter { $0.day == today || $0.day == tomorrow }.sorted { ($0.day, $0.start) < ($1.day, $1.start) }
+        if !blocks.isEmpty {
+            lines.append("\nTIME BLOCKS:")
+            blocks.forEach { lines.append("- \($0.day == today ? "today" : "tomorrow") \(TimeBlock.clock($0.start))–\(TimeBlock.clock($0.end)) \($0.title)") }
         }
         if !c.quests.isEmpty {
             lines.append("\nDAILY QUESTS (done / target today):")
@@ -241,7 +276,12 @@ public enum Coach {
         var p = plan
         p.big = Array(p.big.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.prefix(Planner.bigLimit))
         p.tasks = Array(p.tasks.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.prefix(8))
-        return p.big.isEmpty && p.tasks.isEmpty && p.note.isEmpty ? nil : p
+        p.blocks = Array(p.blocks.filter { b in
+            guard let a = TimeBlock.minute(b.start), let e = TimeBlock.minute(b.end) else { return false }
+            return e > a && !b.title.trimmingCharacters(in: .whitespaces).isEmpty
+        }.prefix(20))
+        p.recommendations = Array(p.recommendations.prefix(4))
+        return p.big.isEmpty && p.tasks.isEmpty && p.note.isEmpty && p.blocks.isEmpty && p.recommendations.isEmpty ? nil : p
     }
 }
 

@@ -478,6 +478,8 @@ struct LifeHome: View {
                         SectionTitle(title: "Season", trailing: "until \(Planner.date(season.end)?.formatted(.dateTime.day().month()) ?? season.end)")
                         Button { editingSeason = true } label: { Image(systemName: "pencil") }.buttonStyle(.plain).foregroundStyle(Theme.textTertiary)
                     }
+                    SeasonGrid(season: season)
+                    Divider().opacity(0.4)
                     ForEach(season.quests) { q in
                         let have = weekMinutes[q.project.lowercased()] ?? 0
                         let main = q == season.main
@@ -493,12 +495,19 @@ struct LifeHome: View {
                         }
                     }
                     let others = weekMinutes.filter { k, _ in !season.quests.contains { $0.project.lowercased() == k } }.values.reduce(0, +)
-                    if others > 0 {
-                        Text("\(Minutes.text(Double(others) * 60)) on other projects this week").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                    HStack {
+                        if others > 0 {
+                            Text("\(Minutes.text(Double(others) * 60)) on other projects this week").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                        }
+                        Spacer()
+                        if LifeCoach.shared.available && LifeCoach.shared.hasClaude {
+                            Button { LifeCoach.shared.ask(.week, model: model) } label: { Label("Weekly Review", systemImage: "flag.checkered") }
+                                .buttonStyle(GhostButtonStyle()).disabled(LifeCoach.shared.asking != nil)
+                        }
                     }
                 } else {
                     SectionTitle(title: "Season", trailing: nil)
-                    Text("Many projects, one at a time: pick a main quest and up to two side quests for the next two weeks, with the hours each deserves. Headroom shows planned against real.")
+                    Text("Many projects, one at a time: pick a main quest and up to two side quests for up to 12 weeks, with the hours each deserves. Each week gets an honest read: on track, adjust or off track.")
                         .font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
                     Button("Start a Season") { editingSeason = true }.buttonStyle(GhostButtonStyle())
                 }
@@ -549,10 +558,11 @@ struct SeasonEditor: View {
     @State private var main: String
     @State private var mainHours: Int
     @State private var sides: [(String, Int)]
-    @State private var weeks = 2
+    @State private var weeks = 12
 
     init(season: Season?, projects: [String]) {
         self.projects = projects
+        if let season { _weeks = State(initialValue: min(12, max(1, season.weekCount))) }
         _main = State(initialValue: season?.main.project ?? "")
         _mainHours = State(initialValue: season?.main.hoursPerWeek ?? 20)
         let s = season?.sides.map { ($0.project, $0.hoursPerWeek) } ?? []
@@ -568,7 +578,7 @@ struct SeasonEditor: View {
             ForEach(sides.indices, id: \.self) { i in
                 row("Side quest \(i + 1)", Binding(get: { sides[i].0 }, set: { sides[i].0 = $0 }), Binding(get: { sides[i].1 }, set: { sides[i].1 = $0 }))
             }
-            Stepper("Lasts \(weeks) week\(weeks == 1 ? "" : "s")", value: $weeks, in: 1...6)
+            Stepper("Lasts \(weeks) week\(weeks == 1 ? "" : "s")", value: $weeks, in: 1...12)
             HStack {
                 if model.planner.season != nil {
                     Button("End Season") { model.plan { $0.season = nil }; dismiss() }.buttonStyle(GhostButtonStyle())
@@ -576,9 +586,13 @@ struct SeasonEditor: View {
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
                 Button("Start") {
-                    let s = Season(start: Planner.key(.now), end: Planner.key(daysFrom: .now, weeks * 7 - 1),
+                    // Editing keeps the start and the weekly record; a new season starts today.
+                    let old = model.planner.season.flatMap { $0.isActive(on: Planner.key(.now)) ? $0 : nil }
+                    let begin = old?.start ?? Planner.key(.now)
+                    var s = Season(start: begin, end: Planner.key(daysFrom: Planner.date(begin) ?? .now, weeks * 7 - 1),
                                    main: .init(project: main.trimmingCharacters(in: .whitespaces), hoursPerWeek: mainHours),
                                    sides: sides.filter { !$0.0.trimmingCharacters(in: .whitespaces).isEmpty }.map { .init(project: $0.0.trimmingCharacters(in: .whitespaces), hoursPerWeek: $0.1) })
+                    s.log = old?.log
                     model.plan { $0.season = s }
                     dismiss()
                 }

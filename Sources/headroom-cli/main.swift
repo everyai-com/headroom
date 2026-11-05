@@ -28,6 +28,7 @@ import HeadroomCore
 //   headroom-cli challenge add "<habit>" <times> [--days 30] · stats           areas, rank, challenges, what earned what
 //   headroom-cli timeline [--day YYYY-MM-DD] · season · season set "<main>" 20 ["<side>" 8] · season end
 //   headroom-cli timeline rules · timeline teach <app|host|title|project> "<value>" [--project p] [--area a] [--kind k]
+//   headroom-cli blocks [--day D] · block add "<title>" 09:30 11:00 [--project p] · block remove <n>   time blocks
 //   headroom-cli journal ["how it went"] [--mood 1-5] [--energy 1-5] · sleep   the journal and check-in; nights the Mac saw
 //   headroom-cli habit add "Commit something" --commit [project]   checked off by your first commit of the day
 //   headroom-cli habit add "<quest>" --minutes 240 [--track "<project>" | --area "<area>"]   a daily quest that fills from the timeline
@@ -210,7 +211,7 @@ Task {
               "temperature": b.temperature, "batteryWatts": b.batteryWatts, "systemWatts": b.systemWatts as Any,
               "adapterWatts": b.adapterWatts as Any, "readings": log.samples.count])
     default:
-        print("usage: headroom-cli [status|reclaim|projects|apps|map|files|growth [hours]|activity|library|search \"query\"|battery|today|add|done|later|habits|habit|focus|rewards|reward|buy|challenge|stats|journal|sleep|timeline|season] [--json]")
+        print("usage: headroom-cli [status|reclaim|projects|apps|map|files|growth [hours]|activity|library|search \"query\"|battery|today|add|done|later|habits|habit|focus|rewards|reward|buy|challenge|stats|blocks|block|journal|sleep|timeline|season] [--json]")
     }
 }
 semaphore.wait()
