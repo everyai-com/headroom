@@ -75,9 +75,9 @@ struct QuickAddView: View {
         let bigLeft = Planner.bigLimit - model.planner.bigToday().count
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
-                Image(systemName: "plus.circle.fill").font(.system(size: 18)).foregroundStyle(Theme.accent)
+                Image(systemName: "plus.circle.fill").font(.system(size: 17)).foregroundStyle(Theme.accent)
                 TextField("Add a task for today…", text: $text)
-                    .textFieldStyle(.plain).font(.system(size: 18)).focused($focused)
+                    .textFieldStyle(.plain).font(.system(size: 17)).focused($focused)
                     // Read the keys from the press itself: ⌥↩ in a text field would otherwise type a line break.
                     .onKeyPress(phases: .down) { press in
                         if press.key == .escape { close(); return .handled }

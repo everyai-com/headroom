@@ -32,7 +32,7 @@ struct AppsView: View {
                 let total = model.apps.reduce(0) { $0 + $1.totalSize }
                 let data = model.apps.reduce(0) { $0 + $1.dataSize }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("\(model.apps.count) apps · \(total.gb)").font(Theme.number(20, weight: .bold))
+                    Text("\(model.apps.count) apps · \(total.gb)").font(Theme.number(22, weight: .bold))
                     Text("\(data.gb) of that is data apps keep in your Library").font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
                 }
                 Spacer()
@@ -107,7 +107,7 @@ struct AppsView: View {
                     Text("\(chosen.count) \(chosen.count == 1 ? "app" : "apps") · \(chosen.reduce(0) { $0 + $1.totalSize }.gb)").font(Theme.number(15, weight: .semibold))
                 }
                 Spacer()
-                Text("Recoverable from the Trash until you empty it").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                Text("Recoverable from the Trash until you empty it").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                 Button("Clear") { model.selectedApps = [] }.buttonStyle(GhostButtonStyle()).keyboardShortcut(.escape, modifiers: [])
                 Button { confirming = true } label: { Label(working ? "Uninstalling…" : "Uninstall…", systemImage: "trash") }
                     .buttonStyle(PrimaryButtonStyle(tint: Theme.critical))
@@ -116,8 +116,8 @@ struct AppsView: View {
             }
             .padding(.horizontal, 20).padding(.vertical, 14)
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.surfaceRaised.opacity(0.96))
-                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.hairline))
+                RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.surfaceRaised.opacity(0.96))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.hairline))
                     .shadow(color: .black.opacity(0.5), radius: 24, y: 8)
             )
             .padding(4)
@@ -143,7 +143,7 @@ struct AppRow: View {
                 Image(nsImage: NSWorkspace.shared.icon(forFile: app.url.path)).resizable().frame(width: 34, height: 34)
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
-                        Text(app.name).font(.system(size: 13.5, weight: .semibold))
+                        Text(app.name).font(.system(size: 13, weight: .semibold))
                         if let v = app.version { Text(v).font(.system(size: 11)).foregroundStyle(Theme.textTertiary) }
                         if app.isApple { Badge(text: "macOS", color: Theme.keep) }
                     }
@@ -154,10 +154,10 @@ struct AppRow: View {
                             .foregroundStyle(app.lastUsed != nil && stale ? Theme.review : Theme.textTertiary)
                             .help(app.lastUsedIsExact ? "From Spotlight" : "Inferred from when the app last changed its own data")
                     }
-                    .font(.system(size: 11.5)).foregroundStyle(Theme.textSecondary)
+                    .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
                 }
                 Spacer()
-                Text(app.totalSize.gb).font(Theme.number(14, weight: .semibold))
+                Text(app.totalSize.gb).font(Theme.number(15, weight: .semibold))
                 Button(action: onExpand) {
                     Image(systemName: "chevron.down").rotationEffect(.degrees(expanded ? 180 : 0))
                         .foregroundStyle(Theme.textSecondary).frame(width: 24, height: 24)
@@ -177,10 +177,10 @@ struct AppRow: View {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(app.leftovers) { l in
                         HStack {
-                            Text(l.kind).font(.system(size: 11.5, weight: .medium)).foregroundStyle(Theme.textSecondary).frame(width: 130, alignment: .leading)
+                            Text(l.kind).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.textSecondary).frame(width: 130, alignment: .leading)
                             Text(l.url.tildePath).font(.system(size: 11)).foregroundStyle(Theme.textTertiary).lineLimit(1).truncationMode(.middle)
                             Spacer()
-                            Text(l.size.allocated.gb).font(Theme.number(11.5, weight: .medium))
+                            Text(l.size.allocated.gb).font(Theme.number(12, weight: .medium))
                             Button { model.reveal([l.url]) } label: { Image(systemName: "magnifyingglass") }.buttonStyle(.plain)
                                 .foregroundStyle(Theme.textSecondary)
                         }
@@ -334,7 +334,7 @@ struct SettingsView: View {
                         ForEach(model.excluded, id: \.self) { path in
                             HStack {
                                 Image(systemName: "hand.raised.fill").foregroundStyle(Theme.review).font(.system(size: 11))
-                                Text(URL(fileURLWithPath: path).tildePath).font(.system(size: 12.5)).lineLimit(1).truncationMode(.middle)
+                                Text(URL(fileURLWithPath: path).tildePath).font(.system(size: 13)).lineLimit(1).truncationMode(.middle)
                                 Spacer()
                                 Button("Remove") { model.unexclude(path) }.buttonStyle(GhostButtonStyle())
                             }
@@ -349,7 +349,7 @@ struct SettingsView: View {
                         Text("Build output of projects you haven't touched for this long is marked safe. Active projects always ask first.")
                             .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
                         Text("Searching: " + ProjectScanner.defaultRoots().map(\.tildePath).joined(separator: ", "))
-                            .font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                            .font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                     }
                 }
                 Card {
@@ -430,7 +430,7 @@ struct SettingsView: View {
                     }
                 }
                 Text(l.title).font(.system(size: 13, weight: .semibold))
-                Text(l == .playful ? "Colourful and friendly" : "Quiet black, white and grey").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                Text(l == .playful ? "Colourful and friendly" : "Quiet black, white and grey").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -453,7 +453,7 @@ struct SettingsView: View {
         Button { on.wrappedValue.toggle() } label: {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(title).font(.system(size: 13.5, weight: .medium)).foregroundStyle(Theme.textPrimary)
+                    Text(title).font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.textPrimary)
                     Text(detail).font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
                 }
                 Spacer()
@@ -470,7 +470,7 @@ struct SettingsView: View {
 
     func sliderRow(_ title: String, value: Binding<Double>, range: ClosedRange<Double>, unit: String) -> some View {
         HStack {
-            Text(title).font(.system(size: 13.5, weight: .medium))
+            Text(title).font(.system(size: 13, weight: .medium))
             if snapshot {
                 // ImageRenderer can't draw a Slider: the same track, drawn by hand.
                 GeometryReader { geo in

@@ -46,10 +46,10 @@ struct MenuBarView: View {
                     HStack(spacing: 10) {
                         Image(systemName: b.pluggedIn ? "battery.100percent.bolt" : "battery.75percent")
                             .foregroundStyle(b.hot ? Theme.critical : Theme.textSecondary).frame(width: 20)
-                        Text("Battery \(b.percent)%").font(.system(size: 12.5, weight: .medium))
+                        Text("Battery \(b.percent)%").font(.system(size: 13, weight: .medium))
                         Spacer(minLength: 4)
                         Text("\(b.healthPercent)% health · \(String(format: "%.0f °C", b.temperature))\(b.adapterDelivering.map { String(format: " · %.0f W in", $0) } ?? "")")
-                            .font(.system(size: 11.5)).foregroundStyle(b.hot ? Theme.critical : Theme.textTertiary)
+                            .font(.system(size: 12)).foregroundStyle(b.hot ? Theme.critical : Theme.textTertiary)
                     }
                     .contentShape(Rectangle())
                 }
@@ -59,7 +59,7 @@ struct MenuBarView: View {
             if showDownloads {
                 Divider().overlay(Theme.hairline)
                 HStack {
-                    Text("Recent downloads").font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.textTertiary)
+                    Text("Recent downloads").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.textTertiary)
                     Spacer()
                     Button("Downloads") {
                         close()
@@ -67,7 +67,7 @@ struct MenuBarView: View {
                         library.browse(library.home + "/Downloads")
                         openWindow()
                     }
-                    .buttonStyle(.plain).font(.system(size: 11.5)).foregroundStyle(Theme.textSecondary)
+                    .buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
                 }
                 let downloads = preloaded ?? self.downloads
                 if downloads.isEmpty {
@@ -81,12 +81,12 @@ struct MenuBarView: View {
             #if !APPSTORE
             if !drives.isEmpty {
                 Divider().overlay(Theme.hairline)
-                Text("Drives").font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.textTertiary)
+                Text("Drives").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.textTertiary)
                 VStack(spacing: 2) {
                     ForEach(drives) { drive in
                         HStack(spacing: 10) {
                             Image(systemName: "externaldrive.fill").foregroundStyle(Theme.textSecondary).frame(width: 20)
-                            Text(drive.name).font(.system(size: 12.5, weight: .medium)).lineLimit(1).truncationMode(.middle)
+                            Text(drive.name).font(.system(size: 13, weight: .medium)).lineLimit(1).truncationMode(.middle)
                             Spacer(minLength: 4)
                             Button { NSWorkspace.shared.open(drive.url) } label: { Image(systemName: "folder") }.help("Show in Finder")
                             Button { eject(drive) } label: { Label("Eject", systemImage: "eject.fill") }
@@ -159,11 +159,11 @@ struct DownloadRow: View {
     var body: some View {
         HStack(spacing: 10) {
             Thumbnail(item: item, size: 34, fill: item.kind == .image || item.kind == .video)
-                .frame(width: 34, height: 34).clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .frame(width: 34, height: 34).clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             VStack(alignment: .leading, spacing: 1) {
-                Text(item.name).font(.system(size: 12.5, weight: .medium)).lineLimit(1).truncationMode(.middle)
+                Text(item.name).font(.system(size: 13, weight: .medium)).lineLimit(1).truncationMode(.middle)
                 Text(item.arrived.ago + (item.isFolder ? "" : " · " + ByteFormat.compact(item.bytes)))
-                    .font(.system(size: 10.5)).foregroundStyle(Theme.textTertiary)
+                    .font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
             }
             Spacer(minLength: 4)
             if hovering {

@@ -75,16 +75,16 @@ struct QuickSearchView: View {
         HStack(spacing: 12) {
             Image(systemName: "magnifyingglass").font(.system(size: 17, weight: .medium)).foregroundStyle(Theme.textTertiary)
             if snapshot {
-                Text(state.text.isEmpty ? Self.placeholder : state.text).font(.system(size: 19))
+                Text(state.text.isEmpty ? Self.placeholder : state.text).font(.system(size: 17))
                     .foregroundStyle(state.text.isEmpty ? Theme.textTertiary : Theme.textPrimary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 TextField("", text: $state.text, prompt: Text(Self.placeholder).foregroundStyle(Theme.textTertiary))
-                    .textFieldStyle(.plain).font(.system(size: 19))
+                    .textFieldStyle(.plain).font(.system(size: 17))
                     .focused($field, equals: .search)
                     .onKeyPress(phases: .down) { press in key(press, sections: sections, current: current, actions: actions) }
                 if !state.text.isEmpty {
-                    Button { state.text = "" } label: { Image(systemName: "xmark.circle.fill").font(.system(size: 14)) }
+                    Button { state.text = "" } label: { Image(systemName: "xmark.circle.fill").font(.system(size: 15)) }
                         .buttonStyle(.plain).foregroundStyle(Theme.textTertiary).help("Clear  esc")
                 }
             }
@@ -230,7 +230,7 @@ struct QuickSearchView: View {
                 Text(value).font(.system(size: 28, weight: .semibold, design: .rounded)).lineLimit(1).minimumScaleFactor(0.5)
             }
             .padding(.horizontal, 16).frame(height: 76)
-            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(on ? Theme.fill(0.10) : Theme.fill(0.04)))
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(on ? Theme.fill(0.10) : Theme.fill(0.04)))
             .contentShape(Rectangle())
         } else {
             HStack(spacing: 10) {
@@ -252,7 +252,7 @@ struct QuickSearchView: View {
                 }
             }
             .padding(.horizontal, 10).frame(height: 42)
-            .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(on ? Theme.fill(0.10) : .clear))
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(on ? Theme.fill(0.10) : .clear))
             .contentShape(Rectangle())
             .onDrag { row.file.flatMap { NSItemProvider(contentsOf: $0.url) } ?? NSItemProvider() }
         }
@@ -282,7 +282,7 @@ struct QuickSearchView: View {
         switch row {
         case .file(let item):
             Thumbnail(item: item, size: 28, fill: item.kind == .image || item.kind == .video)
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         case .app(let app):
             Image(nsImage: AppIcons.icon(app.path)).resizable().interpolation(.high)
         case .setting:
@@ -290,7 +290,7 @@ struct QuickSearchView: View {
         case .command(let command):
             Image(systemName: command.symbol).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.accent)
                 .frame(width: 28, height: 28)
-                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Theme.fill(0.07)))
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.fill(0.07)))
         case .answer:
             EmptyView()
         }
@@ -302,15 +302,15 @@ struct QuickSearchView: View {
         case .file(let item):
             HStack(spacing: 10) {
                 Text(item.latest.formatted(.relative(presentation: .named, unitsStyle: .abbreviated)))
-                Text(ByteFormat.compact(item.bytes)).font(Theme.number(11.5, weight: .medium)).frame(minWidth: 44, alignment: .trailing)
+                Text(ByteFormat.compact(item.bytes)).font(Theme.number(12, weight: .medium)).frame(minWidth: 44, alignment: .trailing)
             }
-            .font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+            .font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
         case .app:
-            Text("Application").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+            Text("Application").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
         case .setting:
-            Text("Settings").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+            Text("Settings").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
         case .command(let command):
-            if let shortcut = command.shortcut { Keycap(shortcut) } else { Text("Command").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary) }
+            if let shortcut = command.shortcut { Keycap(shortcut) } else { Text("Command").font(.system(size: 12)).foregroundStyle(Theme.textTertiary) }
         case .answer:
             EmptyView()
         }
@@ -337,8 +337,8 @@ struct QuickSearchView: View {
 
     func footer(current: QuickRow?, actions: [QuickAction]) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: "magnifyingglass").font(.system(size: 9.5, weight: .bold)).foregroundStyle(Theme.onAccent)
-                .frame(width: 18, height: 18).background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(Theme.accent))
+            Image(systemName: "magnifyingglass").font(.system(size: 10, weight: .bold)).foregroundStyle(Theme.onAccent)
+                .frame(width: 18, height: 18).background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(Theme.accent))
             Text(kind(current)).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.textSecondary)
             Spacer()
             if let primary = actions.first {
@@ -389,19 +389,19 @@ struct QuickSearchView: View {
             VStack(alignment: .leading, spacing: 1) {
                 ForEach(Array(shown.enumerated()), id: \.element.id) { i, action in
                     if action.section != (i > 0 ? shown[i - 1].section : "") && !action.section.isEmpty {
-                        Text(action.section).font(.system(size: 10.5, weight: .semibold)).foregroundStyle(Theme.textTertiary)
+                        Text(action.section).font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.textTertiary)
                             .padding(.horizontal, 10).padding(.top, i == 0 ? 2 : 8).padding(.bottom, 2)
                     }
                     HStack(spacing: 9) {
                         Image(systemName: action.symbol).font(.system(size: 12, weight: .medium)).frame(width: 18)
                             .foregroundStyle(action.destructive ? Theme.critical : Theme.textSecondary)
-                        Text(action.title).font(.system(size: 12.5, weight: .medium)).lineLimit(1)
+                        Text(action.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
                             .foregroundStyle(action.destructive ? Theme.critical : Theme.textPrimary)
                         Spacer(minLength: 8)
                         if let key = action.key { Keycap(key.label) }
                     }
                     .padding(.horizontal, 10).frame(height: 32)
-                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(i == state.actionSelected ? Theme.fill(0.10) : .clear))
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(i == state.actionSelected ? Theme.fill(0.10) : .clear))
                     .contentShape(Rectangle())
                     .onTapGesture { action.run() }
                     .onHover { if $0 { state.actionSelected = i } }
@@ -422,7 +422,7 @@ struct QuickSearchView: View {
                         .onKeyPress(phases: .down) { press in actionKey(press, shown: shown) }
                 }
             }
-            .font(.system(size: 12.5)).padding(.horizontal, 14).frame(height: 38)
+            .font(.system(size: 13)).padding(.horizontal, 14).frame(height: 38)
         }
         .frame(width: 330)
         .background { if snapshot { Theme.surfaceRaised } else { VisualEffect(material: .menu).overlay(Theme.surfaceRaised.opacity(0.7)) } }
@@ -470,14 +470,14 @@ struct QuickInfo: View {
                             Text(value).foregroundStyle(Theme.textSecondary).lineLimit(3).textSelection(.enabled)
                             Spacer(minLength: 0)
                         }
-                        .font(.system(size: 11.5))
+                        .font(.system(size: 12))
                     }
                 }
                 if case .file(let item) = row, let text = library.recognized[item.path]?.trimmingCharacters(in: .whitespacesAndNewlines),
                    !text.isEmpty {
                     VStack(alignment: .leading, spacing: 5) {
                         Text("Text in it").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.textTertiary)
-                        Text(String(text.prefix(400))).font(.system(size: 11.5)).foregroundStyle(Theme.textSecondary)
+                        Text(String(text.prefix(400))).font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
                             .lineLimit(8).textSelection(.enabled)
                     }
                 }

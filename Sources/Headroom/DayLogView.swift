@@ -23,7 +23,7 @@ struct DayLogCard: View {
                 Divider().opacity(0.4)
                 gratitude(day, log)
                 Divider().opacity(0.4)
-                Text("Journal").font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.textTertiary)
+                Text("Journal").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.textTertiary)
                 if snapshot {
                     Text(log?.note.nilIfEmpty ?? "How did today go?").font(.system(size: 13))
                         .foregroundStyle(log?.note.isEmpty == false ? Theme.textPrimary : Theme.textTertiary)
@@ -33,7 +33,7 @@ struct DayLogCard: View {
                         .font(.system(size: 13)).scrollContentBackground(.hidden)
                         .frame(minHeight: 70, maxHeight: 140)
                         .padding(6)
-                        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.fill(0.04)))
+                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.fill(0.04)))
                         .overlay(alignment: .topLeading) {
                             if draft.isEmpty {
                                 Text("What went well, what didn't, what you noticed…").font(.system(size: 13))
@@ -65,11 +65,11 @@ struct DayLogCard: View {
                 if let r = log?.reflection {
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "sparkles").foregroundStyle(Theme.accent).font(.system(size: 12))
-                        Text(r).font(.system(size: 12.5)).foregroundStyle(Theme.textPrimary).fixedSize(horizontal: false, vertical: true)
+                        Text(r).font(.system(size: 13)).foregroundStyle(Theme.textPrimary).fixedSize(horizontal: false, vertical: true)
                             .textSelection(.enabled)
                     }
                     .padding(10)
-                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.accent.opacity(0.08)))
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.accent.opacity(0.08)))
                 }
             }
         }
@@ -107,22 +107,22 @@ struct DayLogCard: View {
     /// Three things you're thankful for (+5 XP), and who you gave more than you took (+5 XP).
     @ViewBuilder func gratitude(_ day: String, _ log: DayLog?) -> some View {
         HStack {
-            Text("Thankful for").font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.textTertiary)
+            Text("Thankful for").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.textTertiary)
             Spacer()
             Text(log?.isGrateful == true ? "+5 XP today" : "three things: +5 XP").font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
         }
         if snapshot {
             let g = log?.gratitude ?? []
             Text(g.isEmpty ? "Three good things, however small" : g.map { "• " + $0 }.joined(separator: "\n"))
-                .font(.system(size: 12.5)).foregroundStyle(g.isEmpty ? Theme.textTertiary : Theme.textPrimary)
-            if let v = log?.gave { Text("Gave more than I took: " + v).font(.system(size: 12.5)) }
+                .font(.system(size: 13)).foregroundStyle(g.isEmpty ? Theme.textTertiary : Theme.textPrimary)
+            if let v = log?.gave { Text("Gave more than I took: " + v).font(.system(size: 13)) }
         } else {
             ForEach(0..<DayLog.gratitudeCount, id: \.self) { i in
                 TextField(["The people I work with", "A morning that went to plan", "This body that carries me"][i], text: $thanks[i])
-                    .textFieldStyle(.roundedBorder).font(.system(size: 12.5)).onSubmit { save(day) }
+                    .textFieldStyle(.roundedBorder).font(.system(size: 13)).onSubmit { save(day) }
             }
             TextField("Who got more use value from you than they paid?", text: $gave)
-                .textFieldStyle(.roundedBorder).font(.system(size: 12.5)).onSubmit { save(day) }
+                .textFieldStyle(.roundedBorder).font(.system(size: 13)).onSubmit { save(day) }
                 .help("The book's rule for every dealing: give more in use value than you take in cash value.")
         }
     }
@@ -133,7 +133,7 @@ struct DayLogCard: View {
             ForEach(1...5, id: \.self) { v in
                 let on = value == v
                 Button { set(on ? nil : v) } label: {
-                    Text(words[v]).font(.system(size: 11.5, weight: on ? .semibold : .regular))
+                    Text(words[v]).font(.system(size: 12, weight: on ? .semibold : .regular))
                         .padding(.horizontal, 8).frame(height: 24)
                         .background(Capsule().fill(on ? Theme.accent.opacity(0.85) : Theme.fill(0.05)))
                         .foregroundStyle(on ? Theme.onAccent : Theme.textSecondary)
@@ -170,15 +170,15 @@ struct HabitMonthCard: View {
                     let counted = days.filter { [.done, .clean, .missed, .slipped].contains($0.mark) }.count
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
-                            Text(h.title).font(.system(size: 12.5, weight: .medium)).lineLimit(1)
+                            Text(h.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
                             Spacer()
                             Text(counted == 0 ? "—" : "\(good)/\(counted)").font(Theme.number(11, weight: .semibold)).foregroundStyle(Theme.textSecondary)
                         }
                         HStack(spacing: 2.5) {
                             ForEach(days, id: \.key) { d in
-                                RoundedRectangle(cornerRadius: 2.5, style: .continuous)
+                                RoundedRectangle(cornerRadius: 4, style: .continuous)
                                     .fill(fill(d.mark))
-                                    .overlay(RoundedRectangle(cornerRadius: 2.5).strokeBorder(d.mark == .missed ? Theme.fill(0.18) : .clear, lineWidth: 1))
+                                    .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(d.mark == .missed ? Theme.fill(0.18) : .clear, lineWidth: 1))
                                     .frame(height: 12)
                                     .help("\(d.key): \(word(d.mark))")
                             }

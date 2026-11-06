@@ -105,9 +105,9 @@ struct MiniPlayer: View {
                 Thumbnail(item: item, size: 30, fill: true)
                     .frame(width: 30, height: 30)
                     .background(Theme.tint(for: .audio).opacity(0.2))
-                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(player.title).font(.system(size: 11.5, weight: .semibold)).lineLimit(1)
+                    Text(player.title).font(.system(size: 12, weight: .semibold)).lineLimit(1)
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
                             Capsule().fill(Theme.fill(0.1))

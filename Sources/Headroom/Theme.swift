@@ -212,21 +212,25 @@ struct SectionTitle: View {
 struct PrimaryButtonStyle: ButtonStyle {
     var tint: Color = Theme.accent
     var large = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    // A flat fill, no glow: the colour alone says "this one". Press lands on press-in, short and
+    // ease-out (a spring here would wobble a control you click dozens of times a day).
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: large ? 16 : 13, weight: .semibold, design: .rounded))
+            .font(.system(size: large ? 15 : 13, weight: .semibold, design: .rounded))
             .foregroundStyle(Theme.minimal ? Theme.onAccent : Color.black.opacity(0.88))
-            .padding(.horizontal, large ? 22 : 14)
-            .padding(.vertical, large ? 14 : 8)
+            .padding(.horizontal, large ? 24 : 16)
+            .padding(.vertical, large ? 12 : 8)
             .frame(maxWidth: large ? .infinity : nil)
             .background(
-                RoundedRectangle(cornerRadius: large ? 16 : 10, style: .continuous)
-                    .fill(LinearGradient(colors: [tint, tint.opacity(0.82)], startPoint: .top, endPoint: .bottom))
-                    .shadow(color: tint.opacity(configuration.isPressed ? 0.15 : 0.35), radius: large ? 18 : 8, y: 4)
+                RoundedRectangle(cornerRadius: large ? 16 : 12, style: .continuous)
+                    .fill(tint)
+                    .overlay(RoundedRectangle(cornerRadius: large ? 16 : 12, style: .continuous)
+                        .fill(Color.black.opacity(configuration.isPressed ? 0.12 : 0)))
             )
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 
@@ -237,14 +241,15 @@ struct GhostButtonStyle: ButtonStyle {
             .foregroundStyle(Theme.textPrimary.opacity(configuration.isPressed ? 0.6 : 0.9))
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.fill(0.06)))
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.fill(configuration.isPressed ? 0.12 : 0.06)))
             .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Theme.hairline))
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
     }
 }
 
 // MARK: - Data visuals
 
-/// The capacity ring: used fraction with a soft gradient and a glowing tip.
+/// The capacity ring: used fraction with a soft gradient.
 struct GaugeRing: View {
     var fraction: Double
     var tint: Color
@@ -261,7 +266,6 @@ struct GaugeRing: View {
                     style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
-                .shadow(color: tint.opacity(0.45), radius: lineWidth * 0.6)
         }
     }
 }
@@ -284,7 +288,7 @@ struct SegmentedBar: View {
         GeometryReader { geo in
             HStack(spacing: 2) {
                 ForEach(segments) { s in
-                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
                         .fill(s.color)
                         .frame(width: max(2, geo.size.width * s.value / scale - 2))
                 }
@@ -459,11 +463,11 @@ struct SearchField: View {
             Image(systemName: "magnifyingglass").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.textTertiary)
             // ImageRenderer can't draw an NSTextField: snapshots show the prompt as text.
             if snapshot {
-                Text(prompt).font(.system(size: 12.5)).foregroundStyle(Theme.textTertiary).lineLimit(1)
+                Text(prompt).font(.system(size: 13)).foregroundStyle(Theme.textTertiary).lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 TextField("", text: $text, prompt: Text(prompt).foregroundStyle(Theme.textTertiary))
-                    .textFieldStyle(.plain).font(.system(size: 12.5))
+                    .textFieldStyle(.plain).font(.system(size: 13))
             }
             if !text.isEmpty {
                 Button { text = "" } label: {
@@ -492,7 +496,7 @@ struct EmptyState: View {
                     .background(Circle().fill(Theme.safe.opacity(0.12)))
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title).font(.system(size: 15, weight: .semibold))
-                    Text(detail).font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary)
+                    Text(detail).font(.system(size: 13)).foregroundStyle(Theme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -503,8 +507,8 @@ struct EmptyState: View {
 /// The raised glass behind sticky action bars.
 struct FloatingBarBackground: View {
     var body: some View {
-        RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.surfaceRaised.opacity(0.97))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.hairline))
+        RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.surfaceRaised.opacity(0.97))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.hairline))
             .shadow(color: .black.opacity(0.22), radius: 24, y: 8)
     }
 }
@@ -519,7 +523,7 @@ struct ToastView: View {
         HStack(spacing: 12) {
             Image(systemName: toast.failed ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
                 .foregroundStyle(toast.failed ? Theme.review : Theme.safe)
-            Text(toast.message).font(.system(size: 12.5, weight: .medium)).lineLimit(2)
+            Text(toast.message).font(.system(size: 13, weight: .medium)).lineLimit(2)
             if toast.undo != nil {
                 Button("Undo", action: undo).buttonStyle(GhostButtonStyle()).keyboardShortcut("z", modifiers: .command)
             }
@@ -544,14 +548,14 @@ struct WideButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 12.5, weight: .semibold))
+            .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(filled ? (Theme.minimal ? Theme.onAccent : Color.black.opacity(0.88)) : tint)
             .padding(.horizontal, 12).padding(.vertical, 9)
             .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(filled ? AnyShapeStyle(tint.gradient) : AnyShapeStyle(tint.opacity(0.08)))
             )
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(tint.opacity(filled ? 0 : 0.3)))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(tint.opacity(filled ? 0 : 0.3)))
             .opacity(enabled ? (configuration.isPressed ? 0.75 : 1) : 0.35)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
     }

@@ -234,11 +234,11 @@ struct DrivesView: View {
             if model.drives.isEmpty {
                 Card {
                     HStack(spacing: 14) {
-                        Image(systemName: "externaldrive.badge.questionmark").font(.system(size: 26)).foregroundStyle(Theme.textTertiary)
+                        Image(systemName: "externaldrive.badge.questionmark").font(.system(size: 28)).foregroundStyle(Theme.textTertiary)
                         VStack(alignment: .leading, spacing: 4) {
                             Text("No USB drive plugged in").font(.system(size: 15, weight: .semibold))
                             Text("Plug one in — it shows up here even before Finder sees it.")
-                                .font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary)
+                                .font(.system(size: 13)).foregroundStyle(Theme.textSecondary)
                         }
                     }
                 }
@@ -272,13 +272,13 @@ struct DrivesView: View {
                 HStack(spacing: 14) {
                     ZStack {
                         RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.color(for: .documents).opacity(0.16))
-                        Image(systemName: "externaldrive.fill").font(.system(size: 20, weight: .semibold)).foregroundStyle(Theme.color(for: .documents))
+                        Image(systemName: "externaldrive.fill").font(.system(size: 22, weight: .semibold)).foregroundStyle(Theme.color(for: .documents))
                     }
                     .frame(width: 46, height: 46)
                     VStack(alignment: .leading, spacing: 5) {
                         Text(d.title).font(.system(size: 17, weight: .bold, design: .rounded))
                         HStack(spacing: 8) {
-                            Text(d.bytes.gb).font(Theme.number(12.5, weight: .medium)).foregroundStyle(Theme.textSecondary)
+                            Text(d.bytes.gb).font(Theme.number(13, weight: .medium)).foregroundStyle(Theme.textSecondary)
                             Badge(text: d.link.label, color: d.link.isBottleneck ? Theme.review : Theme.safe)
                             stateBadge(d)
                         }
@@ -307,7 +307,7 @@ struct DrivesView: View {
                 Image(systemName: "checkmark.shield").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.review)
                     .symbolEffect(.pulse, isActive: !snapshot)
                 Text(checkLine(d))
-                    .font(Theme.number(12.5, weight: .semibold))
+                    .font(Theme.number(13, weight: .semibold))
             }
             if d.canSkipCheck {
                 note("macOS is checking the drive before it shows in Finder. Over a slow link that can take a long time. Open it read-only now to skip the wait — nothing on the drive can be changed that way.")
@@ -397,7 +397,7 @@ struct DrivesView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
                     TextField("Search the drive", text: $model.query)
-                        .textFieldStyle(.plain).font(.system(size: 12.5)).frame(width: 180)
+                        .textFieldStyle(.plain).font(.system(size: 13)).frame(width: 180)
                         .onSubmit { Task { await model.search() } }
                     if model.results != nil {
                         Button { model.query = ""; model.results = nil } label: { Image(systemName: "xmark.circle.fill") }
@@ -451,16 +451,16 @@ struct DrivesView: View {
             .modifier(DriveDrop(model: model, targeted: $dropping))
             .overlay {
                 if dropping {
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .strokeBorder(Theme.accent, style: StrokeStyle(lineWidth: 2, dash: [7, 5]))
-                        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.accent.opacity(0.06)))
+                        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.accent.opacity(0.06)))
                         .overlay(Label("Copy onto \(model.folder?.lastPathComponent ?? "the drive")", systemImage: "plus.circle.fill")
                             .font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.accent))
                         .allowsHitTesting(false)
                 }
             }
             Text("Copies go to ~/Drive Rescue. Re-copying skips files already copied whole, so an interrupted copy just picks up where it stopped.")
-                .font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                .font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
         }
     }
 
@@ -494,18 +494,18 @@ struct DrivesView: View {
     func row(_ e: DrivesModel.Entry) -> some View {
         HStack(spacing: 14) {
             ZStack {
-                RoundedRectangle(cornerRadius: 9, style: .continuous).fill((e.isFolder ? Theme.color(for: .documents) : Theme.keep).opacity(0.16))
-                Image(systemName: e.isFolder ? "folder.fill" : symbol(e.url)).font(.system(size: 14, weight: .semibold))
+                RoundedRectangle(cornerRadius: 8, style: .continuous).fill((e.isFolder ? Theme.color(for: .documents) : Theme.keep).opacity(0.16))
+                Image(systemName: e.isFolder ? "folder.fill" : symbol(e.url)).font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(e.isFolder ? Theme.color(for: .documents) : Theme.textSecondary)
             }
             .frame(width: 34, height: 34)
             VStack(alignment: .leading, spacing: 3) {
-                Text(e.url.lastPathComponent).font(.system(size: 13.5, weight: .semibold)).lineLimit(1)
+                Text(e.url.lastPathComponent).font(.system(size: 13, weight: .semibold)).lineLimit(1)
                 if model.results != nil, let root = model.drive?.mountPoint {
                     Text(String(e.url.deletingLastPathComponent().path.dropFirst(root.path.count)).ifEmpty("/"))
-                        .font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary).lineLimit(1).truncationMode(.middle)
+                        .font(.system(size: 12)).foregroundStyle(Theme.textTertiary).lineLimit(1).truncationMode(.middle)
                 } else if let m = e.modified {
-                    Text("changed \(m.ago)").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                    Text("changed \(m.ago)").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                 }
             }
             Spacer(minLength: 12)

@@ -25,7 +25,7 @@ struct DuplicatesView: View {
             if let p = library.duplicatesProgress {
                 Card {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Comparing your files…").font(.system(size: 14, weight: .semibold))
+                        Text("Comparing your files…").font(.system(size: 15, weight: .semibold))
                         ProgressView(value: p).tint(Theme.accent)
                         Text("Same-size files are fingerprinted with SHA-256, then photos taken close together are compared with Vision. Nothing leaves your Mac.")
                             .font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
@@ -42,7 +42,7 @@ struct DuplicatesView: View {
                     Pill(title: "Identical · \(library.duplicates.count)", on: tab == .identical) { tab = .identical }
                     Pill(title: "Look-alike photos · \(library.lookAlikes.count)", on: tab == .lookAlike) { tab = .lookAlike }
                     Spacer()
-                    Text("Click a copy to keep it instead").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                    Text("Click a copy to keep it instead").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                 }
                 Scrolling {
                     LazyVStack(spacing: 12) {
@@ -69,12 +69,12 @@ struct DuplicatesView: View {
     var start: some View {
         Card {
             HStack(spacing: 18) {
-                Image(systemName: "square.on.square").font(.system(size: 26, weight: .semibold)).foregroundStyle(Theme.accent)
+                Image(systemName: "square.on.square").font(.system(size: 28, weight: .semibold)).foregroundStyle(Theme.accent)
                     .frame(width: 56, height: 56).background(Circle().fill(Theme.accent.opacity(0.12)))
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("One copy is plenty").font(.system(size: 16, weight: .semibold))
+                    Text("One copy is plenty").font(.system(size: 15, weight: .semibold))
                     Text("Headroom finds identical files by their content and look-alike photos — bursts, edits and HEIC/JPEG pairs. You see exactly how much you'd free, and pick what stays.")
-                        .font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
+                        .font(.system(size: 13)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
                 Button { Task { await library.findDuplicates() } } label: { Label("Find duplicates", systemImage: "magnifyingglass") }
@@ -87,7 +87,7 @@ struct DuplicatesView: View {
         Card {
             HStack(spacing: 18) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Free up \(ByteFormat.string(extraBytes))").font(.system(size: 24, weight: .bold, design: .rounded))
+                    Text("Free up \(ByteFormat.string(extraBytes))").font(.system(size: 22, weight: .bold, design: .rounded))
                     Text("\(extras.count) extra copies in \(chosen.count) groups · scanned \(library.duplicatesScanned?.ago ?? "")")
                         .font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                 }
@@ -109,9 +109,9 @@ struct DuplicatesView: View {
                         .buttonStyle(.plain).help(on ? "Leave this group alone" : "Include this group")
                     Text(g.items.first?.name ?? "").font(.system(size: 13, weight: .semibold)).lineLimit(1).truncationMode(.middle)
                     Text("\(g.items.count) \(g.kind == .identical ? "copies" : "look-alikes") · \(ByteFormat.string(g.items.first?.bytes ?? 0)) each")
-                        .font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                        .font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                     Spacer()
-                    Text("frees \(ByteFormat.string(g.wasted(keeping: keeper(g))))").font(Theme.number(12.5)).foregroundStyle(on ? Theme.review : Theme.textTertiary)
+                    Text("frees \(ByteFormat.string(g.wasted(keeping: keeper(g))))").font(Theme.number(13)).foregroundStyle(on ? Theme.review : Theme.textTertiary)
                 }
                 HScrolling {
                     HStack(spacing: 10) {
@@ -128,8 +128,8 @@ struct DuplicatesView: View {
         return Button { keep[g.id] = item.path } label: {
             VStack(alignment: .leading, spacing: 6) {
                 ZStack(alignment: .topLeading) {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.fill(0.045))
-                    Thumbnail(item: item, size: 120).clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.fill(0.045))
+                    Thumbnail(item: item, size: 120).clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     Text(kept ? "Keep" : "Trash")
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(kept ? (Theme.minimal ? Theme.onAccent : .black) : .white)
@@ -138,12 +138,12 @@ struct DuplicatesView: View {
                         .padding(6)
                 }
                 .frame(width: 150, height: 104)
-                Text(LibraryModel.display(item.folder)).font(.system(size: 10.5)).foregroundStyle(Theme.textTertiary)
+                Text(LibraryModel.display(item.folder)).font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
                     .lineLimit(1).truncationMode(.head).frame(width: 150, alignment: .leading)
-                Text(item.created.formatted(date: .abbreviated, time: .omitted)).font(.system(size: 10.5)).foregroundStyle(Theme.textTertiary)
+                Text(item.created.formatted(date: .abbreviated, time: .omitted)).font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
             }
             .padding(6)
-            .background(RoundedRectangle(cornerRadius: 13, style: .continuous).strokeBorder(kept ? Theme.accent : Color.clear, lineWidth: 2))
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(kept ? Theme.accent : Color.clear, lineWidth: 2))
         }
         .buttonStyle(.plain)
         .contextMenu {
@@ -168,7 +168,7 @@ struct DownloadedFromView: View {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(group.source.name).font(.system(size: 17, weight: .bold, design: .rounded))
                         Text("\(group.items.count) files · \(ByteFormat.string(group.items.reduce(0) { $0 + $1.bytes }))")
-                            .font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                            .font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                     }
                     Spacer()
                 }
@@ -201,9 +201,9 @@ struct DownloadedFromView: View {
                                         Button { library.sourceID = g.source.id } label: {
                                             HStack(spacing: 10) {
                                                 SourceIcon(source: g.source, size: 22)
-                                                Text(g.source.name).font(.system(size: 12.5, weight: .medium))
+                                                Text(g.source.name).font(.system(size: 13, weight: .medium))
                                                 Spacer()
-                                                Text("\(g.items.count) files").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                                                Text("\(g.items.count) files").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                                                 Text(ByteFormat.string(g.items.reduce(0) { $0 + $1.bytes })).font(Theme.number(12)).frame(width: 80, alignment: .trailing)
                                                 Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.textTertiary)
                                             }

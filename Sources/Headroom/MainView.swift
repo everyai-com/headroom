@@ -144,12 +144,9 @@ struct MainView: View {
             .id(look)
         }
         .foregroundStyle(Theme.textPrimary)
-        .background(
-            ZStack {
-                Theme.background
-                RadialGradient(colors: [Theme.accent.opacity(Theme.minimal ? 0 : 0.06), .clear], center: .topTrailing, startRadius: 10, endRadius: 650)
-            }
-        )
+        // Every number in the window counts or ticks — tabular digits keep them from jittering.
+        .monospacedDigit()
+        .background(Theme.background)
         .overlay(alignment: .bottom) {
             if let toast = model.toast {
                 ToastView(toast: toast, undo: { model.undo(toast) }, dismiss: { model.toast = nil })
@@ -330,8 +327,8 @@ struct MainView: View {
     var titleRow: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.system(size: 26, weight: .bold, design: .rounded)).lineLimit(1)
-                if let subtitle { Text(subtitle).font(.system(size: 12.5)).foregroundStyle(Theme.textTertiary) }
+                Text(title).font(.system(size: 28, weight: .bold, design: .rounded)).lineLimit(1)
+                if let subtitle { Text(subtitle).font(.system(size: 13)).foregroundStyle(Theme.textTertiary) }
             }
             Spacer()
             if screen.showsFiles && screen != .cleanUp && (screen != .downloads || library.sourceID != nil) { viewControls }
@@ -376,9 +373,9 @@ struct MainView: View {
 
     func modeButton(_ mode: LibraryModel.ViewMode, _ symbol: String, _ help: String) -> some View {
         Button { library.viewMode = mode } label: {
-            Image(systemName: symbol).font(.system(size: 11.5, weight: .semibold)).frame(width: 26, height: 22)
+            Image(systemName: symbol).font(.system(size: 12, weight: .semibold)).frame(width: 26, height: 22)
                 .foregroundStyle(library.viewMode == mode ? Theme.textPrimary : Theme.textTertiary)
-                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(library.viewMode == mode ? Theme.surface : .clear))
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(library.viewMode == mode ? Theme.surface : .clear))
         }
         .buttonStyle(.plain).help(help)
     }
@@ -391,7 +388,7 @@ struct MainView: View {
             Text("\(model.volume.free.gb) free").font(.system(size: 12, weight: .semibold))
             if model.safeReclaimable > 0 {
                 Button { screen = .reclaim } label: {
-                    Text("Reclaim \(ByteFormat.compact(model.safeReclaimable)) safely").font(.system(size: 11.5, weight: .semibold))
+                    Text("Reclaim \(ByteFormat.compact(model.safeReclaimable)) safely").font(.system(size: 12, weight: .semibold))
                 }
                 .buttonStyle(PrimaryButtonStyle())
             }
@@ -428,7 +425,7 @@ struct MainView: View {
                     Image(systemName: l == .playful ? "paintpalette" : "circle.lefthalf.filled")
                         .font(.system(size: 11, weight: .semibold)).frame(width: 26, height: 22)
                         .foregroundStyle(look == l ? Theme.textPrimary : Theme.textTertiary)
-                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(look == l ? Theme.surface : .clear))
+                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(look == l ? Theme.surface : .clear))
                 }
                 .buttonStyle(.plain).help("\(l.title) look  ⌃⌘T")
             }
@@ -441,13 +438,13 @@ struct MainView: View {
             switch model.phase {
             case .scanning(let s), .reclaiming(let s):
                 ProgressView().controlSize(.small)
-                Text(s).font(.system(size: 11.5)).foregroundStyle(Theme.textSecondary).lineLimit(1)
+                Text(s).font(.system(size: 12)).foregroundStyle(Theme.textSecondary).lineLimit(1)
             case .done(let freed):
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.safe)
                 Text("Freed \(freed.gb)").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.safe)
             case .idle:
                 if !model.waitingForAccess.isEmpty {
-                    Label("Waiting for permission", systemImage: "hand.raised.fill").font(.system(size: 11.5, weight: .medium))
+                    Label("Waiting for permission", systemImage: "hand.raised.fill").font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Theme.review)
                         .help("macOS is asking whether Headroom may look in "
                               + model.waitingForAccess.map { LibraryModel.display($0) }.joined(separator: ", ")
@@ -455,7 +452,7 @@ struct MainView: View {
                 }
                 if library.scanning {
                     ProgressView().controlSize(.small)
-                    Text("Updating library…").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                    Text("Updating library…").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                 } else if let r = library.reading, r.total > 0 {
                     Text("Reading text \(r.done)/\(r.total)").font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
                         .help("Headroom reads the text in your screenshots and photos on this Mac, so you can search it")
@@ -520,7 +517,7 @@ struct MainView: View {
             HStack(spacing: 9) {
                 GaugeRing(fraction: model.volume.usedFraction, tint: Theme.color(for: model.volume.health), lineWidth: 4)
                     .frame(width: 20, height: 20)
-                Text("Headroom").font(.system(size: 16, weight: .bold, design: .rounded))
+                Text("Headroom").font(.system(size: 15, weight: .bold, design: .rounded))
                 Spacer()
                 Button { sidebarHidden = true } label: { Image(systemName: "sidebar.left") }
                     .buttonStyle(.plain).foregroundStyle(Theme.textTertiary).help("Hide sidebar  ⌃⌘S")
@@ -650,12 +647,12 @@ struct MainView: View {
 
     func row(title: String, symbol: String, on: Bool, tint: Color? = nil, count: Int? = nil, badge: SidebarBadge? = nil) -> some View {
         HStack(spacing: 9) {
-            Image(systemName: symbol).font(.system(size: 12.5, weight: .semibold)).frame(width: 18)
+            Image(systemName: symbol).font(.system(size: 13, weight: .semibold)).frame(width: 18)
                 .foregroundStyle(tint.map { Theme.minimal ? Theme.textSecondary : $0 } ?? (on ? Theme.textPrimary : Theme.textSecondary))
             Text(title).font(.system(size: 13, weight: on ? .semibold : .regular)).lineLimit(1)
             Spacer(minLength: 4)
             if let badge {
-                Text(badge.text).font(Theme.number(10.5, weight: .bold))
+                Text(badge.text).font(Theme.number(11, weight: .bold))
                     .foregroundStyle(badge.whiteText ? .white : .black).padding(.horizontal, 6).padding(.vertical, 1.5)
                     .background(Capsule().fill(badge.color))
             } else if let count, count > 0 {

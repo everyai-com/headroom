@@ -523,7 +523,7 @@ struct CoachCard: View {
 
     func calendar(_ events: [CalendarEvent]) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Calendar").font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.textTertiary)
+            Text("Calendar").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.textTertiary)
             if !coach.calendarConnected {
                 Button("Connect Calendar…") { coach.connectCalendar() }.buttonStyle(GhostButtonStyle())
                 Text("Read only, never changed. The coach plans around it.")
@@ -533,7 +533,7 @@ struct CoachCard: View {
             }
             if !snapshot {
                 Toggle(isOn: Binding(get: { coach.mirrorOn }, set: { coach.setMirror($0, model: model) })) {
-                    Text("Show my time blocks in Calendar").font(.system(size: 11.5))
+                    Text("Show my time blocks in Calendar").font(.system(size: 12))
                 }
                 .toggleStyle(.checkbox)
                 .help("Copies today's and the next 7 days' blocks into a calendar called “Headroom”, so they reach your phone. Only that calendar is written; turning this off removes the events it made.")
@@ -542,13 +542,13 @@ struct CoachCard: View {
             ForEach(Array(events.prefix(6).enumerated()), id: \.offset) { _, e in
                 HStack(spacing: 8) {
                     Text(e.allDay ? "all day" : e.start.formatted(date: .omitted, time: .shortened))
-                        .font(Theme.number(11.5, weight: .semibold)).foregroundStyle(e.end < .now ? Theme.textTertiary : Theme.accent)
+                        .font(Theme.number(12, weight: .semibold)).foregroundStyle(e.end < .now ? Theme.textTertiary : Theme.accent)
                         .frame(width: 64, alignment: .leading)
-                    Text(e.title).font(.system(size: 12.5)).lineLimit(1).foregroundStyle(e.end < .now ? Theme.textTertiary : Theme.textPrimary)
+                    Text(e.title).font(.system(size: 13)).lineLimit(1).foregroundStyle(e.end < .now ? Theme.textTertiary : Theme.textPrimary)
                     if e == next, coach.hasClaude, !snapshot {
                         Spacer(minLength: 4)
                         Button("Prep") { coach.ask(.meeting, model: model, meeting: e) }
-                            .buttonStyle(.borderless).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.accent)
+                            .buttonStyle(.borderless).font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.accent)
                             .disabled(coach.asking != nil)
                             .help("An agenda, questions to ask and anything to do first — from the event's notes and your season")
                     }
@@ -562,12 +562,12 @@ struct CoachCard: View {
         let per = Dictionary(grouping: coach.commits, by: \.project).map { ($0.key, $0.value.count) }.sorted { $0.1 > $1.1 }
         return VStack(alignment: .leading, spacing: 6) {
             Text("Proof · \(coach.commits.count) commit\(coach.commits.count == 1 ? "" : "s") today")
-                .font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.textTertiary)
+                .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.textTertiary)
             if per.isEmpty { Text("Commits you make today show up here").font(.system(size: 12)).foregroundStyle(Theme.textTertiary) }
             ForEach(per.prefix(4), id: \.0) { name, n in
                 HStack {
                     Image(systemName: "checkmark.seal.fill").foregroundStyle(Theme.safe).font(.system(size: 11))
-                    Text(name).font(.system(size: 12.5, weight: .medium)).lineLimit(1)
+                    Text(name).font(.system(size: 13, weight: .medium)).lineLimit(1)
                     Spacer()
                     Text("\(n)").font(Theme.number(12, weight: .semibold)).foregroundStyle(Theme.textSecondary)
                 }
@@ -597,7 +597,7 @@ struct CoachSheet: View {
             Text(suggestion.moment == .morning ? "Your plan for today" : suggestion.moment == .week ? "Your week, honestly"
                  : suggestion.moment == .dump ? "From your brain dump" : suggestion.moment == .meeting ? "Before \(suggestion.meeting?.title ?? "your meeting")"
                  : "Today, and tomorrow's plan")
-                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .font(.system(size: 17, weight: .bold, design: .rounded))
             if !plan.note.isEmpty {
                 Text(plan.note).font(.system(size: 13)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
             }

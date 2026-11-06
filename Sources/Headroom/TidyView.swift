@@ -17,17 +17,17 @@ struct TidySheet: View {
                 Text("\(plan.moves.count) loose \(plan.moves.count == 1 ? "file goes" : "files go") into folders by kind, inside \(name)."
                      + (plan.folders > 0 ? " Your \(plan.folders) \(plan.folders == 1 ? "folder stays" : "folders stay") as \(plan.folders == 1 ? "it is" : "they are")." : "")
                      + " Nothing is deleted, and Undo or Put Back in Activity moves everything home.")
-                    .font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
+                    .font(.system(size: 13)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
             }
             Scrolling {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(plan.groups, id: \.name) { g in group(g.name, g.moves) }
                     if !plan.skipped.isEmpty {
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("Left where \(plan.skipped.count == 1 ? "it is" : "they are")").font(.system(size: 11.5, weight: .semibold))
+                            Text("Left where \(plan.skipped.count == 1 ? "it is" : "they are")").font(.system(size: 12, weight: .semibold))
                                 .foregroundStyle(Theme.textTertiary)
-                            ForEach(plan.skipped.prefix(6), id: \.self) { Text($0).font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary).lineLimit(1) }
-                            if plan.skipped.count > 6 { Text("and \(plan.skipped.count - 6) more").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary) }
+                            ForEach(plan.skipped.prefix(6), id: \.self) { Text($0).font(.system(size: 12)).foregroundStyle(Theme.textTertiary).lineLimit(1) }
+                            if plan.skipped.count > 6 { Text("and \(plan.skipped.count - 6) more").font(.system(size: 12)).foregroundStyle(Theme.textTertiary) }
                         }
                         .padding(.top, 4)
                     }
@@ -62,7 +62,7 @@ struct TidySheet: View {
                         .padding(.horizontal, 6).padding(.vertical, 1).background(Capsule().fill(Theme.fill(0.07)))
                 }
                 Text(moves.prefix(3).map(\.from.lastPathComponent).joined(separator: ", ") + (moves.count > 3 ? ", …" : ""))
-                    .font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary).lineLimit(1).truncationMode(.middle)
+                    .font(.system(size: 12)).foregroundStyle(Theme.textTertiary).lineLimit(1).truncationMode(.middle)
             }
             Spacer(minLength: 0)
         }

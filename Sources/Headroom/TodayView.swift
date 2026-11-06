@@ -258,8 +258,8 @@ struct TodayView: View {
                 ZStack {
                     GaugeRing(fraction: score.value, tint: Theme.safe, lineWidth: 10)
                     VStack(spacing: 0) {
-                        Text("\(score.percent)%").font(Theme.number(20, weight: .bold))
-                        Text("\(score.done)/\(score.planned) done").font(.system(size: 10.5)).foregroundStyle(Theme.textTertiary)
+                        Text("\(score.percent)%").font(Theme.number(22, weight: .bold))
+                        Text("\(score.done)/\(score.planned) done").font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
                     }
                 }
                 .frame(width: 86, height: 86)
@@ -268,7 +268,7 @@ struct TodayView: View {
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
                         Text("Level \(level.number)").font(.system(size: 22, weight: .bold, design: .rounded))
                         Text(Planner.rank(for: level.number).title).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.accent)
-                        Text("\(level.into) / \(level.needed) XP").font(Theme.number(12.5, weight: .medium)).foregroundStyle(Theme.textSecondary)
+                        Text("\(level.into) / \(level.needed) XP").font(Theme.number(13, weight: .medium)).foregroundStyle(Theme.textSecondary)
                         Spacer(minLength: 8)
                         Label(p.coins().formatted(), systemImage: "circle.hexagongrid.fill").font(Theme.number(13, weight: .semibold))
                             .foregroundStyle(Theme.review).help("Coins: earned with XP, spent on rewards you choose (Progress).")
@@ -301,7 +301,7 @@ struct TodayView: View {
                 ForEach(big) { t in TaskRow(task: t) }
                 if big.count < Planner.bigLimit {
                     ForEach(0..<(Planner.bigLimit - big.count - 1), id: \.self) { _ in
-                        RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.fill(0.1), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                        RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.fill(0.1), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
                             .frame(height: 36)
                     }
                     if !snapshot {
@@ -332,7 +332,7 @@ struct TodayView: View {
             TextField(prompt, text: text).textFieldStyle(.plain).font(.system(size: 13)).onSubmit(submit)
         }
         .padding(.horizontal, 10).frame(height: 36)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.fill(0.04)))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.fill(0.04)))
     }
 
     // MARK: Habits
@@ -353,7 +353,7 @@ struct TodayView: View {
                 ForEach(due) { h in HabitRow(habit: h) { editingHabit = HabitDraft(h) } }
                 if !resting.isEmpty {
                     Text("Not planned today: " + resting.map(\.title).joined(separator: ", "))
-                        .font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                        .font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                 }
             }
         }
@@ -381,7 +381,7 @@ struct TaskRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Button { model.toggleTask(task) } label: { CheckCircle(on: task.isDone, tint: task.big ? Theme.review : Theme.accent) }
+            Button { model.toggleTask(task) } label: { CheckCircle(on: task.isDone, tint: Theme.accent) }
                 .buttonStyle(.plain)
             VStack(alignment: .leading, spacing: 1) {
                 Text(task.title).font(.system(size: compact ? 12.5 : 13.5, weight: task.big ? .semibold : .regular))
@@ -393,7 +393,7 @@ struct TaskRow: View {
                 Image(systemName: "timer").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.safe).help("Focusing on this")
             }
             if !task.isDone && !compact {
-                Text("+\(task.xp)").font(Theme.number(10.5, weight: .semibold)).foregroundStyle(Theme.textTertiary)
+                Text("+\(task.xp)").font(Theme.number(11, weight: .semibold)).foregroundStyle(Theme.textTertiary)
                     .help("XP for finishing it (effort \(task.effort)\(task.big ? ", one of the Big 3" : ""))")
             }
             if task.big { Image(systemName: "star.fill").font(.system(size: 10)).foregroundStyle(Theme.review) }
@@ -471,7 +471,7 @@ struct HabitRow: View {
             Image(systemName: slipped ? "arrow.counterclockwise.circle" : "shield.lefthalf.filled")
                 .font(.system(size: 17)).foregroundStyle(slipped ? Theme.review : Theme.safe).frame(width: 18).padding(.top, 1)
             VStack(alignment: .leading, spacing: 3) {
-                Text(habit.title).font(.system(size: 13.5, weight: .medium))
+                Text(habit.title).font(.system(size: 13, weight: .medium))
                 HStack(spacing: 4) {
                     ForEach(habit.recent(7), id: \.key) { d in
                         Circle().fill(habit.slips.contains(d.key) ? Theme.review.opacity(0.7) : d.scheduled && d.key < Planner.key(.now) ? Theme.safe : Theme.fill(0.08))
@@ -496,8 +496,8 @@ struct HabitRow: View {
         return HStack(alignment: .top, spacing: 10) {
             Button { model.toggleHabit(habit) } label: { CheckCircle(on: done) }.buttonStyle(.plain).padding(.top, 1)
             VStack(alignment: .leading, spacing: 3) {
-                Text(habit.title).font(.system(size: 13.5, weight: .medium))
-                if !done, let line = nudge { Text(line).font(.system(size: 11.5)).foregroundStyle(Theme.textSecondary).lineLimit(2) }
+                Text(habit.title).font(.system(size: 13, weight: .medium))
+                if !done, let line = nudge { Text(line).font(.system(size: 12)).foregroundStyle(Theme.textSecondary).lineLimit(2) }
                 HStack(spacing: 4) {
                     ForEach(habit.recent(7), id: \.key) { d in
                         Circle().fill(d.done ? Theme.safe : d.scheduled ? Theme.fill(0.12) : Theme.fill(0.04)).frame(width: 7, height: 7)
@@ -546,7 +546,7 @@ struct RewardBurst: View {
                 Image(systemName: reward.levelUp == nil ? "sparkles" : "trophy.fill")
                 Text(reward.levelUp.map { "Level \($0)!" } ?? "+\(reward.xp) XP")
             }
-            .font(.system(size: 14, weight: .bold, design: .rounded))
+            .font(.system(size: 15, weight: .bold, design: .rounded))
             .foregroundStyle(Color.black.opacity(0.85))
             .padding(.horizontal, 14).padding(.vertical, 8)
             .background(Capsule().fill(reward.levelUp == nil ? Theme.safe : Theme.review))
@@ -855,14 +855,14 @@ struct NotchTodayView: View {
                         .font(.system(size: 13, weight: .semibold))
                     if let s = p.runningSession {
                         HStack(spacing: 4) {
-                            Image(systemName: "timer").font(.system(size: 9.5, weight: .bold))
+                            Image(systemName: "timer").font(.system(size: 10, weight: .bold))
                             FocusClock(start: s.start, size: 10.5)
-                            Text("· \(s.title)").font(.system(size: 10.5, weight: .medium)).lineLimit(1)
+                            Text("· \(s.title)").font(.system(size: 11, weight: .medium)).lineLimit(1)
                         }
                         .foregroundStyle(Theme.safe)
                     } else {
                         Text("\(Planner.rank(for: level.number).title) · Level \(level.number) · \(level.into)/\(level.needed) XP · \(p.coins()) coins")
-                            .font(Theme.number(10.5, weight: .medium)).foregroundStyle(Theme.textTertiary).lineLimit(1)
+                            .font(Theme.number(11, weight: .medium)).foregroundStyle(Theme.textTertiary).lineLimit(1)
                     }
                 }
                 Spacer()
@@ -883,12 +883,12 @@ struct NotchTodayView: View {
                 ForEach(shown) { t in
                     Button { model.toggleTask(t) } label: {
                         HStack(spacing: 8) {
-                            CheckCircle(on: t.isDone, tint: t.big ? Theme.review : Theme.accent)
-                            Text(t.title).font(.system(size: 12.5, weight: .medium)).lineLimit(1)
+                            CheckCircle(on: t.isDone, tint: Theme.accent)
+                            Text(t.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
                                 .strikethrough(t.isDone).foregroundStyle(t.isDone ? Theme.textTertiary : Theme.textPrimary)
                             if t.id == top?.id {
-                                Text("TOP").font(.system(size: 8.5, weight: .heavy)).foregroundStyle(Theme.accent)
-                            } else if t.big { Image(systemName: "star.fill").font(.system(size: 8)).foregroundStyle(Theme.review) }
+                                Text("TOP").font(.system(size: 9, weight: .heavy)).foregroundStyle(Theme.accent)
+                            } else if t.big { Image(systemName: "star.fill").font(.system(size: 9)).foregroundStyle(Theme.review) }
                             Spacer(minLength: 0)
                         }
                         .frame(height: 22).contentShape(Rectangle())

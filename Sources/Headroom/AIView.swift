@@ -102,7 +102,7 @@ struct AIView: View {
 
     func stat(_ value: String, _ label: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(value).font(Theme.number(26, weight: .bold))
+            Text(value).font(Theme.number(28, weight: .bold))
             Text(label).font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
         }
     }
@@ -113,8 +113,8 @@ struct AIView: View {
         Card(padding: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 12) {
-                    Image(systemName: tool.symbol).font(.system(size: 18)).frame(width: 34, height: 34)
-                        .background(RoundedRectangle(cornerRadius: 9).fill(Theme.surfaceRaised))
+                    Image(systemName: tool.symbol).font(.system(size: 17)).frame(width: 34, height: 34)
+                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.surfaceRaised))
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 8) {
                             Text(tool.name).font(.system(size: 15, weight: .semibold))
@@ -157,7 +157,7 @@ struct AIView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("localhost:\(s.port)").font(.system(size: 13, weight: .medium, design: .monospaced))
                 Text(s.exposed ? "\(s.process) · open to other devices on your network" : "\(s.process) · only this Mac can reach it")
-                    .font(.system(size: 11.5)).foregroundStyle(s.exposed ? Theme.review : Theme.textTertiary)
+                    .font(.system(size: 12)).foregroundStyle(s.exposed ? Theme.review : Theme.textTertiary)
             }
             Spacer()
             Button("Open") { NSWorkspace.shared.open(URL(string: "http://localhost:\(s.port)")!) }.buttonStyle(GhostButtonStyle())
@@ -174,10 +174,10 @@ struct AIView: View {
                 .foregroundStyle(Theme.color(for: f.safety)).frame(width: 34)
             VStack(alignment: .leading, spacing: 2) {
                 Text(f.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                Text(f.subtitle).font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary).lineLimit(1).truncationMode(.middle)
+                Text(f.subtitle).font(.system(size: 12)).foregroundStyle(Theme.textTertiary).lineLimit(1).truncationMode(.middle)
             }
             Spacer()
-            if let used = f.lastUsed { Text(used.ago).font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary) }
+            if let used = f.lastUsed { Text(used.ago).font(.system(size: 12)).foregroundStyle(Theme.textTertiary) }
             Text(f.size.allocated.gb).font(Theme.number(13, weight: .semibold)).frame(width: 80, alignment: .trailing)
             Button { NSWorkspace.shared.activateFileViewerSelecting([f.paths[0]]) } label: { Image(systemName: "magnifyingglass") }
                 .buttonStyle(GhostButtonStyle()).help("Show in Finder")
@@ -186,7 +186,7 @@ struct AIView: View {
             } else if f.safety != .keep, f.method != .none {
                 Button(actionLabel(f)) { confirm = [f] }.buttonStyle(GhostButtonStyle()).frame(width: 96)
             } else {
-                Text(f.safety == .keep ? "Your data" : "Can't remove").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                Text(f.safety == .keep ? "Your data" : "Can't remove").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                     .frame(width: 96).help(f.detail)
             }
         }

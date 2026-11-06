@@ -19,9 +19,9 @@ struct WorkspaceScreen: View {
                 .modifier(WorkspaceDrop(id: w.id, targeted: $dropping))
                 .overlay {
                     if dropping {
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
                             .strokeBorder(Theme.accent, style: StrokeStyle(lineWidth: 2, dash: [7, 5]))
-                            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.accent.opacity(0.06)))
+                            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.accent.opacity(0.06)))
                             .overlay(Label("Add to “\(w.name)”", systemImage: "plus.circle.fill")
                                 .font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.accent))
                             .allowsHitTesting(false)
@@ -107,7 +107,7 @@ struct WorkspaceScreen: View {
                         VStack(alignment: .leading, spacing: 4) {
                             FileCard(item: item, size: 148, siblings: items).frame(width: 148)
                             Text(Workspaces.place(of: item.path, home: library.home))
-                                .font(.system(size: 10.5)).foregroundStyle(Theme.textTertiary).lineLimit(1).truncationMode(.middle)
+                                .font(.system(size: 11)).foregroundStyle(Theme.textTertiary).lineLimit(1).truncationMode(.middle)
                                 .frame(width: 140, alignment: .leading).padding(.leading, 8)
                         }
                     }
@@ -123,7 +123,7 @@ struct WorkspaceScreen: View {
                 Image(systemName: "plus").font(.system(size: big ? 20 : 15, weight: .semibold)).foregroundStyle(Theme.textSecondary)
                 Text("Add folders or files").font(.system(size: big ? 15 : 12.5, weight: .semibold))
                 Text("Drag them here, or right-click a file › Add to Workspace. Nothing is copied or moved.")
-                    .font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary).multilineTextAlignment(.center)
+                    .font(.system(size: 12)).foregroundStyle(Theme.textTertiary).multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(16)
@@ -139,8 +139,8 @@ struct WorkspaceScreen: View {
     func cloudOnlyRow(_ w: Workspace, _ path: String) -> some View {
         HStack(spacing: 10) {
             Image(systemName: "icloud.and.arrow.down").foregroundStyle(Theme.textTertiary)
-            Text((path as NSString).lastPathComponent).font(.system(size: 12.5, weight: .medium))
-            Text("In iCloud only — open it in Finder to download it").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+            Text((path as NSString).lastPathComponent).font(.system(size: 13, weight: .medium))
+            Text("In iCloud only — open it in Finder to download it").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
             Spacer()
             Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)]) }
                 .buttonStyle(GhostButtonStyle())
@@ -235,7 +235,7 @@ struct WorkspaceFolderCard: View {
                     Text(FileManager.default.displayName(atPath: path)).font(.system(size: 15, weight: .bold, design: .rounded))
                         .foregroundStyle(present ? Theme.textPrimary : Theme.textSecondary).lineLimit(1)
                     Text(Workspaces.place(of: path, home: library.home)).font(.system(size: 11)).foregroundStyle(Theme.textTertiary).lineLimit(1)
-                    Text(detail).font(.system(size: 11.5, weight: .medium)).foregroundStyle(Theme.textSecondary).lineLimit(1).padding(.top, 3)
+                    Text(detail).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.textSecondary).lineLimit(1).padding(.top, 3)
                     if present, let changed = summary?.changed {
                         HStack(spacing: 6) {
                             Text("Changed \(changed.ago)").font(.system(size: 11)).foregroundStyle(Theme.textTertiary).lineLimit(1)

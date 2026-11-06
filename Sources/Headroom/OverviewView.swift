@@ -29,7 +29,7 @@ struct OverviewView: View {
             HStack(spacing: 14) {
                 Image(systemName: "lock.shield.fill").font(.system(size: 22)).foregroundStyle(Theme.review)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("See inside “Other”").font(.system(size: 14, weight: .semibold))
+                    Text("See inside “Other”").font(.system(size: 15, weight: .semibold))
                     Text("macOS hides Mail, Safari and some app containers until you give Headroom Full Disk Access. Turn on Headroom in the list — this banner goes away by itself. Emptying the Trash and uninstalling apps need it too.")
                         .font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
                 }
@@ -60,22 +60,22 @@ struct OverviewView: View {
                 }
                 if since == nil {
                     Text("Headroom compares the map over time. Check back after it has measured your disk again — a few hours from now.")
-                        .font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary)
+                        .font(.system(size: 13)).foregroundStyle(Theme.textSecondary)
                 } else if grew.isEmpty {
-                    Text("Nothing grew by more than 100 MB.").font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary)
+                    Text("Nothing grew by more than 100 MB.").font(.system(size: 13)).foregroundStyle(Theme.textSecondary)
                 } else {
                     let top = Double(grew.first?.delta ?? 1)
                     ForEach(grew.prefix(6)) { c in
                         HStack(spacing: 10) {
-                            Text(c.name).font(.system(size: 12.5)).lineLimit(1).truncationMode(.middle)
+                            Text(c.name).font(.system(size: 13)).lineLimit(1).truncationMode(.middle)
                             Spacer()
                             GeometryReader { geo in
-                                RoundedRectangle(cornerRadius: 3).fill(Theme.review)
+                                RoundedRectangle(cornerRadius: 4, style: .continuous).fill(Theme.review)
                                     .frame(width: max(3, geo.size.width * Double(c.delta) / top))
                                     .frame(maxWidth: .infinity, alignment: .trailing)
                             }
                             .frame(width: 120, height: 5)
-                            Text("+\(c.delta.gb)").font(Theme.number(12.5, weight: .semibold)).foregroundStyle(Theme.review)
+                            Text("+\(c.delta.gb)").font(Theme.number(13, weight: .semibold)).foregroundStyle(Theme.review)
                                 .frame(width: 80, alignment: .trailing)
                             if let url = c.url {
                                 Button { model.reveal([url]) } label: { Image(systemName: "magnifyingglass") }
@@ -85,7 +85,7 @@ struct OverviewView: View {
                     }
                     let shrank = changes.filter { $0.delta < 0 }.reduce(0) { $0 + $1.delta }
                     if shrank < 0 {
-                        Text("Elsewhere \((-shrank).gb) was freed.").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                        Text("Elsewhere \((-shrank).gb) was freed.").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                     }
                 }
             }
@@ -180,9 +180,9 @@ struct OverviewView: View {
                         ForEach(byCategory.prefix(5), id: \.cat) { row in
                             HStack {
                                 Circle().fill(Theme.color(for: row.cat)).frame(width: 8, height: 8)
-                                Text(row.cat.title).font(.system(size: 12.5)).foregroundStyle(Theme.textPrimary)
+                                Text(row.cat.title).font(.system(size: 13)).foregroundStyle(Theme.textPrimary)
                                 Spacer()
-                                Text(row.bytes.gb).font(Theme.number(12.5, weight: .medium)).foregroundStyle(Theme.textSecondary)
+                                Text(row.bytes.gb).font(Theme.number(13, weight: .medium)).foregroundStyle(Theme.textSecondary)
                             }
                         }
                         if byCategory.isEmpty {
@@ -199,11 +199,11 @@ struct OverviewView: View {
                 .buttonStyle(PrimaryButtonStyle(large: true))
                 .disabled(total == 0 || model.isBusy)
                 Text("Only temporary files your apps and tools make again on their own. Your files, chats, apps and projects stay exactly as they are.")
-                    .font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary).fixedSize(horizontal: false, vertical: true)
+                    .font(.system(size: 12)).foregroundStyle(Theme.textTertiary).fixedSize(horizontal: false, vertical: true)
                 if model.reviewReclaimable > 0 {
                     Button { openReclaim() } label: {
                         HStack {
-                            Text("\(model.reviewReclaimable.gb) more to review").font(.system(size: 12.5, weight: .medium))
+                            Text("\(model.reviewReclaimable.gb) more to review").font(.system(size: 13, weight: .medium))
                             Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold))
                         }
                         .foregroundStyle(Theme.review)
@@ -234,12 +234,12 @@ struct OverviewView: View {
                     ForEach(groups.prefix(9)) { g in
                         VStack(alignment: .leading, spacing: 5) {
                             HStack {
-                                Text(g.name).font(.system(size: 12.5)).foregroundStyle(Theme.textPrimary).lineLimit(1)
+                                Text(g.name).font(.system(size: 13)).foregroundStyle(Theme.textPrimary).lineLimit(1)
                                 Spacer()
-                                Text(g.bytes.gb).font(Theme.number(12.5, weight: .medium)).foregroundStyle(Theme.textSecondary)
+                                Text(g.bytes.gb).font(Theme.number(13, weight: .medium)).foregroundStyle(Theme.textSecondary)
                             }
                             GeometryReader { geo in
-                                RoundedRectangle(cornerRadius: 3).fill(Theme.color(for: g.area))
+                                RoundedRectangle(cornerRadius: 4, style: .continuous).fill(Theme.color(for: g.area))
                                     .frame(width: max(3, geo.size.width * Double(g.bytes) / maxBytes))
                             }
                             .frame(height: 5)
@@ -298,7 +298,7 @@ struct ProgressLine: View {
                 }
             }
             .frame(height: 6)
-            Text(label).font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary).lineLimit(1).truncationMode(.middle)
+            Text(label).font(.system(size: 12)).foregroundStyle(Theme.textTertiary).lineLimit(1).truncationMode(.middle)
         }
     }
 }

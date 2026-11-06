@@ -46,7 +46,7 @@ struct FilesView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
-                Text("Bigger than").font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary)
+                Text("Bigger than").font(.system(size: 13)).foregroundStyle(Theme.textSecondary)
                 ForEach([Int64(100), 250, 500, 1000, 5000], id: \.self) { mb in
                     Pill(title: mb < 1000 ? "\(mb) MB" : "\(mb / 1000) GB", on: minimumMB == mb) { minimumMB = mb }
                 }
@@ -90,7 +90,7 @@ struct FilesView: View {
                     .keyboardShortcut("a", modifiers: .command)
                     Spacer()
                     Text("\(list.count) files · \(list.reduce(0) { $0 + $1.bytes }.gb) — your own folders only; app data in Library is never listed.")
-                        .font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                        .font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                 }
                 .padding(.horizontal, 18)
                 Card(padding: 0) {
@@ -188,18 +188,18 @@ struct FilesView: View {
         return HStack(spacing: 14) {
             CheckCircle(on: on, tint: Theme.review, disabled: refusal != nil)
             ZStack {
-                RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Theme.color(for: .documents).opacity(0.16))
-                Image(systemName: symbol(f.url)).font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.color(for: .documents))
+                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.color(for: .documents).opacity(0.16))
+                Image(systemName: symbol(f.url)).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.color(for: .documents))
             }
             .frame(width: 34, height: 34)
             VStack(alignment: .leading, spacing: 3) {
-                Text(f.url.lastPathComponent).font(.system(size: 13.5, weight: .semibold)).lineLimit(1).truncationMode(.middle)
-                Text(f.url.deletingLastPathComponent().tildePath).font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                Text(f.url.lastPathComponent).font(.system(size: 13, weight: .semibold)).lineLimit(1).truncationMode(.middle)
+                Text(f.url.deletingLastPathComponent().tildePath).font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                     .lineLimit(1).truncationMode(.middle)
             }
             Spacer(minLength: 12)
             VStack(alignment: .trailing, spacing: 3) {
-                Text(f.bytes.gb).font(Theme.number(14, weight: .semibold))
+                Text(f.bytes.gb).font(Theme.number(15, weight: .semibold))
                 Text("changed \(f.modified.ago)").font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
             }
             .frame(minWidth: 110, alignment: .trailing)
@@ -342,7 +342,7 @@ struct ActivityView: View {
         if !waiting.entries.isEmpty {
             Card {
                 HStack(spacing: 16) {
-                    Image(systemName: "trash.fill").font(.system(size: 18, weight: .semibold)).foregroundStyle(Theme.review)
+                    Image(systemName: "trash.fill").font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.review)
                         .frame(width: 42, height: 42)
                         .background(Circle().fill(Theme.review.opacity(0.14)))
                     VStack(alignment: .leading, spacing: 3) {
@@ -364,27 +364,27 @@ struct ActivityView: View {
     func row(_ e: ActivityLog.Entry) -> some View {
         HStack(spacing: 14) {
             ZStack {
-                RoundedRectangle(cornerRadius: 9, style: .continuous).fill(color(e).opacity(0.16))
-                Image(systemName: symbol(e)).font(.system(size: 14, weight: .semibold)).foregroundStyle(color(e))
+                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(color(e).opacity(0.16))
+                Image(systemName: symbol(e)).font(.system(size: 15, weight: .semibold)).foregroundStyle(color(e))
             }
             .frame(width: 34, height: 34)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {
-                    Text(e.title).font(.system(size: 13.5, weight: .semibold)).lineLimit(1)
+                    Text(e.title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
                     if e.automatic { Badge(text: "Automatic", color: Theme.keep) }
                     if e.restored { Badge(text: "Put back", color: Theme.safe) }
                     if e.purgedAt != nil, !e.canDeleteFromTrash { Badge(text: "Deleted for good", color: Theme.critical) }
                 }
                 Text(verb(e) + " · " + (e.items.first.map { URL(fileURLWithPath: $0.original).tildePath } ?? "")
                      + (e.items.count > 1 ? " +\(e.items.count - 1) more" : ""))
-                    .font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary).lineLimit(1).truncationMode(.middle)
+                    .font(.system(size: 12)).foregroundStyle(Theme.textTertiary).lineLimit(1).truncationMode(.middle)
                 if let rebuild = e.rebuild {
                     Text("bring it back: \(rebuild)").font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.textSecondary)
                 }
             }
             Spacer(minLength: 12)
             VStack(alignment: .trailing, spacing: 3) {
-                Text(e.bytes.gb).font(Theme.number(14, weight: .semibold))
+                Text(e.bytes.gb).font(Theme.number(15, weight: .semibold))
                 Text(e.date.ago).font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
             }
             if e.canPutBack {

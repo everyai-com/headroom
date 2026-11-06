@@ -9,9 +9,9 @@ struct KeepAwakeRow: View {
         HStack(spacing: 10) {
             Image(systemName: model.awake == nil ? "moon.zzz" : "cup.and.saucer.fill")
                 .foregroundStyle(model.awakeState == .awake && model.awake != nil ? Theme.safe : Theme.textSecondary).frame(width: 20)
-            Text("Keep awake").font(.system(size: 12.5, weight: .medium))
+            Text("Keep awake").font(.system(size: 13, weight: .medium))
             Spacer(minLength: 4)
-            Text(model.awakeLabel).font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary).lineLimit(1)
+            Text(model.awakeLabel).font(.system(size: 12)).foregroundStyle(Theme.textTertiary).lineLimit(1)
             Menu {
                 Button("30 minutes") { model.startAwake(.timed, minutes: 30) }
                 Button("1 hour") { model.startAwake(.timed, minutes: 60) }
@@ -48,10 +48,10 @@ struct EnergyCard: View {
                 }
                 ForEach(model.energy) { u in
                     HStack(spacing: 10) {
-                        Text(u.name).font(.system(size: 12.5, weight: .medium)).lineLimit(1)
+                        Text(u.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
                         Spacer(minLength: 6)
                         Text(String(format: "%.0f%% CPU · %.0f wake-ups/s", u.cpuPercent, u.wakeupsPerSecond))
-                            .font(.system(size: 11.5).monospacedDigit()).foregroundStyle(u.impact > 50 ? Theme.critical : Theme.textTertiary)
+                            .font(.system(size: 12).monospacedDigit()).foregroundStyle(u.impact > 50 ? Theme.critical : Theme.textTertiary)
                         if u.bundlePath != nil, u.name != "Headroom" {
                             Button("Quit") { quit(u) }.buttonStyle(.borderless).disabled(quitting != nil)
                         }
@@ -63,12 +63,12 @@ struct EnergyCard: View {
                     ForEach(model.sleepBlockers) { b in
                         HStack(spacing: 10) {
                             Image(systemName: b.display ? "display" : "moon.zzz").foregroundStyle(Theme.textSecondary).frame(width: 18)
-                            Text(b.process).font(.system(size: 12.5, weight: .medium))
-                            Text(b.name).font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary).lineLimit(1)
+                            Text(b.process).font(.system(size: 13, weight: .medium))
+                            Text(b.name).font(.system(size: 12)).foregroundStyle(Theme.textTertiary).lineLimit(1)
                             Spacer(minLength: 6)
                             if let since = b.since {
                                 Text("for \(since.formatted(.relative(presentation: .named, unitsStyle: .abbreviated)).replacingOccurrences(of: " ago", with: ""))")
-                                    .font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                                    .font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                             }
                         }
                     }

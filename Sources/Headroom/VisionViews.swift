@@ -19,7 +19,7 @@ struct VisionCard: View {
                 SectionTitle(title: "Vision", trailing: "\(met.count)/\(CertainWay.Item.allCases.count) in the certain way")
                 if vision.isEmpty {
                     Text("Write down what you want to have, do and become — clearly enough to picture it.")
-                        .font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
+                        .font(.system(size: 13)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
                     Button("Write My Vision…") { editing = true }.buttonStyle(GhostButtonStyle())
                 } else {
                     if let line = vision.headline {
@@ -42,18 +42,18 @@ struct VisionCard: View {
                 let ready = vision.waiting.filter { $0.ready() <= day }
                 if !vision.waiting.isEmpty {
                     Text("Waiting on · \(vision.waiting.count)\(ready.isEmpty ? "" : " · \(ready.count) ready to decide")")
-                        .font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.textTertiary)
+                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.textTertiary)
                     ForEach(vision.waiting) { d in
                         HStack(spacing: 8) {
                             Image(systemName: d.ready() <= day ? "checkmark.circle" : "hourglass").font(.system(size: 11))
                                 .foregroundStyle(d.ready() <= day ? Theme.safe : Theme.textTertiary)
-                            Text(d.title).font(.system(size: 12.5)).lineLimit(1)
+                            Text(d.title).font(.system(size: 13)).lineLimit(1)
                             Spacer()
                             if snapshot {
                                 Text("from \(d.ready())").font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
                             } else {
                                 Button("Decided") { model.plan { p in p.vision?.waiting.removeAll { $0.id == d.id } } }
-                                    .buttonStyle(.borderless).font(.system(size: 11.5))
+                                    .buttonStyle(.borderless).font(.system(size: 12))
                             }
                         }
                     }
@@ -72,8 +72,8 @@ struct VisionCard: View {
                             }
                         } label: {
                             HStack(spacing: 5) {
-                                Image(systemName: on ? "checkmark.circle.fill" : "circle").font(.system(size: 10.5))
-                                Text(item.short).font(.system(size: 11.5))
+                                Image(systemName: on ? "checkmark.circle.fill" : "circle").font(.system(size: 11))
+                                Text(item.short).font(.system(size: 12))
                             }
                             .padding(.horizontal, 9).frame(height: 26)
                             .background(Capsule().fill(on ? Theme.accent.opacity(0.18) : Theme.fill(0.05)))
@@ -98,11 +98,11 @@ struct VisionSheet: View {
     var body: some View {
         let v = model.planner.vision ?? Vision()
         VStack(alignment: .leading, spacing: 16) {
-            Text("Your vision").font(.system(size: 20, weight: .bold, design: .rounded))
+            Text("Your vision").font(.system(size: 22, weight: .bold, design: .rounded))
             Scrolling {
                 VStack(alignment: .leading, spacing: 14) {
                     if !v.picture.isEmpty {
-                        Text(v.picture).font(.system(size: 14)).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                        Text(v.picture).font(.system(size: 15)).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
                     }
                     list("Who I'm becoming", v.become)
                     list("What I'm doing", v.doing)
@@ -135,7 +135,7 @@ struct VisionSheet: View {
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 SectionTitle(title: title)
-                ForEach(items, id: \.self) { Text("• " + $0).font(.system(size: 13.5)).fixedSize(horizontal: false, vertical: true) }
+                ForEach(items, id: \.self) { Text("• " + $0).font(.system(size: 13)).fixedSize(horizontal: false, vertical: true) }
             }
         }
     }
@@ -162,7 +162,7 @@ struct VisionEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Your vision").font(.system(size: 18, weight: .bold))
+            Text("Your vision").font(.system(size: 17, weight: .bold))
             Text("Be definite: vague wishes don't move anything. One thing per line. Ask for enough — a better life, not a little more.")
                 .font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
             Scrolling {
@@ -172,10 +172,10 @@ struct VisionEditor: View {
                     field("Have", $have, "₹1 Cr a year in revenue\nA quiet house with a studio")
                     field("The picture, as if it's already yours", $picture, "I wake up at 6 in the house with the studio…", height: 110)
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Waiting on (when in doubt, wait \(Decision.days) days)").font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.textTertiary)
+                        Text("Waiting on (when in doubt, wait \(Decision.days) days)").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.textTertiary)
                         ForEach(waiting) { d in
                             HStack {
-                                Text(d.title).font(.system(size: 12.5))
+                                Text(d.title).font(.system(size: 13))
                                 Spacer()
                                 Text("decide from \(d.ready())").font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
                                 Button { waiting.removeAll { $0.id == d.id } } label: { Image(systemName: "xmark") }.buttonStyle(.borderless)
@@ -215,10 +215,10 @@ struct VisionEditor: View {
 
     func field(_ title: String, _ text: Binding<String>, _ hint: String, height: CGFloat = 64) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.textTertiary)
+            Text(title).font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.textTertiary)
             TextEditor(text: text).font(.system(size: 13)).scrollContentBackground(.hidden)
                 .padding(6).frame(height: height)
-                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.fill(0.04)))
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.fill(0.04)))
                 .overlay(alignment: .topLeading) {
                     if text.wrappedValue.isEmpty {
                         Text(hint).font(.system(size: 13)).foregroundStyle(Theme.textTertiary)

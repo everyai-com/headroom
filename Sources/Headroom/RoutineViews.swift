@@ -19,7 +19,7 @@ struct RoutinesSheet: View {
                     Toggle(isOn: $r.on) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(r.kind.title).font(.system(size: 13, weight: .semibold))
-                            Text(r.kind.body).font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary).lineLimit(2)
+                            Text(r.kind.body).font(.system(size: 12)).foregroundStyle(Theme.textTertiary).lineLimit(2)
                         }
                     }
                     .toggleStyle(.checkbox)
@@ -124,7 +124,7 @@ struct PauseCardView: View {
                 }
             }
             .padding(36).frame(width: 440)
-            .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(.regularMaterial))
+            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(.regularMaterial))
         }
         .onReceive(timer) { _ in if left > 0 { left -= 1 } }
     }

@@ -124,7 +124,7 @@ struct MemoryView: View {
                         Text(m.used.gb).font(Theme.number(40, weight: .bold))
                         Text("used of \(m.total.gb)").font(.system(size: 15, weight: .medium)).foregroundStyle(Theme.textSecondary)
                     }
-                    Text(headline(m)).font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
+                    Text(headline(m)).font(.system(size: 13)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
                     SegmentedBar(segments: [
                         .init(id: "Apps", value: Double(m.app), color: Color(hex: 0x7C83FF)),
                         .init(id: "macOS", value: Double(m.wired), color: Color(hex: 0xFF8A65)),
@@ -166,8 +166,8 @@ struct MemoryView: View {
     func legend(_ label: String, _ bytes: Int64, _ color: Color, _ help: String) -> some View {
         HStack(spacing: 6) {
             Circle().fill(color).frame(width: 7, height: 7)
-            Text(label).font(.system(size: 11.5)).foregroundStyle(Theme.textSecondary)
-            Text(bytes.gb).font(Theme.number(11.5, weight: .semibold))
+            Text(label).font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
+            Text(bytes.gb).font(Theme.number(12, weight: .semibold))
         }
         .help(help)
     }
@@ -185,7 +185,7 @@ struct MemoryView: View {
                         .frame(width: 36, height: 36).background(Circle().fill(pressureColor.opacity(0.14)))
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Quitting \(list.map(\.name).joined(separator: ", ")) frees about \(list.reduce(0) { $0 + $1.footprint }.gb)")
-                            .font(.system(size: 13.5, weight: .semibold))
+                            .font(.system(size: 13, weight: .semibold))
                         Text("The biggest things you're running that are safe to quit.").font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
                     }
                     Spacer()
@@ -207,18 +207,18 @@ struct MemoryView: View {
                 icon(g).frame(width: 34, height: 34)
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 8) {
-                        Text(g.name).font(.system(size: 13.5, weight: .semibold)).lineLimit(1)
+                        Text(g.name).font(.system(size: 13, weight: .semibold)).lineLimit(1)
                         if g.processes.count > 1 {
-                            Text("\(g.processes.count) parts").font(.system(size: 10.5, weight: .semibold)).foregroundStyle(Theme.textTertiary)
+                            Text("\(g.processes.count) parts").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.textTertiary)
                         }
                         if g.kind == .developer { Badge(text: "Dev", color: Color(hex: 0xB388FF)) }
                     }
-                    Text(ProcessExplainer.explain(g)).font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                    Text(ProcessExplainer.explain(g)).font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                         .lineLimit(1).truncationMode(.middle)
                 }
                 Spacer(minLength: 12)
                 VStack(alignment: .trailing, spacing: 3) {
-                    Text(g.footprint.gb).font(Theme.number(14, weight: .semibold))
+                    Text(g.footprint.gb).font(Theme.number(15, weight: .semibold))
                         .foregroundStyle(g.footprint > 2_000_000_000 ? Theme.review : Theme.textPrimary)
                     if let start = g.oldestStart {
                         Text("running \(start.ago.replacingOccurrences(of: " ago", with: ""))").font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
@@ -264,7 +264,7 @@ struct MemoryView: View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(g.processes.prefix(30)) { p in
                 HStack(spacing: 8) {
-                    Text("\(p.pid)").font(.system(size: 10.5, design: .monospaced)).foregroundStyle(Theme.textTertiary).frame(width: 52, alignment: .leading)
+                    Text("\(p.pid)").font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.textTertiary).frame(width: 52, alignment: .leading)
                     Text(p.arguments.isEmpty ? p.name : p.arguments.joined(separator: " ")).font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(Theme.textSecondary).lineLimit(1).truncationMode(.middle)
                     Spacer()
@@ -286,8 +286,8 @@ struct MemoryView: View {
             case .background: ("gearshape.2.fill", Theme.textSecondary)
             }
             ZStack {
-                RoundedRectangle(cornerRadius: 9, style: .continuous).fill(color.opacity(0.16))
-                Image(systemName: symbol).font(.system(size: 14, weight: .semibold)).foregroundStyle(color)
+                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(color.opacity(0.16))
+                Image(systemName: symbol).font(.system(size: 15, weight: .semibold)).foregroundStyle(color)
             }
         }
     }

@@ -113,9 +113,9 @@ struct FileGrid: View {
                 }
             }
         }
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.surface)
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.hairline)))
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.surface)
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.hairline)))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     func sortHeader(_ title: String, _ sort: LibraryModel.Sort) -> some View {
@@ -124,9 +124,9 @@ struct FileGrid: View {
         } label: {
             HStack(spacing: 3) {
                 Text(title)
-                if library.sort == sort { Image(systemName: library.ascending ? "chevron.up" : "chevron.down").font(.system(size: 8, weight: .bold)) }
+                if library.sort == sort { Image(systemName: library.ascending ? "chevron.up" : "chevron.down").font(.system(size: 9, weight: .bold)) }
             }
-            .font(.system(size: 11.5, weight: .semibold)).foregroundStyle(library.sort == sort ? Theme.textPrimary : Theme.textTertiary)
+            .font(.system(size: 12, weight: .semibold)).foregroundStyle(library.sort == sort ? Theme.textPrimary : Theme.textTertiary)
         }
         .buttonStyle(.plain)
     }
@@ -197,7 +197,7 @@ struct FileCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.name).font(.system(size: 12, weight: .medium)).lineLimit(1).truncationMode(.middle)
                 Text(item.latest.listDate)
-                    .font(.system(size: 10.5)).foregroundStyle(Theme.textTertiary).lineLimit(1)
+                    .font(.system(size: 11)).foregroundStyle(Theme.textTertiary).lineLimit(1)
             }
             .padding(.horizontal, 3)
         }
@@ -269,10 +269,10 @@ struct FileRow: View {
         HStack(spacing: 12) {
             Thumbnail(item: item, size: 30, fill: item.kind == .image || item.kind == .video)
                 .frame(width: 30, height: 30)
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             VStack(alignment: .leading, spacing: 1) {
-                Text(item.name).font(.system(size: 12.5, weight: .medium)).lineLimit(1).truncationMode(.middle)
-                Text(LibraryModel.display(item.folder)).font(.system(size: 10.5))
+                Text(item.name).font(.system(size: 13, weight: .medium)).lineLimit(1).truncationMode(.middle)
+                Text(LibraryModel.display(item.folder)).font(.system(size: 11))
                     .foregroundStyle(selected ? Theme.textSecondary : Theme.textTertiary).lineLimit(1).truncationMode(.head)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -280,13 +280,13 @@ struct FileRow: View {
                 Circle().fill(Theme.tint(for: item.kind)).frame(width: 6, height: 6)
                 if item.isFolder { FolderSizeText(path: item.path, format: .items) } else { Text(item.typeLabel) }
             }
-            .font(.system(size: 11.5)).foregroundStyle(Theme.textSecondary).frame(width: 90, alignment: .leading)
+            .font(.system(size: 12)).foregroundStyle(Theme.textSecondary).frame(width: 90, alignment: .leading)
             Group {
                 if item.isFolder { FolderSizeText(path: item.path, format: .bytes) } else { Text(ByteFormat.string(item.bytes)) }
             }
-            .font(Theme.number(11.5, weight: .medium))
+            .font(Theme.number(12, weight: .medium))
             .foregroundStyle(Theme.textSecondary).frame(width: 80, alignment: .trailing)
-            Text(item.latest.listDate).font(.system(size: 11.5)).lineLimit(1)
+            Text(item.latest.listDate).font(.system(size: 12)).lineLimit(1)
                 .foregroundStyle(Theme.textTertiary).frame(width: 130, alignment: .trailing)
         }
         .padding(.horizontal, 12).padding(.vertical, 6)

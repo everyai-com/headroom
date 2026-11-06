@@ -45,7 +45,7 @@ struct BatteryView: View {
                 ZStack {
                     GaugeRing(fraction: Double(b.percent) / 100, tint: chargeColor(b), lineWidth: 12)
                     VStack(spacing: 0) {
-                        Text("\(b.percent)%").font(Theme.number(26, weight: .bold))
+                        Text("\(b.percent)%").font(Theme.number(28, weight: .bold))
                         Image(systemName: b.pluggedIn ? "bolt.fill" : "battery.75percent")
                             .font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.textTertiary)
                     }
@@ -56,7 +56,7 @@ struct BatteryView: View {
                         Badge(text: stateText(b), color: chargeColor(b))
                         if b.hot { Badge(text: "Hot", color: Theme.critical) }
                     }
-                    Text(headline(b)).font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary)
+                    Text(headline(b)).font(.system(size: 13)).foregroundStyle(Theme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 28) {
                         stat("Health", "\(b.healthPercent)%", b.health < 0.8 ? Theme.critical : b.health < 0.85 ? Theme.review : Theme.safe,
@@ -77,7 +77,7 @@ struct BatteryView: View {
     func stat(_ title: String, _ value: String, _ color: Color, _ detail: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title).font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.textTertiary)
-            Text(value).font(Theme.number(20, weight: .bold)).foregroundStyle(color)
+            Text(value).font(Theme.number(22, weight: .bold)).foregroundStyle(color)
             Text(detail).font(.system(size: 11)).foregroundStyle(Theme.textTertiary).lineLimit(1)
         }
         .help(detail)
@@ -119,7 +119,7 @@ struct BatteryView: View {
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: tip.level == .good ? "checkmark.circle.fill" : tip.level == .note ? "info.circle.fill" : "exclamationmark.triangle.fill")
                             .foregroundStyle(tip.level == .good ? Theme.safe : tip.level == .note ? Theme.review : Theme.critical)
-                            .font(.system(size: 14))
+                            .font(.system(size: 15))
                         VStack(alignment: .leading, spacing: 3) {
                             Text(tip.title).font(.system(size: 13, weight: .semibold))
                             Text(tip.detail).font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
@@ -287,11 +287,11 @@ struct PowerFlowCard: View {
 
     func node(_ symbol: String, _ title: String, _ value: String, on: Bool) -> some View {
         VStack(spacing: 6) {
-            Image(systemName: symbol).font(.system(size: 20, weight: .semibold))
+            Image(systemName: symbol).font(.system(size: 22, weight: .semibold))
                 .foregroundStyle(on ? Theme.textPrimary : Theme.textTertiary)
                 .frame(width: 52, height: 52)
                 .background(Circle().fill(Theme.fill(on ? 0.07 : 0.03)))
-            Text(title).font(.system(size: 11.5, weight: .medium)).foregroundStyle(Theme.textSecondary)
+            Text(title).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.textSecondary)
             Text(value).font(Theme.number(13, weight: .semibold))
         }
         .frame(minWidth: 86)
@@ -300,7 +300,7 @@ struct PowerFlowCard: View {
     /// A flow, left to right (reversed: from the battery back to the Mac).
     func arrow(_ w: Double?, reversed: Bool = false) -> some View {
         VStack(spacing: 4) {
-            Image(systemName: reversed ? "arrow.left" : "arrow.right").font(.system(size: 14, weight: .bold))
+            Image(systemName: reversed ? "arrow.left" : "arrow.right").font(.system(size: 15, weight: .bold))
                 .foregroundStyle(w != nil ? Theme.safe : Theme.fill(0.15))
             Rectangle().fill(w != nil ? Theme.safe.opacity(0.5) : Theme.fill(0.08)).frame(height: 2)
         }
@@ -324,9 +324,9 @@ struct BatteryRecapCard: View {
                     Text(month.start.formatted(.dateTime.month(.wide).year())).font(.system(size: 12)).foregroundStyle(.white.opacity(0.6))
                 }
                 Spacer()
-                Image(systemName: mood.symbol).font(.system(size: 26, weight: .semibold)).foregroundStyle(Color(hex: 0x3DF5A7))
+                Image(systemName: mood.symbol).font(.system(size: 28, weight: .semibold)).foregroundStyle(Color(hex: 0x3DF5A7))
             }
-            Text(mood.rawValue).font(.system(size: 26, weight: .bold, design: .rounded)).foregroundStyle(.white)
+            Text(mood.rawValue).font(.system(size: 28, weight: .bold, design: .rounded)).foregroundStyle(.white)
             LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], spacing: 14) {
                 tile("\(Int((month.healthEnd * 100).rounded()))%", "battery health",
                      month.healthChange == 0 ? "no change" : "\(month.healthChange > 0 ? "+" : "−")\(abs(month.healthChange)) this month")
@@ -335,12 +335,12 @@ struct BatteryRecapCard: View {
                 tile("+\(month.cyclesUsed)", "charge cycles", "\(month.cyclesTotal) in total")
             }
             Text(mood.line).font(.system(size: 12)).foregroundStyle(.white.opacity(0.7)).fixedSize(horizontal: false, vertical: true)
-            Text("Measured by Headroom").font(.system(size: 10.5, weight: .medium)).foregroundStyle(.white.opacity(0.4))
+            Text("Measured by Headroom").font(.system(size: 11, weight: .medium)).foregroundStyle(.white.opacity(0.4))
         }
         .padding(22)
         .frame(width: 360)
         .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .fill(LinearGradient(colors: [Color(hex: 0x15302A), Color(hex: 0x0B0C10)], startPoint: .topLeading, endPoint: .bottomTrailing))
         )
     }
@@ -348,8 +348,8 @@ struct BatteryRecapCard: View {
     func tile(_ value: String, _ title: String, _ detail: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(value).font(.system(size: 22, weight: .bold, design: .rounded)).foregroundStyle(.white)
-            Text(title).font(.system(size: 11.5, weight: .medium)).foregroundStyle(.white.opacity(0.75))
-            Text(detail).font(.system(size: 10.5)).foregroundStyle(.white.opacity(0.45))
+            Text(title).font(.system(size: 12, weight: .medium)).foregroundStyle(.white.opacity(0.75))
+            Text(detail).font(.system(size: 11)).foregroundStyle(.white.opacity(0.45))
         }
     }
 }

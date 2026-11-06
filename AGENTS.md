@@ -224,6 +224,11 @@ README screenshots are rendered with `--demo` so no personal projects or files a
   `.environment(\.colorScheme, .dark)`, renders pass `.environment(\.colorScheme, …)` (ImageRenderer
   ignores `preferredColorScheme`), and the Minimal look swaps colours for greys — MainView rebuilds its
   content with `.id(look)`. Never hardcode `Color.white` fills; use `Theme.fill(_:)`.
+- Design locks (after Appllama's anti-slop pre-flight): type sizes 9 10 11 12 13 15 17 22 28 (34+ only for hero numbers
+  and icons); corner radii 4 bars · 8 ghost controls · 12 buttons, rows, fields · 16 inner panels · 20 cards, always
+  `.continuous`, chips are Capsules. One accent (`Theme.accent`) for actions, done ticks and progress; the primary button
+  is a flat fill — no gradient, no glow — pressed with a 0.12 s ease-out (no scale under Reduce Motion). The window and
+  notch roots set `.monospacedDigit()`. No emoji or ✓ glyphs in chrome — SF Symbols.
 - Grid keys (⌘C, ⇧⌘C, ⌘A, ⌘⌫, Space, arrows) are `onKeyPress` on the focused grid, so they never steal
   copy/paste from a text field. Keys bubble up from children, so never put a text field inside a
   `FileGrid` header (Space would open Quick Look, Return the focused file) — put it above the grid. ⌘1–9 = Home, Recents, Images, Videos, Music, Documents, Archives, Apps,

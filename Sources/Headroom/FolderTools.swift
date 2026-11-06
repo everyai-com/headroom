@@ -178,7 +178,7 @@ struct GroupHeader: View {
     var body: some View {
         HStack(spacing: 6) {
             Text(group.title).font(.system(size: 13, weight: .bold, design: .rounded))
-            Text("\(group.items.count)").font(.system(size: 11.5, weight: .medium)).foregroundStyle(Theme.textTertiary)
+            Text("\(group.items.count)").font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.textTertiary)
             Rectangle().fill(Theme.hairline).frame(height: 1).padding(.leading, 4)
         }
         .padding(.top, 4)
@@ -277,7 +277,7 @@ struct EditorSettingRow: View {
             if editors.isEmpty {
                 Text("No code editor installed").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
             } else if snapshot {
-                Text(DevOpen.editor?.name ?? "").font(.system(size: 12.5, weight: .medium))
+                Text(DevOpen.editor?.name ?? "").font(.system(size: 13, weight: .medium))
             } else {
                 Picker("", selection: Binding(get: { DevOpen.editor?.name ?? "" }, set: { chosen = $0 })) {
                     ForEach(editors) { Text($0.name).tag($0.name) }

@@ -138,9 +138,9 @@ struct ShortcutRecorder: View {
                     Text(hotKey.recording ? "Press keys…" : (hotKey.combo.map { KeyCombo.presets.contains($0) ? "Other…" : $0.title } ?? "Off"))
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .padding(.horizontal, 10).padding(.vertical, 5)
-                        .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .fill(hotKey.recording ? Theme.accent.opacity(0.22) : Theme.fill(0.06)))
-                        .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .strokeBorder(hotKey.recording ? Theme.accent : Theme.hairline))
                 }
                 .buttonStyle(.plain)
@@ -164,7 +164,7 @@ struct ShortcutRecorder: View {
                     Button("Turn it off in Keyboard Shortcuts…") {
                         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension")!)
                     }
-                    .buttonStyle(.link).font(.system(size: 11.5))
+                    .buttonStyle(.link).font(.system(size: 12))
                 }
             } else {
                 note("\(combo.title) opens Quick Search from any app.", Theme.accent, "checkmark.circle.fill")
@@ -175,7 +175,7 @@ struct ShortcutRecorder: View {
     }
 
     func note(_ text: String, _ color: Color, _ symbol: String) -> some View {
-        Label(text, systemImage: symbol).font(.system(size: 11.5)).foregroundStyle(color)
+        Label(text, systemImage: symbol).font(.system(size: 12)).foregroundStyle(color)
             .multilineTextAlignment(.trailing).fixedSize(horizontal: false, vertical: true)
     }
 

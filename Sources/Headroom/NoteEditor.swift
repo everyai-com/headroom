@@ -58,7 +58,7 @@ struct NoteEditor: View {
                 .background(Theme.fill(0.06))
             }
             TextEditor(text: $text)
-                .font(.system(size: 14, design: url.pathExtension.lowercased() == "txt" ? .default : .monospaced))
+                .font(.system(size: 15, design: url.pathExtension.lowercased() == "txt" ? .default : .monospaced))
                 .scrollContentBackground(.hidden)
                 .padding(.horizontal, 12).padding(.top, 10)
                 .disabled(!loaded)

@@ -52,7 +52,7 @@ struct NotchView: View {
         HStack(spacing: 4) {
             ForEach([(NotchTab.today, "Today"), (.space, "Space")], id: \.0) { t, title in
                 Button { withAnimation(.easeOut(duration: 0.15)) { tab = t } } label: {
-                    Text(title).font(.system(size: 11.5, weight: .semibold)).fixedSize()
+                    Text(title).font(.system(size: 12, weight: .semibold)).fixedSize()
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .background(Capsule().fill(tab == t ? Theme.fill(0.16) : .clear))
                         .foregroundStyle(tab == t ? Theme.textPrimary : Theme.textTertiary)
@@ -80,7 +80,7 @@ struct NotchView: View {
             .frame(width: Self.wing, alignment: .center)
             Spacer().frame(width: notchWidth)
             Text(ByteFormat.compact(v.free))
-                .font(Theme.number(12.5, weight: .bold))
+                .font(Theme.number(13, weight: .bold))
                 .foregroundStyle(tint)
                 .frame(width: Self.wing, alignment: .center)
                 .modifier(Pulse(active: v.health == .critical))
@@ -99,11 +99,11 @@ struct NotchView: View {
                 .frame(width: 44, height: 44)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(v.free.gb).font(Theme.number(24, weight: .bold))
+                        Text(v.free.gb).font(Theme.number(22, weight: .bold))
                         Text("free").font(.system(size: 13)).foregroundStyle(Theme.textSecondary)
                     }
                     Text("of \(v.total.gb) · \(v.health == .critical ? "critically low" : v.health == .tight ? "getting tight" : "healthy")")
-                        .font(.system(size: 11.5)).foregroundStyle(v.health == .good ? Theme.textTertiary : tint)
+                        .font(.system(size: 12)).foregroundStyle(v.health == .good ? Theme.textTertiary : tint)
                 }
                 Spacer()
                 // Memory at a glance: how full RAM is, coloured by pressure.
@@ -111,7 +111,7 @@ struct NotchView: View {
                 let memTint = m.pressure == .critical ? Theme.critical : m.pressure == .warning ? Theme.review : Theme.textSecondary
                 HStack(spacing: 5) {
                     Image(systemName: "memorychip").font(.system(size: 10, weight: .semibold))
-                    Text("RAM \(Int((m.usedFraction * 100).rounded()))%").font(Theme.number(11.5, weight: .semibold))
+                    Text("RAM \(Int((m.usedFraction * 100).rounded()))%").font(Theme.number(12, weight: .semibold))
                 }
                 .foregroundStyle(memTint)
                 .padding(.horizontal, 8).padding(.vertical, 5)
@@ -280,6 +280,7 @@ final class NotchController {
             NotificationCenter.default.post(name: .headroomShowScreen, object: screen)
         })
         .environmentObject(model)
+        .monospacedDigit()
         // The notch is black whatever the window looks like.
         .environment(\.colorScheme, .dark)
         if let hosting {

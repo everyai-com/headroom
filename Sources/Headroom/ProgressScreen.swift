@@ -12,7 +12,7 @@ struct FocusBar: View {
         if let s = p.runningSession {
             HStack(spacing: 8) {
                 Image(systemName: "timer").foregroundStyle(Theme.safe)
-                Text(s.title).font(.system(size: 12.5, weight: .medium)).lineLimit(1)
+                Text(s.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
                 FocusClock(start: s.start).foregroundStyle(Theme.safe)
                 FocusQuality(session: s)
                 Button("Stop") { model.stopFocus() }.buttonStyle(GhostButtonStyle()).controlSize(.small)
@@ -21,7 +21,7 @@ struct FocusBar: View {
             let open = p.today().filter { !$0.isDone }
             let next = open.first
             HStack(spacing: 8) {
-                Text(headline(next: next)).font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary).lineLimit(1)
+                Text(headline(next: next)).font(.system(size: 13)).foregroundStyle(Theme.textSecondary).lineLimit(1)
                 if let next, !snapshot {
                     Button { model.startFocus(next.title, task: next) } label: { Label("Focus", systemImage: "timer") }
                         .buttonStyle(GhostButtonStyle()).controlSize(.small)
@@ -107,8 +107,8 @@ struct JourneyView: View {
                 ZStack {
                     GaugeRing(fraction: level.fraction, tint: Theme.accent, lineWidth: 10)
                     VStack(spacing: 0) {
-                        Text("\(level.number)").font(.system(size: 30, weight: .bold, design: .rounded))
-                        Text("level").font(.system(size: 10.5)).foregroundStyle(Theme.textTertiary)
+                        Text("\(level.number)").font(.system(size: 28, weight: .bold, design: .rounded))
+                        Text("level").font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
                     }
                 }
                 .frame(width: 86, height: 86)
@@ -116,7 +116,7 @@ struct JourneyView: View {
                     Text(rank.title).font(.system(size: 22, weight: .bold, design: .rounded))
                     Text("\(xp.formatted()) XP earned · \(level.needed - level.into) to level \(level.number + 1)"
                          + (rank.next.map { " · \($0.title) at level \($0.level)" } ?? ""))
-                        .font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary)
+                        .font(.system(size: 13)).foregroundStyle(Theme.textSecondary)
                     HStack(spacing: 14) {
                         stat(p.coins().formatted(), "coins", "circle.hexagongrid.fill", Theme.review)
                         stat("\(p.focusMinutes())", "min focused today", "timer", Theme.safe)
@@ -152,13 +152,13 @@ struct JourneyView: View {
                     ForEach(list) { a in
                         VStack(alignment: .leading, spacing: 6) {
                             HStack(alignment: .firstTextBaseline) {
-                                Text(a.name).font(.system(size: 13.5, weight: .semibold)).lineLimit(1)
+                                Text(a.name).font(.system(size: 13, weight: .semibold)).lineLimit(1)
                                 Spacer()
                                 Text("Lv \(a.level.number)").font(Theme.number(12, weight: .bold)).foregroundStyle(Theme.accent)
                             }
                             SegmentedBar(segments: [.init(id: a.name, value: Double(a.level.into), color: Theme.accent)],
                                          total: Double(a.level.needed), height: 6)
-                            Text("\(a.level.into) / \(a.level.needed) XP").font(Theme.number(10.5, weight: .medium)).foregroundStyle(Theme.textTertiary)
+                            Text("\(a.level.into) / \(a.level.needed) XP").font(Theme.number(11, weight: .medium)).foregroundStyle(Theme.textTertiary)
                         }
                         .padding(12)
                         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.fill(0.04)))
@@ -251,7 +251,7 @@ struct JourneyView: View {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(r.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
                             Text(coins >= r.cost ? "\(r.cost.formatted()) coins" : "\(r.cost.formatted()) coins · \((r.cost - coins).formatted()) to go")
-                                .font(Theme.number(10.5, weight: .medium)).foregroundStyle(Theme.textTertiary)
+                                .font(Theme.number(11, weight: .medium)).foregroundStyle(Theme.textTertiary)
                         }
                         Spacer()
                         Button("Buy") { model.buy(r) }.buttonStyle(GhostButtonStyle()).controlSize(.small).disabled(coins < r.cost)
@@ -269,11 +269,11 @@ struct JourneyView: View {
                         Text("coins").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                     }
                     .padding(.horizontal, 10).frame(height: 36)
-                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.fill(0.04)))
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.fill(0.04)))
                 }
                 let bought = p.purchases.sorted { $0.date > $1.date }.prefix(3)
                 if !bought.isEmpty {
-                    Text("Enjoyed: " + bought.map(\.title).joined(separator: ", ")).font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                    Text("Enjoyed: " + bought.map(\.title).joined(separator: ", ")).font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                 }
             }
         }
@@ -299,12 +299,12 @@ struct JourneyView: View {
                 ForEach(entries) { e in
                     HStack(spacing: 8) {
                         Image(systemName: symbol(e.kind)).font(.system(size: 11)).foregroundStyle(Theme.textTertiary).frame(width: 14)
-                        Text(e.title).font(.system(size: 12.5)).lineLimit(1)
+                        Text(e.title).font(.system(size: 13)).lineLimit(1)
                         Spacer(minLength: 6)
                         Text(e.coins < 0 ? "\(e.coins) coins" : "+\(e.xp)")
-                            .font(Theme.number(11.5, weight: .semibold)).foregroundStyle(e.coins < 0 ? Theme.review : Theme.safe)
+                            .font(Theme.number(12, weight: .semibold)).foregroundStyle(e.coins < 0 ? Theme.review : Theme.safe)
                         Text(e.date.formatted(.relative(presentation: .named, unitsStyle: .abbreviated)))
-                            .font(.system(size: 10.5)).foregroundStyle(Theme.textTertiary).frame(width: 62, alignment: .trailing)
+                            .font(.system(size: 11)).foregroundStyle(Theme.textTertiary).frame(width: 62, alignment: .trailing)
                     }
                 }
             }

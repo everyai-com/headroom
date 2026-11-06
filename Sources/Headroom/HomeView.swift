@@ -189,9 +189,9 @@ struct FolderCard: View {
                 }
                 .padding(.top, 2)
                 Spacer(minLength: 0)
-                Text(kind.title).font(.system(size: 16, weight: .bold, design: .rounded)).foregroundStyle(Theme.textPrimary)
+                Text(kind.title).font(.system(size: 15, weight: .bold, design: .rounded)).foregroundStyle(Theme.textPrimary)
                 Text("\(totals.count.formatted()) items · \(ByteFormat.string(totals.bytes))")
-                    .font(.system(size: 11.5, weight: .medium)).foregroundStyle(Theme.textSecondary).lineLimit(1)
+                    .font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.textSecondary).lineLimit(1)
                     .padding(.top, 2)
             }
             .padding(.horizontal, 14).padding(.bottom, 14).padding(.top, 30)
@@ -216,7 +216,7 @@ struct AppIconStack: View {
                 Image(nsImage: NSWorkspace.shared.icon(forFile: app.url.path)).resizable().frame(width: 26, height: 26)
             }
             if total > apps.count, !apps.isEmpty {
-                Text("+\(total - apps.count)").font(.system(size: 9.5, weight: .semibold, design: .rounded)).foregroundStyle(Theme.textSecondary)
+                Text("+\(total - apps.count)").font(.system(size: 10, weight: .semibold, design: .rounded)).foregroundStyle(Theme.textSecondary)
                     .lineLimit(1).fixedSize()
                     .padding(.horizontal, 6).padding(.vertical, 5).background(Capsule().fill(Theme.surface))
                     .overlay(Capsule().strokeBorder(Theme.hairline)).padding(.leading, 9)
@@ -270,12 +270,12 @@ struct SuggestionCard: View {
                 Text(ByteFormat.string(suggestion.bytes)).font(Theme.number(large ? 26 : 22, weight: .bold))
             }
             if large {
-                Text(suggestion.kind.detail).font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                Text(suggestion.kind.detail).font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                     .fixedSize(horizontal: false, vertical: true).lineLimit(3)
             }
             HStack {
                 Spacer()
-                Text(countLabel).font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                Text(countLabel).font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                 Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.textTertiary)
             }
         }
@@ -310,8 +310,8 @@ struct SourceCard: View {
             }
         }
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.surface).shadow(color: Theme.shadow, radius: 6, y: 2))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.hairline))
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.surface).shadow(color: Theme.shadow, radius: 6, y: 2))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.hairline))
     }
 }
 

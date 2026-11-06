@@ -85,10 +85,10 @@ struct ReclaimView: View {
             VStack(spacing: 0) {
                 HStack(spacing: 10) {
                     Circle().fill(Theme.color(for: safety)).frame(width: 9, height: 9)
-                    Text(safety.label).font(.system(size: 14, weight: .semibold))
+                    Text(safety.label).font(.system(size: 15, weight: .semibold))
                     Text(subtitle(safety)).font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                     Spacer()
-                    Text(total.gb).font(Theme.number(14, weight: .semibold)).foregroundStyle(Theme.color(for: safety))
+                    Text(total.gb).font(Theme.number(15, weight: .semibold)).foregroundStyle(Theme.color(for: safety))
                     if safety != .keep {
                         Button(allOn ? "Deselect all" : "Select all") {
                             for f in items where f.reclaimable > 0 {
@@ -131,7 +131,7 @@ struct ReclaimView: View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("\(groups.count) projects with build output · \(groups.reduce(0) { $0 + $1.bytes }.gb)")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 15, weight: .semibold))
                     Text("\(idle.count) untouched for 30+ days hold \(idle.reduce(0) { $0 + $1.bytes }.gb)")
                         .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
                 }
@@ -149,12 +149,12 @@ struct ReclaimView: View {
                 VStack(spacing: 0) {
                     HStack(spacing: 10) {
                         Image(systemName: "folder.fill").foregroundStyle(Theme.color(for: .projectArtifacts))
-                        Text(g.id).font(.system(size: 14, weight: .semibold))
+                        Text(g.id).font(.system(size: 15, weight: .semibold))
                         if let used = g.lastUsed {
                             Text("touched \(used.ago)").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                         }
                         Spacer()
-                        Text(g.bytes.gb).font(Theme.number(14, weight: .semibold))
+                        Text(g.bytes.gb).font(Theme.number(15, weight: .semibold))
                         Button(allOn ? "Deselect" : "Select all") {
                             for f in g.items where f.reclaimable > 0 {
                                 if allOn { model.selected.remove(f.id) } else { model.selected.insert(f.id) }
@@ -210,8 +210,8 @@ struct ReclaimView: View {
             }
             .padding(.horizontal, 20).padding(.vertical, 14)
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.surfaceRaised.opacity(0.96))
-                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.hairline))
+                RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.surfaceRaised.opacity(0.96))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.hairline))
                     .shadow(color: .black.opacity(0.5), radius: 24, y: 8)
             )
             .padding(.horizontal, 4).padding(.bottom, 4)
@@ -243,27 +243,27 @@ struct FindingRow: View {
             .padding(.top, 9)
 
             ZStack {
-                RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Theme.color(for: finding.category).opacity(0.16))
-                Image(systemName: finding.symbol).font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.color(for: finding.category))
+                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.color(for: finding.category).opacity(0.16))
+                Image(systemName: finding.symbol).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.color(for: finding.category))
             }
             .frame(width: 34, height: 34)
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Text(finding.project.map { "\($0) · \(finding.title)" } ?? finding.title)
-                        .font(.system(size: 13.5, weight: .semibold)).lineLimit(1)
+                        .font(.system(size: 13, weight: .semibold)).lineLimit(1)
                     if let rebuild = finding.rebuild {
-                        Text(rebuild).font(.system(size: 10.5, design: .monospaced)).foregroundStyle(Theme.textSecondary)
+                        Text(rebuild).font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.textSecondary)
                             .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(RoundedRectangle(cornerRadius: 5).fill(Theme.fill(0.06)))
+                            .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(Theme.fill(0.06)))
                     }
                 }
-                Text(finding.subtitle).font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary).lineLimit(1).truncationMode(.middle)
+                Text(finding.subtitle).font(.system(size: 12)).foregroundStyle(Theme.textTertiary).lineLimit(1).truncationMode(.middle)
                 Text(finding.detail).font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 12)
             VStack(alignment: .trailing, spacing: 4) {
-                Text(finding.size.allocated > 0 ? finding.size.allocated.gb : "—").font(Theme.number(14, weight: .semibold))
+                Text(finding.size.allocated > 0 ? finding.size.allocated.gb : "—").font(Theme.number(15, weight: .semibold))
                 if reclaimable, finding.reclaimable < finding.size.allocated * 9 / 10 {
                     Text("frees \(finding.reclaimable.gb)").font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
                         .help("Shared with other projects through hard links — only this much is actually freed.")

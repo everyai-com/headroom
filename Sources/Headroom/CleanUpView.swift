@@ -26,9 +26,9 @@ struct CleanUpView: View {
                     HStack(alignment: .center, spacing: 20) {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Free up \(ByteFormat.string(total + model.safeReclaimable))")
-                                .font(.system(size: 30, weight: .bold, design: .rounded))
+                                .font(.system(size: 28, weight: .bold, design: .rounded))
                             Text("Headroom finds the stuff you forgot about and shows you what it's worth. You review it, you decide. Files go to the Trash, so you can always put them back.")
-                                .font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
+                                .font(.system(size: 13)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
                         }
                         Spacer(minLength: 10)
                         if library.duplicatesScanned == nil {
@@ -55,7 +55,7 @@ struct CleanUpView: View {
                                detail: "No old installers, forgotten downloads, old screenshots or unused apps. Nice and tidy.")
                 }
                 Text("Example rules: installers untouched for 30 days or already installed · downloads not opened in 3 months · screenshots and screen recordings older than a month · videos over 500 MB untouched for 6 months · Mail attachments you opened over a week ago · apps not opened in 3 months.")
-                    .font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary).fixedSize(horizontal: false, vertical: true)
+                    .font(.system(size: 12)).foregroundStyle(Theme.textTertiary).fixedSize(horizontal: false, vertical: true)
             }
             .padding(.bottom, 24)
         }
@@ -72,11 +72,11 @@ struct CleanUpView: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text("Caches & build output").font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.textSecondary)
-                Text(ByteFormat.string(model.safeReclaimable)).font(Theme.number(26, weight: .bold))
+                Text(ByteFormat.string(model.safeReclaimable)).font(Theme.number(28, weight: .bold))
             }
             Text("Temporary files your apps and tools make again on their own. Nothing of yours.")
-                .font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary).fixedSize(horizontal: false, vertical: true)
-            HStack { Spacer(); Text("Reclaim").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                .font(.system(size: 12)).foregroundStyle(Theme.textTertiary).fixedSize(horizontal: false, vertical: true)
+            HStack { Spacer(); Text("Reclaim").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                 Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.textTertiary) }
         }
         .padding(14)
@@ -104,7 +104,7 @@ struct CleanUpReview: View {
                 Image(systemName: kind.symbol).font(.system(size: 15, weight: .bold)).foregroundStyle(Theme.accent)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(kind.title).font(.system(size: 17, weight: .bold, design: .rounded))
-                    Text(kind.detail).font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                    Text(kind.detail).font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                 }
                 Spacer()
                 if kind == .duplicates {
@@ -160,7 +160,7 @@ struct CleanUpReview: View {
                             Image(nsImage: NSWorkspace.shared.icon(forFile: app.url.path)).resizable().frame(width: 34, height: 34)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(app.name).font(.system(size: 13, weight: .semibold))
-                                Text("Last opened \(app.lastUsed?.ago ?? "never")").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                                Text("Last opened \(app.lastUsed?.ago ?? "never")").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                             }
                             Spacer()
                             Text(ByteFormat.string(app.totalSize)).font(Theme.number(13))

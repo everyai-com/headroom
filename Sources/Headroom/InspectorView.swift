@@ -29,7 +29,7 @@ struct InspectorView: View {
                 one(item)
             } else {
                 VStack(spacing: 8) {
-                    Image(systemName: "cursorarrow.click.2").font(.system(size: 26)).foregroundStyle(Theme.textTertiary)
+                    Image(systemName: "cursorarrow.click.2").font(.system(size: 28)).foregroundStyle(Theme.textTertiary)
                     Text("Select a file to see its details").font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -49,7 +49,7 @@ struct InspectorView: View {
                     .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.fill(0.045)))
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(item.name).font(.system(size: 14, weight: .semibold)).lineLimit(3).textSelection(.enabled)
+                    Text(item.name).font(.system(size: 15, weight: .semibold)).lineLimit(3).textSelection(.enabled)
                     Text(item.isFolder ? "Folder" : "\(item.typeLabel) · \(ByteFormat.string(item.bytes))")
                         .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
                 }
@@ -74,7 +74,7 @@ struct InspectorView: View {
                             Image(systemName: "folder.fill").foregroundStyle(Theme.tint(for: .document))
                             Text(LibraryModel.display(item.folder)).lineLimit(2).truncationMode(.head)
                         }
-                        .font(.system(size: 11.5))
+                        .font(.system(size: 12))
                     }
                     .buttonStyle(.plain)
                     .help("Open this folder in Headroom")
@@ -119,7 +119,7 @@ struct InspectorView: View {
             Button { library.sourceID = source.id; NotificationCenter.default.post(name: .headroomShowScreen, object: Screen.downloads) } label: {
                 HStack(spacing: 8) {
                     SourceIcon(source: source, size: 22)
-                    Text(source.name).font(.system(size: 12.5, weight: .semibold))
+                    Text(source.name).font(.system(size: 13, weight: .semibold))
                     Spacer()
                     Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.textTertiary)
                 }
@@ -141,12 +141,12 @@ struct InspectorView: View {
     func textSection(_ item: LibraryItem) -> some View {
         section("Text in \(item.kind == .image ? "image" : "file")") {
             if let text, !text.isEmpty {
-                Text(text.prefix(1200)).font(.system(size: 11.5)).foregroundStyle(Theme.textSecondary)
+                Text(text.prefix(1200)).font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
                     .textSelection(.enabled).lineLimit(14)
                 Button { Task { await library.copyText([item]) } } label: { Label("Copy Text", systemImage: "doc.on.clipboard") }
                     .buttonStyle(GhostButtonStyle())
             } else if text != nil {
-                Text("No text found.").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                Text("No text found.").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
             } else {
                 Button {
                     reading = true
@@ -193,7 +193,7 @@ struct InspectorView: View {
             Spacer(minLength: 8)
             Text(value).multilineTextAlignment(.trailing).textSelection(.enabled)
         }
-        .font(.system(size: 11.5))
+        .font(.system(size: 12))
     }
 
     static func imageSize(_ url: URL, into d: Spotlight.Details) -> Spotlight.Details {

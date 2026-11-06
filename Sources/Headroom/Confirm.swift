@@ -35,8 +35,8 @@ private struct ConfirmCard<A: View, M: View>: View {
 
     var body: some View {
             VStack(alignment: .leading, spacing: 12) {
-                Text(title).font(.system(size: 16, weight: .semibold)).fixedSize(horizontal: false, vertical: true)
-                message().font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
+                Text(title).font(.system(size: 15, weight: .semibold)).fixedSize(horizontal: false, vertical: true)
+                message().font(.system(size: 13)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 10) {
                     Spacer()
                     actions()

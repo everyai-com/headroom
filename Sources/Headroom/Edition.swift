@@ -99,7 +99,7 @@ struct HomeAccessCard: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Let Headroom see your files").font(.system(size: 15, weight: .semibold))
                         Text("macOS keeps App Store apps out of your folders until you choose one. Pick your home folder once and Headroom can show your files by kind, find duplicates, tidy the Desktop and say what takes the space. Nothing leaves your Mac.")
-                            .font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
+                            .font(.system(size: 13)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
                         Button("Choose Home Folder…") {
                             if access.request(HeadroomPaths.home, message: "Choose your home folder (\(NSUserName())) so Headroom can see your files.") {
                                 Task { await library.scan() }

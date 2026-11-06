@@ -10,7 +10,7 @@ struct LibrarySearchBar: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass").font(.system(size: 12.5, weight: .semibold)).foregroundStyle(Theme.textTertiary)
+            Image(systemName: "magnifyingglass").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.textTertiary)
             if snapshot {
                 Text(library.searchText.isEmpty ? "Search, or try “pdfs from last week”…" : library.searchText)
                     .font(.system(size: 13)).foregroundStyle(library.searchText.isEmpty ? Theme.textTertiary : Theme.textPrimary)
@@ -32,9 +32,9 @@ struct LibrarySearchBar: View {
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Theme.surface)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.surface)
             .shadow(color: Theme.shadow, radius: 8, y: 2))
-        .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous)
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
             .strokeBorder(focused ? Theme.accent.opacity(0.6) : Theme.hairline, lineWidth: focused ? 1.5 : 1))
         .onChange(of: library.focusSearch) { _, _ in focused = true }
     }
@@ -46,10 +46,10 @@ struct Keycap: View {
     init(_ text: String) { self.text = text }
 
     var body: some View {
-        Text(text).font(.system(size: 10.5, weight: .semibold, design: .rounded)).foregroundStyle(Theme.textTertiary)
+        Text(text).font(.system(size: 11, weight: .semibold, design: .rounded)).foregroundStyle(Theme.textTertiary)
             .padding(.horizontal, 5).padding(.vertical, 2)
-            .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(Theme.fill(0.06)))
-            .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Theme.hairline))
+            .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(Theme.fill(0.06)))
+            .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(Theme.hairline))
     }
 }
 
@@ -67,7 +67,7 @@ struct QueryChips: View {
                         Image(systemName: chip.symbol).font(.system(size: 10, weight: .semibold)).foregroundStyle(color(chip.kind))
                         Text(chip.label).font(.system(size: 12, weight: .medium))
                         Button { library.searchText = chip.removing } label: {
-                            Image(systemName: "xmark").font(.system(size: 8, weight: .bold)).foregroundStyle(Theme.textTertiary)
+                            Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.textTertiary)
                         }
                         .buttonStyle(.plain).help("Remove")
                     }
@@ -105,7 +105,7 @@ struct SearchExamples: View {
             FlowLayout(spacing: 8) {
                 ForEach(Self.examples, id: \.self) { e in
                     Button { library.search(e) } label: {
-                        Text("“\(e)”").font(.system(size: 12.5)).padding(.horizontal, 11).padding(.vertical, 6)
+                        Text("“\(e)”").font(.system(size: 13)).padding(.horizontal, 11).padding(.vertical, 6)
                             .background(Capsule().fill(Theme.fill(0.05))).overlay(Capsule().strokeBorder(Theme.hairline))
                     }
                     .buttonStyle(.plain)
@@ -221,7 +221,7 @@ struct SavedSearchScreen: View {
         if let saved = library.saved.first(where: { $0.id == library.savedID }) {
             let items = library.matches(for: saved.query)
             FileGrid(items: items, header: AnyView(HStack {
-                Label("“\(saved.query)”", systemImage: "magnifyingglass").font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary)
+                Label("“\(saved.query)”", systemImage: "magnifyingglass").font(.system(size: 13)).foregroundStyle(Theme.textSecondary)
                 Text("· \(items.count) files").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                 Spacer()
                 Button("Edit Search") { library.search(saved.query); NotificationCenter.default.post(name: .headroomShowScreen, object: Screen.search) }
@@ -300,10 +300,10 @@ struct FolderScreen: View {
             Button { library.browseBack() } label: { Image(systemName: "chevron.left") }
                 .buttonStyle(GhostButtonStyle()).disabled(library.browseHistory.isEmpty).help("Back")
             ForEach(Array(parts.enumerated()), id: \.offset) { i, part in
-                if i > 0 { Image(systemName: "chevron.right").font(.system(size: 8, weight: .bold)).foregroundStyle(Theme.textTertiary) }
+                if i > 0 { Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.textTertiary) }
                 Button(part.0) { library.browse(part.1) }
                     .buttonStyle(.plain)
-                    .font(.system(size: 12.5, weight: i == parts.count - 1 ? .semibold : .regular))
+                    .font(.system(size: 13, weight: i == parts.count - 1 ? .semibold : .regular))
                     .foregroundStyle(i == parts.count - 1 ? Theme.textPrimary : Theme.textSecondary)
             }
             GitBadge(path: path).padding(.leading, 6)

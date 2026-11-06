@@ -65,12 +65,12 @@ struct SetupCard: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Finish setting up").font(.system(size: 17, weight: .bold, design: .rounded))
                             Text("Once, a few minutes each. Then the path above runs your day.")
-                                .font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary)
+                                .font(.system(size: 13)).foregroundStyle(Theme.textSecondary)
                         }
                         Spacer()
                         Text("\(done) of \(all.count)").font(Theme.number(13, weight: .semibold)).foregroundStyle(Theme.accent)
                         if !snapshot {
-                            Button("Hide") { hidden = true }.buttonStyle(.borderless).font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                            Button("Hide") { hidden = true }.buttonStyle(.borderless).font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                         }
                     }
                     ProgressBar(fraction: Double(done) / Double(max(1, all.count)))
@@ -95,14 +95,14 @@ struct SetupCard: View {
         HStack(alignment: .top, spacing: 10) {
             ZStack {
                 Circle().fill(item.done ? Theme.accent : next ? Theme.accent.opacity(0.16) : Theme.fill(0.06)).frame(width: 30, height: 30)
-                Image(systemName: item.done ? "checkmark" : item.symbol).font(.system(size: 12.5, weight: .semibold))
+                Image(systemName: item.done ? "checkmark" : item.symbol).font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(item.done ? Theme.onAccent : next ? Theme.accent : Theme.textSecondary)
             }
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.title).font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(item.done ? Theme.textTertiary : Theme.textPrimary).strikethrough(item.done)
                 if !item.done {
-                    Text(item.detail).font(.system(size: 11.5)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
+                    Text(item.detail).font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
                 }
             }
             Spacer(minLength: 4)
@@ -156,20 +156,20 @@ struct DayPathCard: View {
                         Text("\(phase.title.uppercased()) · \(done.count) OF \(DayPath.Step.allCases.count) ON TODAY'S PATH")
                             .font(.system(size: 11, weight: .bold)).tracking(0.6).foregroundStyle(Theme.accent)
                         if let next {
-                            Text(headline(next)).font(.system(size: 24, weight: .bold, design: .rounded)).fixedSize(horizontal: false, vertical: true)
-                            Text(next.why).font(.system(size: 13.5)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
+                            Text(headline(next)).font(.system(size: 22, weight: .bold, design: .rounded)).fixedSize(horizontal: false, vertical: true)
+                            Text(next.why).font(.system(size: 13)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
                         } else {
                             Text(phase == .evening ? "Day closed. Rest well." : "On track. Keep going.")
-                                .font(.system(size: 24, weight: .bold, design: .rounded))
+                                .font(.system(size: 22, weight: .bold, design: .rounded))
                             Text(phase == .evening ? "Tomorrow's top thing is set — the morning starts already moving."
                                  : "Everything for now is done. The evening ritual opens after 5 pm.")
-                                .font(.system(size: 13.5)).foregroundStyle(Theme.textSecondary)
+                                .font(.system(size: 13)).foregroundStyle(Theme.textSecondary)
                         }
                     }
                     Spacer(minLength: 12)
                     if let next {
                         Button { perform(next) } label: {
-                            Label(action(next), systemImage: next.symbol).font(.system(size: 14, weight: .semibold)).padding(.horizontal, 6)
+                            Label(action(next), systemImage: next.symbol).font(.system(size: 15, weight: .semibold)).padding(.horizontal, 6)
                         }
                         .buttonStyle(PrimaryButtonStyle()).controlSize(.large)
                         .disabled(coach.asking != nil && next == .plan)
@@ -198,7 +198,7 @@ struct DayPathCard: View {
         Button { perform(s) } label: {
             HStack(spacing: 6) {
                 Image(systemName: done ? "checkmark" : s.symbol).font(.system(size: 11, weight: .semibold))
-                if next { Text(s.title).font(.system(size: 11.5, weight: .semibold)).lineLimit(1) }
+                if next { Text(s.title).font(.system(size: 12, weight: .semibold)).lineLimit(1) }
             }
             .padding(.horizontal, next ? 10 : 0)
             .frame(minWidth: 30, minHeight: 30)
@@ -290,7 +290,7 @@ struct EveningSheet: View {
                             ForEach([1, 2, 3, 4], id: \.self) { v in
                                 let on = progress == v
                                 Button { progress = on ? nil : v } label: {
-                                    Text(["", "Little", "Mixed", "Solid", "Massive"][v]).font(.system(size: 12.5, weight: on ? .semibold : .regular))
+                                    Text(["", "Little", "Mixed", "Solid", "Massive"][v]).font(.system(size: 13, weight: on ? .semibold : .regular))
                                         .padding(.horizontal, 14).frame(height: 30)
                                         .background(Capsule().fill(on ? Theme.accent : Theme.fill(0.06)))
                                         .foregroundStyle(on ? Theme.onAccent : Theme.textSecondary)
@@ -313,7 +313,7 @@ struct EveningSheet: View {
                     section(4, "A few lines about today", xp: "+10") {
                         TextEditor(text: $note).font(.system(size: 13)).scrollContentBackground(.hidden)
                             .padding(6).frame(height: 84)
-                            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.fill(0.04)))
+                            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.fill(0.04)))
                     }
                     section(5, "In the certain way, today I…", xp: "3+ = +10") {
                         FlowLayout(spacing: 6) {
@@ -343,7 +343,7 @@ struct EveningSheet: View {
                                         Image(systemName: tomorrowTop == t.id ? "largecircle.fill.circle" : "circle")
                                             .foregroundStyle(tomorrowTop == t.id ? Theme.accent : Theme.textTertiary)
                                         Text(t.title).font(.system(size: 13))
-                                        if t.big { Image(systemName: "star.fill").font(.system(size: 8)).foregroundStyle(Theme.review) }
+                                        if t.big { Image(systemName: "star.fill").font(.system(size: 9)).foregroundStyle(Theme.review) }
                                         Spacer()
                                     }
                                     .contentShape(Rectangle())
@@ -376,7 +376,7 @@ struct EveningSheet: View {
             HStack(spacing: 8) {
                 Text("\(n)").font(Theme.number(11, weight: .bold)).foregroundStyle(Theme.accent)
                     .frame(width: 20, height: 20).background(Circle().fill(Theme.accent.opacity(0.14)))
-                Text(title).font(.system(size: 14, weight: .semibold))
+                Text(title).font(.system(size: 15, weight: .semibold))
                 Spacer()
                 if let xp { Text(xp + " XP").font(.system(size: 11)).foregroundStyle(Theme.textTertiary) }
             }

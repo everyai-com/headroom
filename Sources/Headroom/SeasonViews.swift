@@ -22,7 +22,7 @@ struct DailySyncCard: View {
         let evening = Calendar.current.component(.hour, from: .now) >= 16
         Card {
             VStack(alignment: .leading, spacing: 12) {
-                SectionTitle(title: "Top thing", trailing: log?.isSynced == true ? "day closed ✓" : nil)
+                SectionTitle(title: "Top thing", trailing: log?.isSynced == true ? "day closed" : nil)
                 topRow(day: day, label: "Today")
                 if evening || log?.isSynced == true { topRow(day: tomorrow, label: "Tomorrow") }
                 if open || log?.isSynced == true, let season = model.planner.season, season.isActive(on: day) { questReads(day: day, log: log, season: season) }
@@ -33,12 +33,12 @@ struct DailySyncCard: View {
                             .help("Five minutes: how it moved, three thanks, value given, a few lines, tomorrow's top thing.")
                         if model.planner.season?.isActive(on: day) == true && log?.isSynced != true {
                             Button(open ? "Hide Quests" : "Rate Quests") { withAnimation(.easeOut(duration: 0.2)) { open.toggle() } }
-                                .buttonStyle(.borderless).font(.system(size: 11.5))
+                                .buttonStyle(.borderless).font(.system(size: 12))
                         }
                         Spacer()
                         if coach.hasClaude && LifeCoach.shared.available && evening {
                             Button { coach.ask(.evening, model: model) } label: { Label("Plan Tomorrow", systemImage: "sparkles") }
-                                .buttonStyle(.borderless).font(.system(size: 11.5)).disabled(coach.asking != nil)
+                                .buttonStyle(.borderless).font(.system(size: 12)).disabled(coach.asking != nil)
                         }
                     }
                 }
@@ -71,7 +71,7 @@ struct DailySyncCard: View {
             Image(systemName: top?.isDone == true ? "checkmark.circle.fill" : "scope")
                 .foregroundStyle(top?.isDone == true ? Theme.safe : Theme.accent)
             VStack(alignment: .leading, spacing: 1) {
-                Text(label).font(.system(size: 10.5, weight: .semibold)).foregroundStyle(Theme.textTertiary)
+                Text(label).font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.textTertiary)
                 Text(top?.title ?? "Pick the one task that makes the day a success").font(.system(size: top == nil ? 12.5 : 14, weight: top == nil ? .regular : .semibold))
                     .foregroundStyle(top == nil ? Theme.textTertiary : Theme.textPrimary).lineLimit(2)
             }
@@ -179,16 +179,16 @@ struct SeasonDetails: View {
         VStack(alignment: .leading, spacing: 8) {
             if let m = season.manifesto, !m.isEmpty {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("“\(m)”").font(.system(size: 12.5, design: .serif).italic()).foregroundStyle(Theme.textSecondary)
+                    Text("“\(m)”").font(.system(size: 13, design: .serif).italic()).foregroundStyle(Theme.textSecondary)
                         .lineLimit(2).help(m)
                     if let signed = season.signed {
-                        Text("Signed \(signed.formatted(date: .abbreviated, time: .shortened))").font(.system(size: 10.5)).foregroundStyle(Theme.textTertiary)
+                        Text("Signed \(signed.formatted(date: .abbreviated, time: .shortened))").font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
                     }
                 }
             }
             let all = season.milestones ?? []
             if !all.isEmpty {
-                Text("Next milestones · \(all.filter { $0.done != nil }.count) of \(all.count) done").font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.textTertiary)
+                Text("Next milestones · \(all.filter { $0.done != nil }.count) of \(all.count) done").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.textTertiary)
                 ForEach(season.openMilestones.prefix(3)) { m in
                     HStack(spacing: 8) {
                         Button { model.toggleMilestone(m.id) } label: {
@@ -196,10 +196,10 @@ struct SeasonDetails: View {
                         }
                         .buttonStyle(.plain)
                         if m.pinned == true { Image(systemName: "pin.fill").font(.system(size: 9)).foregroundStyle(Theme.accent) }
-                        Text(m.title).font(.system(size: 12.5)).strikethrough(m.done != nil).lineLimit(1)
+                        Text(m.title).font(.system(size: 13)).strikethrough(m.done != nil).lineLimit(1)
                             .foregroundStyle(m.done != nil ? Theme.textTertiary : Theme.textPrimary)
                         Spacer(minLength: 4)
-                        Text(m.project).font(.system(size: 10.5)).foregroundStyle(Theme.textTertiary).lineLimit(1)
+                        Text(m.project).font(.system(size: 11)).foregroundStyle(Theme.textTertiary).lineLimit(1)
                         if let due = m.due {
                             Text(Planner.date(due)?.formatted(.dateTime.day().month(.abbreviated)) ?? due)
                                 .font(Theme.number(11, weight: .medium))
@@ -216,12 +216,12 @@ struct SeasonDetails: View {
             }
             HStack {
                 if let support = season.support, !support.isEmpty {
-                    Text("Support: " + support.joined(separator: " · ")).font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary).lineLimit(1)
+                    Text("Support: " + support.joined(separator: " · ")).font(.system(size: 12)).foregroundStyle(Theme.textTertiary).lineLimit(1)
                 }
                 Spacer()
                 if !snapshot {
                     Button { model.wrapSeason = season } label: { Label("Season Wrap", systemImage: "sparkles.rectangle.stack") }
-                        .buttonStyle(.borderless).font(.system(size: 11.5))
+                        .buttonStyle(.borderless).font(.system(size: 12))
                 }
             }
         }
@@ -241,7 +241,7 @@ struct SeasonWrapSheet: View {
         let w = SeasonWrap.of(season, planner: p, previous: previous)
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(season.ended == nil ? "Your season so far" : "Your season, wrapped").font(.system(size: 20, weight: .bold, design: .rounded))
+                Text(season.ended == nil ? "Your season so far" : "Your season, wrapped").font(.system(size: 22, weight: .bold, design: .rounded))
                 Text("\(Planner.date(season.start)?.formatted(date: .abbreviated, time: .omitted) ?? season.start) – \(Planner.date(season.ended ?? season.end)?.formatted(date: .abbreviated, time: .omitted) ?? season.end) · \(w.days) days")
                     .font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
             }
@@ -257,7 +257,7 @@ struct SeasonWrapSheet: View {
                 }
             }
             if let peak = w.peak {
-                Label(peak.chronotype, systemImage: "sunrise.fill").font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.accent)
+                Label(peak.chronotype, systemImage: "sunrise.fill").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.accent)
             }
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(w.quests, id: \.project) { q in
@@ -277,7 +277,7 @@ struct SeasonWrapSheet: View {
 
     func stat(_ value: String, _ label: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(value).font(Theme.number(20, weight: .bold))
+            Text(value).font(Theme.number(22, weight: .bold))
             Text(label).font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -300,7 +300,7 @@ struct BrainDumpSheet: View {
                 .font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
             TextEditor(text: $text).font(.system(size: 13)).scrollContentBackground(.hidden)
                 .padding(6).frame(height: 220)
-                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.fill(0.04)))
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.fill(0.04)))
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
@@ -324,7 +324,7 @@ struct CoachMemorySheet: View {
                 .font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
             TextEditor(text: $text).font(.system(size: 13, design: .monospaced)).scrollContentBackground(.hidden)
                 .padding(6).frame(height: 260)
-                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.fill(0.04)))
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.fill(0.04)))
                 .overlay(alignment: .topLeading) {
                     if text.isEmpty {
                         Text("- I build best before noon; calls after 2 pm\n- Svikarr is for clinics in the US\n- Gym Mon/Wed/Fri at 18:30")
@@ -385,7 +385,7 @@ struct SeasonEditor: View {
         VStack(alignment: .leading, spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("Your season").font(.system(size: 18, weight: .bold))
+                    Text("Your season").font(.system(size: 17, weight: .bold))
                     Text("Fewer goals, done well: one main quest gets most of your hours, up to two side quests keep moving, and everything else waits for the next season.")
                         .font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
                     if coach.hasClaude && coach.available { draftSection }
@@ -470,10 +470,10 @@ struct SeasonEditor: View {
                         .font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
                     TextEditor(text: $dump).font(.system(size: 13)).scrollContentBackground(.hidden)
                         .padding(6).frame(height: 110)
-                        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.fill(0.05)))
+                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.fill(0.05)))
                     HStack {
                         if coach.drafting { ProgressView().controlSize(.small); Text("Turning your answers into goals…").font(.system(size: 12)).foregroundStyle(Theme.textSecondary) }
-                        if let f = coach.failure { Text(f).font(.system(size: 11.5)).foregroundStyle(Theme.review) }
+                        if let f = coach.failure { Text(f).font(.system(size: 12)).foregroundStyle(Theme.review) }
                         Spacer()
                         Button("Draft My Season") { coach.draftSeason(dump, weeks: weeks, model: model) { apply($0) } }
                             .buttonStyle(PrimaryButtonStyle()).disabled(dump.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || coach.drafting)
@@ -505,7 +505,7 @@ struct SeasonEditor: View {
     var milestoneRows: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Big goals feel far away; milestones make progress visible. A missed one turns that week to “adjust”.")
-                .font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary).fixedSize(horizontal: false, vertical: true)
+                .font(.system(size: 12)).foregroundStyle(Theme.textTertiary).fixedSize(horizontal: false, vertical: true)
             ForEach($milestones) { $m in
                 HStack(spacing: 8) {
                     TextField("Milestone", text: $m.title).textFieldStyle(.roundedBorder)
@@ -529,7 +529,7 @@ struct SeasonEditor: View {
     var protectedRows: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Hours you guard for a quest every week. The stack puts that quest's tasks there first, nothing else lands in it, and it counts toward plan strength.")
-                .font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary).fixedSize(horizontal: false, vertical: true)
+                .font(.system(size: 12)).foregroundStyle(Theme.textTertiary).fixedSize(horizontal: false, vertical: true)
             ForEach($protected) { $p in
                 HStack(spacing: 8) {
                     Picker("", selection: $p.project) {
@@ -571,10 +571,10 @@ struct SeasonEditor: View {
     var commitment: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("A few sentences you can sign: what this season is for, and what you'll say no to.")
-                .font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                .font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
             TextEditor(text: $manifesto).font(.system(size: 13, design: .serif)).scrollContentBackground(.hidden)
                 .padding(6).frame(height: 80)
-                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.fill(0.05)))
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.fill(0.05)))
                 .onChange(of: manifesto) { signed = nil }
             HStack {
                 if let signed {

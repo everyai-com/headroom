@@ -111,8 +111,8 @@ struct CodingScreen: View {
         return Card {
             HStack(alignment: .center, spacing: 18) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(ByteFormat.string(total)).font(Theme.number(30, weight: .bold))
-                    Text(blurb(free: free)).font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary)
+                    Text(ByteFormat.string(total)).font(Theme.number(28, weight: .bold))
+                    Text(blurb(free: free)).font(.system(size: 13)).foregroundStyle(Theme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 12)
@@ -157,11 +157,11 @@ struct CodingScreen: View {
                 HStack(spacing: 10) {
                     Image(systemName: screen.symbol).font(.system(size: 12, weight: .bold))
                         .foregroundStyle(Theme.color(for: Self.category(screen)))
-                    Text(name).font(.system(size: 14, weight: .semibold)).lineLimit(1)
+                    Text(name).font(.system(size: 15, weight: .semibold)).lineLimit(1)
                     Text("\(list.count)").font(Theme.number(11, weight: .bold)).foregroundStyle(Theme.textSecondary)
                         .padding(.horizontal, 7).padding(.vertical, 2).background(Capsule().fill(Theme.fill(0.07)))
                     Spacer()
-                    Text(ByteFormat.string(bytes)).font(Theme.number(14, weight: .semibold))
+                    Text(ByteFormat.string(bytes)).font(Theme.number(15, weight: .semibold))
                     if !removableHere.isEmpty {
                         Button(allOn ? "Deselect" : "Select all") {
                             for f in removableHere { if allOn { model.selected.remove(f.id) } else { model.selected.insert(f.id) } }
@@ -200,8 +200,8 @@ struct CodingScreen: View {
             }
             .padding(.horizontal, 20).padding(.vertical, 14)
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.surfaceRaised.opacity(0.96))
-                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.hairline))
+                RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.surfaceRaised.opacity(0.96))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.hairline))
                     .shadow(color: .black.opacity(0.5), radius: 24, y: 8)
             )
             .padding(.horizontal, 4).padding(.bottom, 4)

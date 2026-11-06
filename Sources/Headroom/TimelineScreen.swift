@@ -75,7 +75,7 @@ struct TimelineScreen: View {
     }
 
     func bullet(_ symbol: String, _ text: String) -> some View {
-        Label(text, systemImage: symbol).font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary)
+        Label(text, systemImage: symbol).font(.system(size: 13)).foregroundStyle(Theme.textSecondary)
     }
 
     // MARK: The day
@@ -98,7 +98,7 @@ struct TimelineScreen: View {
                     ForEach(ActivityCategory.allCases.filter { cat in spans.contains { c.classify($0).category == cat } }, id: \.self) { cat in
                         HStack(spacing: 5) {
                             Circle().fill(cat.color).frame(width: 8, height: 8)
-                            Text(cat.title).font(.system(size: 11.5)).foregroundStyle(Theme.textSecondary)
+                            Text(cat.title).font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
                         }
                     }
                 }
@@ -109,7 +109,7 @@ struct TimelineScreen: View {
     func stat(_ value: String, _ label: String, _ tint: Color = Theme.textPrimary) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(value).font(Theme.number(22, weight: .bold)).foregroundStyle(tint)
-            Text(label).font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+            Text(label).font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
         }
     }
 
@@ -152,7 +152,7 @@ struct TimelineScreen: View {
     func bar(_ name: String, _ seconds: TimeInterval, top: TimeInterval, color: Color) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(name).font(.system(size: 12.5, weight: .medium)).lineLimit(1)
+                Text(name).font(.system(size: 13, weight: .medium)).lineLimit(1)
                 Spacer()
                 Text(Minutes.text(seconds)).font(Theme.number(12, weight: .semibold)).foregroundStyle(Theme.textSecondary)
             }
@@ -191,9 +191,9 @@ struct TimelineScreen: View {
                     HStack(spacing: 8) {
                         Circle().fill(r.classification.category.color).frame(width: 8, height: 8)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(r.name).font(.system(size: 12.5, weight: .medium)).lineLimit(1)
+                            Text(r.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
                             let detail = [r.classification.project, r.classification.area, r.classification.category.title].compactMap { $0 }
-                            Text(detail.joined(separator: " · ")).font(.system(size: 10.5)).foregroundStyle(Theme.textTertiary).lineLimit(1)
+                            Text(detail.joined(separator: " · ")).font(.system(size: 11)).foregroundStyle(Theme.textTertiary).lineLimit(1)
                         }
                         Spacer()
                         Text(Minutes.text(r.seconds)).font(Theme.number(12, weight: .semibold)).foregroundStyle(Theme.textSecondary)
@@ -240,7 +240,7 @@ struct TimelineScreen: View {
                            : browsers.map { "\(Self.browserName($0.key)) \($0.value ? "✓" : "—")" }.sorted().joined(separator: "  "),
                            ok: !browsers.isEmpty && browsers.values.allSatisfy { $0 }, action: "Allow…") { timeline.askBrowsers() }
                 HStack {
-                    Text("Recording on this Mac only · 30 days").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                    Text("Recording on this Mac only · 30 days").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                     Spacer()
                     if !snapshot {
                         Button("Forget Today") { timeline.forgetToday() }.buttonStyle(GhostButtonStyle())
@@ -256,7 +256,7 @@ struct TimelineScreen: View {
             Image(systemName: ok ? "checkmark.circle.fill" : "circle.dashed").foregroundStyle(ok ? Theme.safe : Theme.textTertiary)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.system(size: 13, weight: .medium))
-                Text(detail).font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary).fixedSize(horizontal: false, vertical: true)
+                Text(detail).font(.system(size: 12)).foregroundStyle(Theme.textTertiary).fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
             if !ok && !snapshot { Button(action, action: perform).buttonStyle(GhostButtonStyle()) }
@@ -297,7 +297,7 @@ struct DayStrip: View {
                     Spacer()
                     Text(end.formatted(date: .omitted, time: .shortened))
                 }
-                .font(.system(size: 9.5, weight: .medium)).foregroundStyle(Theme.textTertiary).offset(y: 14)
+                .font(.system(size: 10, weight: .medium)).foregroundStyle(Theme.textTertiary).offset(y: 14)
             }
         }
         .padding(.bottom, 12)
@@ -363,7 +363,7 @@ struct LifeHome: View {
                     Spacer()
                     let level = Planner.level(for: p.xp())
                     Text("\(Planner.rank(for: level.number).title) · level \(level.number) · \(p.coins().formatted()) coins")
-                        .font(Theme.number(11.5, weight: .medium)).foregroundStyle(Theme.textTertiary)
+                        .font(Theme.number(12, weight: .medium)).foregroundStyle(Theme.textTertiary)
                 }
                 .contentShape(Rectangle())
             }
@@ -490,7 +490,7 @@ struct LifeHome: View {
                                 Image(systemName: main ? "crown.fill" : "circle.fill").font(.system(size: main ? 10 : 5)).foregroundStyle(main ? Theme.review : Theme.textTertiary)
                                 Text(q.project).font(.system(size: 13, weight: main ? .semibold : .medium))
                                 Spacer()
-                                Text("\(Minutes.text(Double(have) * 60)) of \(q.hoursPerWeek) h this week").font(Theme.number(11.5, weight: .medium)).foregroundStyle(Theme.textSecondary)
+                                Text("\(Minutes.text(Double(have) * 60)) of \(q.hoursPerWeek) h this week").font(Theme.number(12, weight: .medium)).foregroundStyle(Theme.textSecondary)
                             }
                             SegmentedBar(segments: [.init(id: q.project, value: Double(have), color: main ? Theme.review : Theme.accent)],
                                          total: Double(q.hoursPerWeek * 60), height: 6)
@@ -499,7 +499,7 @@ struct LifeHome: View {
                     let others = weekMinutes.filter { k, _ in !season.quests.contains { $0.project.lowercased() == k } }.values.reduce(0, +)
                     HStack {
                         if others > 0 {
-                            Text("\(Minutes.text(Double(others) * 60)) on other projects this week").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                            Text("\(Minutes.text(Double(others) * 60)) on other projects this week").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                         }
                         Spacer()
                         if LifeCoach.shared.available && LifeCoach.shared.hasClaude {
@@ -548,7 +548,7 @@ struct LifeHome: View {
                             let cat = ActivityCategory(rawValue: t.name) ?? .other
                             HStack(spacing: 5) {
                                 Circle().fill(cat.color).frame(width: 7, height: 7)
-                                Text("\(cat.title) \(Minutes.text(t.seconds))").font(.system(size: 11.5)).foregroundStyle(Theme.textSecondary).lineLimit(1)
+                                Text("\(cat.title) \(Minutes.text(t.seconds))").font(.system(size: 12)).foregroundStyle(Theme.textSecondary).lineLimit(1)
                             }
                         }
                     }

@@ -132,17 +132,17 @@ struct DayPlanCard: View {
 
     func line(time: String, title: String, detail: String, tint: Color, symbol: String, past: Bool, current: Bool) -> some View {
         HStack(spacing: 10) {
-            Text(time).font(Theme.number(11.5, weight: .semibold)).foregroundStyle(past ? Theme.textTertiary : tint).frame(width: 64, alignment: .leading)
-            RoundedRectangle(cornerRadius: 2).fill(past ? Theme.fill(0.1) : tint).frame(width: 3, height: 26)
+            Text(time).font(Theme.number(12, weight: .semibold)).foregroundStyle(past ? Theme.textTertiary : tint).frame(width: 64, alignment: .leading)
+            RoundedRectangle(cornerRadius: 4, style: .continuous).fill(past ? Theme.fill(0.1) : tint).frame(width: 3, height: 26)
             VStack(alignment: .leading, spacing: 1) {
                 Text(title).font(.system(size: 13, weight: current ? .semibold : .regular)).lineLimit(1)
                     .foregroundStyle(past ? Theme.textTertiary : Theme.textPrimary)
-                Text(detail).font(.system(size: 10.5)).foregroundStyle(Theme.textTertiary).lineLimit(1)
+                Text(detail).font(.system(size: 11)).foregroundStyle(Theme.textTertiary).lineLimit(1)
             }
             Spacer(minLength: 0)
         }
         .padding(.vertical, 2).padding(.horizontal, current ? 6 : 0)
-        .background(RoundedRectangle(cornerRadius: 8).fill(current ? Theme.accent.opacity(0.08) : .clear))
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(current ? Theme.accent.opacity(0.08) : .clear))
     }
 
     func adder(_ day: String) -> some View {
@@ -156,7 +156,7 @@ struct DayPlanCard: View {
             .labelsHidden().fixedSize()
         }
         .padding(.horizontal, 10).frame(height: 36)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.fill(0.04)))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.fill(0.04)))
     }
 
     func add(_ day: String) {
@@ -189,10 +189,10 @@ struct SeasonGrid: View {
             if let day = season.dayNumber(on: today) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text("Day \(day) of \(season.days)").font(.system(size: 15, weight: .bold, design: .rounded))
-                    Text("\(season.days - day) days left").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                    Text("\(season.days - day) days left").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                     Spacer()
                     if let strength = PlanStrength.of(model.planner, done: timeline.weekProjectMinutes) {
-                        Text("Plan strength \(Int(strength.score * 100))%").font(Theme.number(11.5, weight: .semibold))
+                        Text("Plan strength \(Int(strength.score * 100))%").font(Theme.number(12, weight: .semibold))
                             .foregroundStyle(strength.score >= 0.8 ? Theme.safe : strength.score >= 0.5 ? Theme.review : Theme.textSecondary)
                             .help(strength.gaps.isEmpty ? "Every hour still needed this week has a time block."
                                   : "Not blocked yet: " + strength.gaps.map { "\($0.key) \(Minutes.text(Double($0.value) * 60))" }.sorted().joined(separator: ", "))
@@ -201,18 +201,18 @@ struct SeasonGrid: View {
             }
             ForEach(grid, id: \.quest.id) { row in
                 HStack(spacing: 8) {
-                    Text(row.quest.project).font(.system(size: 11.5, weight: row.quest == season.main ? .semibold : .regular)).lineLimit(1)
+                    Text(row.quest.project).font(.system(size: 12, weight: row.quest == season.main ? .semibold : .regular)).lineLimit(1)
                         .frame(width: 110, alignment: .leading)
                     HStack(spacing: 3) {
                         ForEach(Array(row.weeks.enumerated()), id: \.offset) { i, st in
-                            RoundedRectangle(cornerRadius: 3, style: .continuous).fill(color(st))
-                                .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(i == current ? Theme.textSecondary : .clear, lineWidth: 1))
+                            RoundedRectangle(cornerRadius: 4, style: .continuous).fill(color(st))
+                                .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(i == current ? Theme.textSecondary : .clear, lineWidth: 1))
                                 .frame(height: 12)
                                 .help("Week \(i + 1): \(word(st))")
                         }
                     }
                     Text(word(row.weeks.indices.contains(current) ? row.weeks[current] : .upcoming))
-                        .font(.system(size: 10.5, weight: .medium)).foregroundStyle(color(row.weeks.indices.contains(current) ? row.weeks[current] : .upcoming))
+                        .font(.system(size: 11, weight: .medium)).foregroundStyle(color(row.weeks.indices.contains(current) ? row.weeks[current] : .upcoming))
                         .frame(width: 62, alignment: .trailing)
                 }
             }
@@ -312,7 +312,7 @@ struct FocusQuality: View {
         HStack(spacing: 8) {
             if timeline.isOn || AppModel.demoMode,
                let q = FocusMode.quality(session, spans: timeline.allToday, classifier: timeline.classifier) {
-                Text("\(Int(q * 100))% focused").font(Theme.number(11.5, weight: .semibold))
+                Text("\(Int(q * 100))% focused").font(Theme.number(12, weight: .semibold))
                     .foregroundStyle(q >= 0.85 ? Theme.safe : Theme.review)
                     .help("\(FocusMode.verdict(q)). Share of this session not spent on distracting apps and sites (from the timeline).")
             }

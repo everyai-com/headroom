@@ -28,8 +28,8 @@ struct MapInspector: View {
         .padding(18)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.surface)
-                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.hairline))
+            RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.surface)
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.hairline))
         )
     }
 
@@ -38,17 +38,17 @@ struct MapInspector: View {
             if let e {
                 verdict(e.verdict)
                 section("What it is") {
-                    Text(e.what).font(.system(size: 13.5, weight: .semibold))
-                    Text(e.detail).font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary)
+                    Text(e.what).font(.system(size: 13, weight: .semibold))
+                    Text(e.detail).font(.system(size: 13)).foregroundStyle(Theme.textSecondary)
                 }
                 section("If you delete it") {
-                    Text(e.ifDeleted).font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary)
+                    Text(e.ifDeleted).font(.system(size: 13)).foregroundStyle(Theme.textSecondary)
                 }
                 if let owner, !isApp { ownerRow(owner) }
                 if let url = node.url { details(url) }
             } else {
                 Text("A group of smaller items. Look inside to see and delete what's in it.")
-                    .font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary)
+                    .font(.system(size: 13)).foregroundStyle(Theme.textSecondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -64,7 +64,7 @@ struct MapInspector: View {
             icon
             VStack(alignment: .leading, spacing: 3) {
                 Text(node.name).font(.system(size: 15, weight: .bold)).lineLimit(2).truncationMode(.middle)
-                Text(node.bytes.gb).font(Theme.number(20, weight: .bold))
+                Text(node.bytes.gb).font(Theme.number(22, weight: .bold))
                     .foregroundStyle(e.map { Theme.color(for: $0.verdict) } ?? Theme.textPrimary)
             }
             Spacer(minLength: 0)
@@ -79,7 +79,7 @@ struct MapInspector: View {
             Image(nsImage: NSWorkspace.shared.icon(forFile: url.path)).resizable().frame(width: 40, height: 40)
         } else {
             Image(systemName: node.url == nil ? "square.grid.2x2.fill" : "folder.fill")
-                .font(.system(size: 20)).foregroundStyle(Theme.color(for: node.area)).frame(width: 40, height: 40)
+                .font(.system(size: 22)).foregroundStyle(Theme.color(for: node.area)).frame(width: 40, height: 40)
         }
     }
 
@@ -96,7 +96,7 @@ struct MapInspector: View {
         .foregroundStyle(Theme.color(for: v))
         .padding(.horizontal, 10).padding(.vertical, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.color(for: v).opacity(0.12)))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.color(for: v).opacity(0.12)))
     }
 
     func section<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
@@ -112,14 +112,14 @@ struct MapInspector: View {
             if snapshot { Image(systemName: "app.fill").frame(width: 26, height: 26) }
             else { Image(nsImage: NSWorkspace.shared.icon(forFile: app.url.path)).resizable().frame(width: 26, height: 26) }
             VStack(alignment: .leading, spacing: 1) {
-                Text("Belongs to \(app.name)").font(.system(size: 12.5, weight: .semibold))
+                Text("Belongs to \(app.name)").font(.system(size: 13, weight: .semibold))
                 Text("App \(app.appSize.allocated.gb) + data \(app.dataSize.gb) in \(app.leftovers.count) places")
                     .font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
             }
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.fill(0.04)))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.fill(0.04)))
     }
 
     func details(_ url: URL) -> some View {
@@ -143,7 +143,7 @@ struct MapInspector: View {
                         VStack(spacing: 1) {
                             Label(isApp ? "Uninstall with all its data" : "Uninstall \(owner.name) completely", systemImage: "trash.slash.fill")
                                 .lineLimit(1)
-                            Text("app + caches, data, settings · \(owner.totalSize.gb)").font(.system(size: 10.5, weight: .medium)).opacity(0.7)
+                            Text("app + caches, data, settings · \(owner.totalSize.gb)").font(.system(size: 11, weight: .medium)).opacity(0.7)
                         }
                         .frame(maxWidth: .infinity)
                     }
