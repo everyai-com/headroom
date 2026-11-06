@@ -5,6 +5,7 @@
 #   ~/Desktop/headroom-demo/   3 idle agent-made projects (safe), 1 active one (review), 1 idle Rust project
 #   ~/Downloads/Figma-Installer-demo.dmg      an "old installer" (60 days)
 #   ~/Movies/headroom-demo-recording.mov      a big forgotten video (Large files → Trash → Put Back)
+#   ~/Desktop/headroom-demo/Home/             a made-up home for the file library (run with --demo)
 set -euo pipefail
 DEMO="$HOME/Desktop/headroom-demo"
 OLD=$(date -v-60d +%Y%m%d%H%M)
@@ -43,5 +44,14 @@ blob "$HOME/Downloads/Figma-Installer-demo.dmg" 800m
 old "$HOME/Downloads/Figma-Installer-demo.dmg"
 blob "$HOME/Movies/headroom-demo-recording.mov" 1200m
 old "$HOME/Movies/headroom-demo-recording.mov"
+
+# A made-up home for the file library (photos, screenshots, PDFs, music, videos, downloads with
+# "where from" notes). Needs a built app: swift build -c release, or scripts/bundle.sh.
+BIN=""
+for b in .build/release/Headroom .build/debug/Headroom /Applications/Headroom.app/Contents/MacOS/Headroom; do
+  [ -x "$(dirname "$0")/../$b" ] && BIN="$(dirname "$0")/../$b" && break
+  [ -x "$b" ] && BIN="$b" && break
+done
+if [ -n "$BIN" ]; then "$BIN" --seed-library "$DEMO/Home"; else echo "(build Headroom to seed the demo file library too)"; fi
 
 echo "Done. In Headroom press Rescan (top right) and wait for the map to finish."

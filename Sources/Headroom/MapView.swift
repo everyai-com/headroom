@@ -68,7 +68,7 @@ struct MapView: View {
             }
         }
         .confirmingAction($pending) { p in await run(p) }
-        .confirmationDialog("Uninstall \(uninstalling?.name ?? "")?", isPresented: Binding(get: { uninstalling != nil }, set: { if !$0 { uninstalling = nil } }),
+        .confirmSheet("Uninstall \(uninstalling?.name ?? "")?", isPresented: Binding(get: { uninstalling != nil }, set: { if !$0 { uninstalling = nil } }),
                             presenting: uninstalling) { app in
             Button("Uninstall \(app.totalSize.gb)", role: .destructive) { Task { await uninstallCompletely(app) } }
             Button("Cancel", role: .cancel) {}
@@ -130,8 +130,8 @@ struct MapView: View {
                 }
             } else {
                 HStack(spacing: 14) {
-                    LegendDot(color: Theme.safe, label: "Safe to reclaim")
-                    LegendDot(color: Theme.review, label: "Review first")
+                    LegendDot(color: Theme.safe, label: "Safe to remove")
+                    LegendDot(color: Theme.review, label: "Check first")
                     Text("Click anything to see what it is and delete it · double-click to look inside")
                         .font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                 }
@@ -152,7 +152,7 @@ struct MapView: View {
             Button("Copy Path") { model.copyPath(url) }
             Divider()
             if let known = model.knownFinding(for: url), known.method != .none, known.safety != .keep {
-                actionItem(.reclaim, "Reclaim — \(known.title)", node)
+                actionItem(.reclaim, "Free up — \(known.title)", node)
             }
             if url.pathExtension == "app" { actionItem(.uninstall, "Uninstall App…", node) }
             actionItem(.trash, "Move to Trash…", node)
@@ -360,7 +360,7 @@ struct Tile: View {
     }
 }
 
-/// Diagonal hatching for "safe to reclaim" tiles.
+/// Diagonal hatching for "safe to remove" tiles.
 struct Hatch: Shape {
     func path(in rect: CGRect) -> Path {
         var p = Path()

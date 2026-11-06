@@ -98,7 +98,7 @@ public final class BigFileCollector: @unchecked Sendable {
     private var found: [BigFile] = []
     private let lock = NSLock()
 
-    public init(threshold: Int64 = 500_000_000, home: URL = URL(fileURLWithPath: NSHomeDirectory())) {
+    public init(threshold: Int64 = 500_000_000, home: URL = URL(fileURLWithPath: HeadroomPaths.home)) {
         self.threshold = threshold
         self.home = home.standardizedFileURL.path
     }

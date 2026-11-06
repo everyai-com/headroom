@@ -11,6 +11,11 @@ struct NotchView: View {
     var notchHeight: CGFloat
     var expanded: Bool
     var openApp: () -> Void
+    /// Opens the window on a screen (the Today tab's "Open Today").
+    var openScreen: (Screen) -> Void = { _ in }
+    @AppStorage("notchTab") private var tab: NotchTab = .today
+
+    enum NotchTab: String { case today, space }
 
     static let expandedSize = CGSize(width: 500, height: 228)
     static let wing: CGFloat = 74
@@ -23,8 +28,15 @@ struct NotchView: View {
                 .fill(Color.black)
                 .shadow(color: .black.opacity(expanded ? 0.55 : 0), radius: 22, y: 10)
             if expanded {
-                expandedContent(v, tint: tint)
-                    .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
+                ZStack(alignment: .top) {
+                    if model.plannerAddOn && tab == .today {
+                        NotchTodayView(notchHeight: notchHeight, openToday: { openScreen(.today) })
+                    } else {
+                        expandedContent(v, tint: tint)
+                    }
+                    if model.plannerAddOn { tabBar }
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
             } else {
                 compact(v, tint: tint)
             }
@@ -33,6 +45,27 @@ struct NotchView: View {
                height: expanded ? Self.expandedSize.height : notchHeight)
         .animation(.spring(response: 0.42, dampingFraction: 0.82), value: expanded)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// Today | Space, in the band beside the camera, so switching never makes the panel taller.
+    var tabBar: some View {
+        HStack(spacing: 4) {
+            ForEach([(NotchTab.today, "Today"), (.space, "Space")], id: \.0) { t, title in
+                Button { withAnimation(.easeOut(duration: 0.15)) { tab = t } } label: {
+                    Text(title).font(.system(size: 12, weight: .semibold)).fixedSize()
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(Capsule().fill(tab == t ? Theme.fill(0.16) : .clear))
+                        .foregroundStyle(tab == t ? Theme.textPrimary : Theme.textTertiary)
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer()
+        }
+        .frame(width: max(0, (Self.expandedSize.width - notchWidth) / 2 - 18), alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.leading, 18)
+        .frame(height: max(notchHeight - 4, 24))
     }
 
     // Leading ring + trailing value, either side of the camera (Yazio / Tide Guide pattern).
@@ -47,7 +80,7 @@ struct NotchView: View {
             .frame(width: Self.wing, alignment: .center)
             Spacer().frame(width: notchWidth)
             Text(ByteFormat.compact(v.free))
-                .font(Theme.number(12.5, weight: .bold))
+                .font(Theme.number(13, weight: .bold))
                 .foregroundStyle(tint)
                 .frame(width: Self.wing, alignment: .center)
                 .modifier(Pulse(active: v.health == .critical))
@@ -66,13 +99,24 @@ struct NotchView: View {
                 .frame(width: 44, height: 44)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(v.free.gb).font(Theme.number(24, weight: .bold))
+                        Text(v.free.gb).font(Theme.number(22, weight: .bold))
                         Text("free").font(.system(size: 13)).foregroundStyle(Theme.textSecondary)
                     }
                     Text("of \(v.total.gb) · \(v.health == .critical ? "critically low" : v.health == .tight ? "getting tight" : "healthy")")
-                        .font(.system(size: 11.5)).foregroundStyle(v.health == .good ? Theme.textTertiary : tint)
+                        .font(.system(size: 12)).foregroundStyle(v.health == .good ? Theme.textTertiary : tint)
                 }
                 Spacer()
+                // Memory at a glance: how full RAM is, coloured by pressure.
+                let m = model.memory
+                let memTint = m.pressure == .critical ? Theme.critical : m.pressure == .warning ? Theme.review : Theme.textSecondary
+                HStack(spacing: 5) {
+                    Image(systemName: "memorychip").font(.system(size: 10, weight: .semibold))
+                    Text("RAM \(Int((m.usedFraction * 100).rounded()))%").font(Theme.number(12, weight: .semibold))
+                }
+                .foregroundStyle(memTint)
+                .padding(.horizontal, 8).padding(.vertical, 5)
+                .background(Capsule().fill(memTint.opacity(0.12)))
+                .help("\(m.used.gb) of \(m.total.gb) memory in use · \(m.pressure.label.lowercased())")
                 Button(action: openApp) {
                     Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 11, weight: .semibold))
                 }
@@ -89,7 +133,7 @@ struct NotchView: View {
                     }
                 }
                 if model.safeFindings.isEmpty {
-                    Text(model.lastScan == nil ? "Scanning…" : "Nothing safe to reclaim right now.")
+                    Text(model.lastScan == nil ? "Scanning…" : "Nothing safe to remove right now.")
                         .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
                 }
             }
@@ -113,7 +157,7 @@ struct NotchView: View {
         case .reclaiming: "Reclaiming…"
         case .done(let freed): "+\(freed.gb) back"
         case .scanning: "Scanning…"
-        case .idle: model.safeReclaimable > 0 ? "Reclaim \(model.safeReclaimable.gb) safely" : "All clean"
+        case .idle: model.safeReclaimable > 0 ? "Free up \(model.safeReclaimable.gb) safely" : "All clean"
         }
     }
 }
@@ -230,8 +274,15 @@ final class NotchController {
         let view = NotchView(notchWidth: g.notchWidth, notchHeight: g.notchHeight, expanded: expanded, openApp: { [weak self] in
             self?.collapse()
             self?.openApp()
+        }, openScreen: { [weak self] screen in
+            self?.collapse()
+            self?.openApp()
+            NotificationCenter.default.post(name: .headroomShowScreen, object: screen)
         })
         .environmentObject(model)
+        .monospacedDigit()
+        // The notch is black whatever the window looks like.
+        .environment(\.colorScheme, .dark)
         if let hosting {
             hosting.rootView = AnyView(view)
         } else {
@@ -249,6 +300,7 @@ final class NotchController {
         let open = frame(for: g, expanded: true).insetBy(dx: -12, dy: -12)
         if !expanded, hot.contains(p) {
             expanded = true
+            model.reloadPlannerIfChanged() // a task Claude just added shows the moment you look
             render(g)
             Task { await model.refreshVolume() }
         } else if expanded, !open.contains(p) {

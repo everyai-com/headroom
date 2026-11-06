@@ -28,7 +28,7 @@ public struct Explanation: Sendable, Equatable {
 
 public enum Explainer {
     /// Explain `url`. `appName` turns a bundle ID into an app's name ("com.tinyspeck.slackmacgap" → "Slack").
-    public static func explain(_ url: URL, home: URL = URL(fileURLWithPath: NSHomeDirectory()),
+    public static func explain(_ url: URL, home: URL = URL(fileURLWithPath: HeadroomPaths.home),
                                appName: (String) -> String? = { _ in nil }) -> Explanation {
         let path = url.standardizedFileURL.path
         let h = home.standardizedFileURL.path

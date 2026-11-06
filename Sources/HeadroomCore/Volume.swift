@@ -34,7 +34,7 @@ public struct VolumeStatus: Sendable, Hashable, Codable {
 
     /// Read the startup disk (the Data volume holds everything but macOS itself).
     public static func current() -> VolumeStatus {
-        let data = URL(fileURLWithPath: NSHomeDirectory())
+        let data = URL(fileURLWithPath: HeadroomPaths.home)
         let values = try? data.resourceValues(forKeys: [
             .volumeTotalCapacityKey, .volumeAvailableCapacityKey, .volumeAvailableCapacityForImportantUsageKey,
         ])
@@ -113,6 +113,7 @@ public enum ByteFormat {
         let gb = Double(bytes) / 1_000_000_000
         if gb >= 100 { return String(format: "%.0fG", gb) }
         if gb >= 1 { return String(format: "%.1fG", gb) }
-        return String(format: "%.0fM", Double(bytes) / 1_000_000)
+        if bytes >= 1_000_000 { return String(format: "%.0fM", Double(bytes) / 1_000_000) }
+        return bytes <= 0 ? "0K" : String(format: "%.0fK", max(1, Double(bytes) / 1000))
     }
 }

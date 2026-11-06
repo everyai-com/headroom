@@ -15,9 +15,37 @@ public struct ExternalDrive: Sendable, Hashable, Identifiable {
     public var readOnly: Bool
     /// macOS is still checking the file system; the drive mounts when that finishes.
     public var macOSChecking: Bool
+    /// What the partition holds, from its partition-table type.
+    public var format: Format = .unknown
+    /// Bytes read from the disk since it was plugged in. While it isn't mounted only macOS's
+    /// check reads it, so this (sampled over time) is the check's progress and speed.
+    public var bytesRead: Int64 = 0
 
     public var mounted: Bool { mountPoint != nil }
     public var title: String { vendor.isEmpty ? name : "\(vendor) \(name)" }
+
+    public enum Format: Sendable {
+        /// exFAT, FAT or NTFS: no journal, so a drive pulled out without Eject is checked in full.
+        case windows, apfs, hfs, unknown
+
+        init(content: String) {
+            let c = content.uppercased()
+            if c.hasPrefix("EBD0A0A2") || c.hasPrefix("DOS_FAT") || c.hasPrefix("WINDOWS_") || c == "EXFAT" { self = .windows }
+            else if c.hasPrefix("7C3457EF") || c == "APPLE_APFS" { self = .apfs }
+            else if c.hasPrefix("48465300") || c == "APPLE_HFS" { self = .hfs }
+            else { self = .unknown }
+        }
+    }
+
+    /// On macOS 26 and later exFAT and FAT go through FSKit: the old kernel drivers can't load, and
+    /// FSKit won't mount such a volume — not even read-only — until its check has finished.
+    public static let fsKitOwnsWindowsFormats =
+        FileManager.default.fileExists(atPath: "/System/Library/ExtensionKit/Extensions/com.apple.fskit.exfat.appex")
+
+    /// Opening read-only without waiting for the check works only where the old drivers still mount.
+    public var canSkipCheck: Bool {
+        readOnlyMountScript != nil && !(format == .windows && Self.fsKitOwnsWindowsFormats)
+    }
 
     public enum Link: Int, Sendable {
         case usb1Low = 0, usb1Full, usb2, usb3, usb3Gen2, unknown = -1
@@ -70,6 +98,11 @@ public struct ExternalDrive: Sendable, Hashable, Identifiable {
             let partition = partitions.first { mounts[$0] != nil } ?? partitions.first
             let sizes = values(#""Size" = (\d+)"#, in: block).compactMap { Int64($0) }
             let mount = partition.flatMap { mounts[$0] } ?? mounts[whole]
+            // Each IOKit node's properties follow its "+-o" line; the partition's "Content" is its type.
+            let nodes = block.components(separatedBy: "+-o ")
+            let format = partition.flatMap { p in nodes.first { $0.contains("\"BSD Name\" = \"\(p)\"") } }
+                .flatMap { values(#""Content" = "([^"]+)""#, in: $0).first }
+                .map(Format.init(content:)) ?? .unknown
             return ExternalDrive(
                 name: values(#""USB Product Name" = "([^"]+)""#, in: block).first ?? "USB drive",
                 vendor: values(#""USB Vendor Name" = "([^"]+)""#, in: block).first ?? "",
@@ -79,7 +112,9 @@ public struct ExternalDrive: Sendable, Hashable, Identifiable {
                 link: Link(rawValue: Int(values(#""Device Speed" = (\d)"#, in: block).first ?? "") ?? -1) ?? .unknown,
                 mountPoint: mount?.0,
                 readOnly: mount?.1 ?? false,
-                macOSChecking: mount == nil && checking
+                macOSChecking: mount == nil && checking,
+                format: format,
+                bytesRead: values(#""Bytes \(Read\)"=(\d+)"#, in: block).compactMap { Int64($0) }.max() ?? 0
             )
         }
     }

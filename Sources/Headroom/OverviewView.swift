@@ -29,8 +29,8 @@ struct OverviewView: View {
             HStack(spacing: 14) {
                 Image(systemName: "lock.shield.fill").font(.system(size: 22)).foregroundStyle(Theme.review)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("See inside “Other”").font(.system(size: 14, weight: .semibold))
-                    Text("macOS hides Mail, Safari and some app containers until you give Headroom Full Disk Access. Turn on Headroom in the list — this banner goes away by itself. Reclaiming never needs it.")
+                    Text("See inside “Other”").font(.system(size: 15, weight: .semibold))
+                    Text("macOS hides Mail, Safari and some app containers until you give Headroom Full Disk Access. Turn on Headroom in the list — this banner goes away by itself. Emptying the Trash and uninstalling apps need it too.")
                         .font(.system(size: 12)).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 12)
@@ -60,22 +60,22 @@ struct OverviewView: View {
                 }
                 if since == nil {
                     Text("Headroom compares the map over time. Check back after it has measured your disk again — a few hours from now.")
-                        .font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary)
+                        .font(.system(size: 13)).foregroundStyle(Theme.textSecondary)
                 } else if grew.isEmpty {
-                    Text("Nothing grew by more than 100 MB.").font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary)
+                    Text("Nothing grew by more than 100 MB.").font(.system(size: 13)).foregroundStyle(Theme.textSecondary)
                 } else {
                     let top = Double(grew.first?.delta ?? 1)
                     ForEach(grew.prefix(6)) { c in
                         HStack(spacing: 10) {
-                            Text(c.name).font(.system(size: 12.5)).lineLimit(1).truncationMode(.middle)
+                            Text(c.name).font(.system(size: 13)).lineLimit(1).truncationMode(.middle)
                             Spacer()
                             GeometryReader { geo in
-                                RoundedRectangle(cornerRadius: 3).fill(Theme.review)
+                                RoundedRectangle(cornerRadius: 4, style: .continuous).fill(Theme.review)
                                     .frame(width: max(3, geo.size.width * Double(c.delta) / top))
                                     .frame(maxWidth: .infinity, alignment: .trailing)
                             }
                             .frame(width: 120, height: 5)
-                            Text("+\(c.delta.gb)").font(Theme.number(12.5, weight: .semibold)).foregroundStyle(Theme.review)
+                            Text("+\(c.delta.gb)").font(Theme.number(13, weight: .semibold)).foregroundStyle(Theme.review)
                                 .frame(width: 80, alignment: .trailing)
                             if let url = c.url {
                                 Button { model.reveal([url]) } label: { Image(systemName: "magnifyingglass") }
@@ -85,7 +85,7 @@ struct OverviewView: View {
                     }
                     let shrank = changes.filter { $0.delta < 0 }.reduce(0) { $0 + $1.delta }
                     if shrank < 0 {
-                        Text("Elsewhere \((-shrank).gb) was freed.").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                        Text("Elsewhere \((-shrank).gb) was freed.").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                     }
                 }
             }
@@ -150,7 +150,7 @@ struct OverviewView: View {
 
     func healthLine(_ v: VolumeStatus) -> String {
         switch v.health {
-        case .critical: "macOS needs about 10 GB free for updates, swap and apps to run smoothly. Reclaim below — nothing you made is touched."
+        case .critical: "macOS needs about 10 GB free for updates and apps to run smoothly. Free some up below — nothing you made is touched."
         case .tight: "You're under 10 GB. Agentic coding refills this fast — every repo an agent touches grows its own dependencies."
         case .good: "Plenty of room. Headroom keeps watching and tells you before it gets tight."
         }
@@ -166,7 +166,7 @@ struct OverviewView: View {
         let total = model.safeReclaimable
         return Card {
             VStack(alignment: .leading, spacing: 16) {
-                SectionTitle(title: "Reclaim safely", trailing: model.lastScan.map { "scanned \($0.ago)" })
+                SectionTitle(title: "Free up space safely", trailing: model.lastScan.map { "scanned \($0.ago)" })
                 HStack(spacing: 18) {
                     ZStack {
                         Donut(slices: byCategory.map { (Double($0.bytes), Theme.color(for: $0.cat)) })
@@ -180,13 +180,13 @@ struct OverviewView: View {
                         ForEach(byCategory.prefix(5), id: \.cat) { row in
                             HStack {
                                 Circle().fill(Theme.color(for: row.cat)).frame(width: 8, height: 8)
-                                Text(row.cat.title).font(.system(size: 12.5)).foregroundStyle(Theme.textPrimary)
+                                Text(row.cat.title).font(.system(size: 13)).foregroundStyle(Theme.textPrimary)
                                 Spacer()
-                                Text(row.bytes.gb).font(Theme.number(12.5, weight: .medium)).foregroundStyle(Theme.textSecondary)
+                                Text(row.bytes.gb).font(Theme.number(13, weight: .medium)).foregroundStyle(Theme.textSecondary)
                             }
                         }
                         if byCategory.isEmpty {
-                            Text(model.lastScan == nil ? "Scanning…" : "Nothing safe left to reclaim.")
+                            Text(model.lastScan == nil ? "Scanning…" : "Nothing left that's safe to remove.")
                                 .font(.system(size: 13)).foregroundStyle(Theme.textSecondary)
                         }
                     }
@@ -198,12 +198,12 @@ struct OverviewView: View {
                 }
                 .buttonStyle(PrimaryButtonStyle(large: true))
                 .disabled(total == 0 || model.isBusy)
-                Text("Only caches and build output your tools recreate on their own. Your files, chats, apps and projects stay exactly as they are.")
-                    .font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary).fixedSize(horizontal: false, vertical: true)
+                Text("Only temporary files your apps and tools make again on their own. Your files, chats, apps and projects stay exactly as they are.")
+                    .font(.system(size: 12)).foregroundStyle(Theme.textTertiary).fixedSize(horizontal: false, vertical: true)
                 if model.reviewReclaimable > 0 {
                     Button { openReclaim() } label: {
                         HStack {
-                            Text("\(model.reviewReclaimable.gb) more to review").font(.system(size: 12.5, weight: .medium))
+                            Text("\(model.reviewReclaimable.gb) more to review").font(.system(size: 13, weight: .medium))
                             Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold))
                         }
                         .foregroundStyle(Theme.review)
@@ -219,7 +219,7 @@ struct OverviewView: View {
         case .reclaiming: "Reclaiming…"
         case .done(let freed): "Freed \(freed.gb)"
         case .scanning: "Scanning…"
-        case .idle: total > 0 ? "Reclaim \(total.gb) safely" : "All clean"
+        case .idle: total > 0 ? "Free up \(total.gb) safely" : "All clean"
         }
     }
 
@@ -234,12 +234,12 @@ struct OverviewView: View {
                     ForEach(groups.prefix(9)) { g in
                         VStack(alignment: .leading, spacing: 5) {
                             HStack {
-                                Text(g.name).font(.system(size: 12.5)).foregroundStyle(Theme.textPrimary).lineLimit(1)
+                                Text(g.name).font(.system(size: 13)).foregroundStyle(Theme.textPrimary).lineLimit(1)
                                 Spacer()
-                                Text(g.bytes.gb).font(Theme.number(12.5, weight: .medium)).foregroundStyle(Theme.textSecondary)
+                                Text(g.bytes.gb).font(Theme.number(13, weight: .medium)).foregroundStyle(Theme.textSecondary)
                             }
                             GeometryReader { geo in
-                                RoundedRectangle(cornerRadius: 3).fill(Theme.color(for: g.area))
+                                RoundedRectangle(cornerRadius: 4, style: .continuous).fill(Theme.color(for: g.area))
                                     .frame(width: max(3, geo.size.width * Double(g.bytes) / maxBytes))
                             }
                             .frame(height: 5)
@@ -262,7 +262,7 @@ struct Donut: View {
     var body: some View {
         let total = max(slices.reduce(0) { $0 + $1.0 }, 1)
         ZStack {
-            Circle().stroke(Color.white.opacity(0.06), lineWidth: 16)
+            Circle().stroke(Theme.fill(0.06), lineWidth: 16)
             ForEach(Array(slices.enumerated()), id: \.offset) { i, s in
                 let start = slices.prefix(i).reduce(0) { $0 + $1.0 } / total
                 Circle()
@@ -293,12 +293,12 @@ struct ProgressLine: View {
         VStack(alignment: .leading, spacing: 8) {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.07))
+                    Capsule().fill(Theme.fill(0.07))
                     Capsule().fill(Theme.safe).frame(width: geo.size.width * Double(done) / Double(max(total, 1)))
                 }
             }
             .frame(height: 6)
-            Text(label).font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary).lineLimit(1).truncationMode(.middle)
+            Text(label).font(.system(size: 12)).foregroundStyle(Theme.textTertiary).lineLimit(1).truncationMode(.middle)
         }
     }
 }

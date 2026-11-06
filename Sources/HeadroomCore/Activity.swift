@@ -2,6 +2,16 @@ import Foundation
 
 /// Where Headroom keeps its own small state (history, activity log, map snapshots).
 public enum HeadroomPaths {
+    /// Your real home folder. Inside the App Store sandbox `NSHomeDirectory()` is the app's own
+    /// container (~/Library/Containers/…/Data), so this asks the user database instead; outside it the two agree.
+    public static let home: String = {
+        if let pw = getpwuid(getuid()), let dir = pw.pointee.pw_dir { return String(cString: dir) }
+        return NSHomeDirectory()
+    }()
+
+    /// Built for the Mac App Store: sandboxed, so some features are off (see `Edition`).
+    public static let isSandboxed = ProcessInfo.processInfo.environment["APP_SANDBOX_CONTAINER_ID"] != nil
+
     public static var support: URL {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Headroom", isDirectory: true)
@@ -14,7 +24,8 @@ public enum HeadroomPaths {
 public struct ActivityLog: Codable, Sendable {
     public struct Item: Codable, Sendable, Hashable {
         public var original: String
-        /// Where it landed in the Trash; nil when it was deleted for good.
+        /// Where it landed in the Trash; nil when it was deleted for good. For a `.filed` entry,
+        /// where it was moved to (Put Back moves it home the same way).
         public var inTrash: String?
 
         public init(original: String, inTrash: String? = nil) {
@@ -24,7 +35,7 @@ public struct ActivityLog: Codable, Sendable {
     }
 
     public struct Entry: Codable, Sendable, Identifiable, Hashable {
-        public enum Kind: String, Codable, Sendable { case reclaimed, trashed, emptied, deleted, uninstalled, ranTool }
+        public enum Kind: String, Codable, Sendable { case reclaimed, trashed, emptied, deleted, uninstalled, ranTool, filed }
         public var id = UUID()
         public var date = Date()
         public var kind: Kind
@@ -57,7 +68,8 @@ public struct ActivityLog: Codable, Sendable {
 
         /// The trashed copies still sitting in the Trash.
         public var stillInTrash: [URL] {
-            guard !restored else { return [] }
+            // Filed screenshots were moved into a folder, never to the Trash.
+            guard !restored, kind != .filed else { return [] }
             return items.compactMap { $0.inTrash }.filter { FileManager.default.fileExists(atPath: $0) }
                 .map { URL(fileURLWithPath: $0) }
         }

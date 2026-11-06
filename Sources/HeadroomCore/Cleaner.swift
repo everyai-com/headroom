@@ -7,7 +7,7 @@ public struct SafetyGuard: Sendable {
     /// Your never-touch list: nothing at, inside or containing these paths is removed.
     public let excluded: [String]
 
-    public init(home: URL = URL(fileURLWithPath: NSHomeDirectory()), excluded: [String] = []) {
+    public init(home: URL = URL(fileURLWithPath: HeadroomPaths.home), excluded: [String] = []) {
         self.home = home.resolvingSymlinksInPath().standardizedFileURL
         self.excluded = excluded.map { URL(fileURLWithPath: $0).standardizedFileURL.path.lowercased() }
     }
@@ -49,13 +49,42 @@ public struct SafetyGuard: Sendable {
         if protectedPrefixes.map({ $0.lowercased() }).contains(where: { resolved == $0 || resolved.hasPrefix($0 + "/") }) {
             return .refused("protected location")
         }
+        // iPhone and iPad backups may be the only copy of a phone: one device's backup may go to the
+        // Trash — never the Backup folder (or anything holding it), never a piece of one, never for good.
+        let backups = home + "/library/application support/mobilesync/backup"
+        if backups.hasPrefix(resolved + "/") || resolved == backups { return .refused("holds your iPhone and iPad backups") }
+        if resolved.hasPrefix(backups + "/") {
+            guard case .trash = finding.method, !resolved.dropFirst(backups.count + 1).contains("/") else {
+                return .refused("an iPhone or iPad backup — it can only go to the Trash, a whole device at a time")
+            }
+        }
+        // Mail's data lives in its container too: only the copies Mail saved when you opened an attachment
+        // may go (the original stays in the email) — to the Trash, never for good, never the mailboxes.
+        let mailContainer = home + "/library/containers/com.apple.mail"
+        if mailContainer.hasPrefix(resolved + "/") { return .refused("holds Mail's data") }
+        if resolved == mailContainer || resolved.hasPrefix(mailContainer + "/") {
+            guard resolved.hasPrefix(CleanUp.mailDownloads(home: home).lowercased() + "/"), case .trash = finding.method else {
+                return .refused("Mail's data — only attachments Mail saved when you opened them may go, to the Trash")
+            }
+        }
         // Inside an app bundle: deleting part of an app breaks it — uninstall the whole app instead.
-        if let bundle = Self.enclosingAppBundle(resolvedPath) { return .refused("part of \(bundle) — uninstall the app instead") }
+        // An app already uninstalled to the Trash may be deleted for good — the whole bundle, never a piece of it.
+        let trashedApp: Bool = {
+            guard case .delete = finding.method else { return false }
+            let trash = home + "/.trash/"
+            return resolved.hasPrefix(trash) && !resolved.dropFirst(trash.count).contains("/") && resolved.hasSuffix(".app")
+        }()
+        if !trashedApp, let bundle = Self.enclosingAppBundle(resolvedPath) { return .refused("part of \(bundle) — uninstall the app instead") }
         // Git history: one object pack can be a whole repo's past. Build output never lives here.
         if resolved.hasSuffix("/.git") || resolved.contains("/.git/") { return .refused("git history — use git to slim a repo") }
         // A live VM's disk (Colima, Lima, OrbStack…): removing it wipes every container inside.
+        // Its `backups` folder holds copies, not the live disk — those may go, to the Trash only.
         let runsOwnTool: Bool = { if case .command = finding.method { return true }; return false }()
-        if !runsOwnTool, BigFileCollector.vmHomes.contains(where: { resolved.hasPrefix(home + "/" + $0 + "/") || resolved == home + "/" + $0 }) {
+        let trashesBackup: Bool = {
+            guard case .trash = finding.method else { return false }
+            return BigFileCollector.vmHomes.contains { resolved.hasPrefix(home + "/" + $0 + "/backups/") }
+        }()
+        if !runsOwnTool, !trashesBackup, BigFileCollector.vmHomes.contains(where: { resolved.hasPrefix(home + "/" + $0 + "/") || resolved == home + "/" + $0 }) {
             return .refused("a virtual machine's disk — clean it with its own tool (docker system prune)")
         }
         // A photo library under any name (they're often renamed or kept outside ~/Pictures).

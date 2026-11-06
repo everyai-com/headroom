@@ -10,6 +10,10 @@ final class AppModel: ObservableObject {
     @Published var volume = VolumeStatus.current()
     @Published var findings: [Finding] = []
     @Published var selected: Set<String> = []
+    /// The worktrees found by the last scan (the Coding screen groups them; nested ones count once).
+    @Published var worktrees: [Worktree] = []
+    /// Folders macOS is still asking about (a permission prompt nobody has answered): skipped until it's answered.
+    @Published var waitingForAccess: [String] = []
     @Published var apps: [InstalledApp] = []
     @Published var selectedApps: Set<String> = []
     @Published var map: DiskNode?
@@ -42,7 +46,28 @@ final class AppModel: ObservableObject {
     }
     @Published var toast: Toast?
 
+    /// Failures land in Application Support/Headroom/problems.log too — a toast is gone in seconds.
+    static func logProblem(_ message: String) {
+        let url = URL(fileURLWithPath: HeadroomPaths.home).appendingPathComponent("Library/Application Support/Headroom/problems.log")
+        let line = "\(Date().formatted(.iso8601)) \(message)\n"
+        if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(Data(line.utf8)); try? h.close() }
+        else { try? Data(line.utf8).write(to: url) }
+    }
+
     func show(_ message: String, failed: Bool = false, undo: ActivityLog.Entry.ID? = nil) {
+        var message = message
+        // Without Full Disk Access macOS blocks the Trash and other apps' data — say so instead of a vague failure.
+        let blocked = ["permission", "not permitted", "skipped", "couldn't"].contains { message.lowercased().contains($0) }
+        if blocked, Edition.appStore {
+            // Sandboxed: Full Disk Access doesn't apply; folders open when you choose them.
+            message += " — Headroom can only open folders you've given it. Choose your home folder on Home, or the folder when asked."
+        } else if blocked || failed {
+            hasFullDiskAccess = Self.checkFullDiskAccess()
+            if !hasFullDiskAccess {
+                message += " — Headroom needs Full Disk Access for this: System Settings → Privacy & Security → Full Disk Access → turn on Headroom"
+            }
+        }
+        if blocked || failed { Self.logProblem(message) }
         let t = Toast(message: message, failed: failed, undo: undo)
         toast = t
         Task { [weak self] in
@@ -64,7 +89,8 @@ final class AppModel: ObservableObject {
     /// `--demo` (for recording): projects and personal files are limited to what
     /// scripts/demo-seed.sh made, so your real projects and documents never appear on camera.
     static let demoMode = CommandLine.arguments.contains("--demo")
-    static let demoRoot = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Desktop/headroom-demo")
+    static let demoRoot = ProcessInfo.processInfo.environment["HEADROOM_DEMO_ROOT"].map { URL(fileURLWithPath: $0) }
+        ?? URL(fileURLWithPath: HeadroomPaths.home).appendingPathComponent("Desktop/headroom-demo")
 
     static func isDemoPath(_ url: URL) -> Bool {
         let p = url.path
@@ -109,10 +135,15 @@ final class AppModel: ObservableObject {
         phase = .scanning("Looking for space you can safely get back…")
         let stale = staleDays
         let excluded = self.excluded
-        let roots = Self.demoMode ? [Self.demoRoot] : ProjectScanner.defaultRoots()
+        // A folder still waiting on its permission prompt is skipped (and named), never waited on.
+        let roots = Self.demoMode ? [Self.demoRoot] : Access.readable(ProjectScanner.defaultRoots())
         async let projects = ProjectScanner.scan(roots: roots, staleDays: stale)
         async let known = Catalog.scanKnownLocations()
-        let found = await projects + known
+        // Every agent's worktrees, wherever they live (removed through git, never one-click).
+        async let trees = Worktrees.scan(roots: Self.demoMode ? roots : roots + Worktrees.agentRoots())
+        let worktreeList = await trees
+        let git = Git.executable
+        let found = await projects + known + worktreeList.map { $0.finding(git: git) }
         var all = await Task.detached { Exclusions.apply(found, excluded: excluded) }.value
             .sorted { $0.size.allocated > $1.size.allocated }
         if Self.demoMode {
@@ -127,6 +158,10 @@ final class AppModel: ObservableObject {
                 return d
             }
         }
+        // The App Store edition can't run other tools (simctl, docker, brew…): those findings stay out.
+        if Edition.appStore { all.removeAll { if case .command = $0.method { true } else { false } } }
+        worktrees = worktreeList
+        waitingForAccess = Access.waiting
         findings = all
         // Safe items are pre-selected; review items wait for you.
         selected = Set(all.filter { $0.safety == .safe && $0.reclaimable > 0 }.map(\.id))
@@ -161,14 +196,15 @@ final class AppModel: ObservableObject {
 
     /// Reclaim the selection. With `safeOnly`, exactly the safe set — the one-click path.
     @discardableResult
-    func reclaim(safeOnly: Bool = false, automatic: Bool = false) async -> (report: CleanupReport, plan: [Finding])? {
+    func reclaim(safeOnly: Bool = false, automatic: Bool = false, only: [Finding]? = nil) async -> (report: CleanupReport, plan: [Finding])? {
         guard !isBusy else { return nil }
         // One click never acts on a stale verdict: drop projects you've touched since the scan.
-        let plan = safeOnly
+        // `only`: exactly these (a Coding screen's selection), never anything kept.
+        let plan = only.map { $0.filter { $0.safety != .keep } } ?? (safeOnly
             ? ProjectScanner.revalidated(safeFindings, staleDays: staleDays).filter { $0.safety == .safe }
-            : selectedFindings
+            : selectedFindings)
         guard !plan.isEmpty else { return nil }
-        phase = .reclaiming("Reclaiming \(plan.reduce(0) { $0 + $1.reclaimable }.gb)…")
+        phase = .reclaiming("Freeing up \(plan.reduce(0) { $0 + $1.reclaimable }.gb)…")
         let guardrail = self.guardrail
         let report = await Task.detached(priority: .userInitiated) {
             Cleaner(guardrail: guardrail).reclaim(plan)
@@ -183,7 +219,7 @@ final class AppModel: ObservableObject {
             let names = Dictionary(plan.map { ($0.id, $0.title) }, uniquingKeysWith: { a, _ in a })
             if let skip = report.skipped.first {
                 let what = names[skip.id] ?? skip.id
-                show((report.reclaimed.isEmpty ? "Couldn't reclaim" : "Freed \(report.freedBytes.gb) · \(report.skipped.count) skipped")
+                show((report.reclaimed.isEmpty ? "Couldn't free up space" : "Freed \(report.freedBytes.gb) · \(report.skipped.count) skipped")
                      + " — \(what): \(skip.reason)", failed: report.reclaimed.isEmpty)
             } else {
                 show("Freed \(report.freedBytes.gb) from \(report.reclaimed.count) item\(report.reclaimed.count == 1 ? "" : "s")")
@@ -245,6 +281,16 @@ final class AppModel: ObservableObject {
 
     /// Trash (or delete) several large files in one go, as one Activity entry you can put back.
     func remove(_ files: [BigFile], permanently: Bool) async -> (message: String, removed: Set<String>, undo: ActivityLog.Entry.ID?) {
+        await removeFiles(files.map { ($0.url, $0.bytes) }, permanently: permanently, label: "large files")
+    }
+
+    /// Move files to the Trash as one Activity entry you can put back (the library, duplicates, clean-up cards).
+    func trashFiles(_ files: [(url: URL, bytes: Int64)], label: String? = nil) async -> (message: String, removed: Set<String>, undo: ActivityLog.Entry.ID?) {
+        await removeFiles(files, permanently: false, label: label ?? "files")
+    }
+
+    func removeFiles(_ files: [(url: URL, bytes: Int64)], permanently: Bool, label: String) async
+        -> (message: String, removed: Set<String>, undo: ActivityLog.Entry.ID?) {
         let plan = files.map { Finding.picked($0.url, bytes: $0.bytes, method: permanently ? .delete : .trash) }
         guard !plan.isEmpty else { return ("Nothing selected", [], nil) }
         let guardrail = self.guardrail
@@ -258,7 +304,7 @@ final class AppModel: ObservableObject {
                 entry = one
             } else {
                 let landed = Dictionary(report.trashed.map { ($0.original.path, $0.inTrash.path) }, uniquingKeysWith: { a, _ in a })
-                entry = .init(kind: permanently ? .deleted : .trashed, title: "\(done.count) large files", bytes: bytes,
+                entry = .init(kind: permanently ? .deleted : .trashed, title: "\(done.count) \(label)", bytes: bytes,
                               items: done.flatMap(\.paths).map { .init(original: $0.path, inTrash: landed[$0.path]) })
             }
             activity.record(entry)
@@ -267,10 +313,190 @@ final class AppModel: ObservableObject {
         refreshVolume()
         if permanently, report.freedBytes > 0 { history.record(volume: volume, safe: safeReclaimable, freed: report.freedBytes) }
         let removed = Set(done.compactMap { $0.paths.first?.path })
-        let what = done.count == 1 ? "“\(done[0].title)”" : "\(done.count) files"
-        var message = permanently ? "Deleted \(what) — freed \(bytes.gb)" : "Moved \(what) to the Trash (\(bytes.gb))"
+        let what = done.count == 1 ? "“\(done[0].title)”" : "\(done.count) \(label)"
+        var message = done.isEmpty ? "Couldn't move \(files.count == 1 ? "it" : "them") to the Trash"
+            : permanently ? "Deleted \(what) — freed \(bytes.gb)" : "Moved \(what) to the Trash (\(bytes.gb))"
         if let skip = report.skipped.first { message += " · \(report.skipped.count) skipped: \(skip.reason)" }
         return (message, removed, undo)
+    }
+
+    // MARK: Memory
+
+    @Published var memory = MemoryStatus.current()
+    @Published var memoryGroups: [MemoryGroup] = []
+
+    func refreshMemory() async {
+        let (status, groups) = await Task.detached(priority: .utility) {
+            (MemoryStatus.current(), ProcessScanner.groups(ProcessScanner.snapshot()))
+        }.value
+        memory = status
+        memoryGroups = groups
+    }
+
+    // MARK: Battery
+
+    /// nil on desktops. Read-only: Headroom shows the battery, it never changes how the Mac charges.
+    @Published var battery: BatteryStatus? = AppModel.demoMode ? BatteryDemo.status : BatteryStatus.current()
+    @Published var batteryLog = AppModel.demoMode ? BatteryDemo.log() : BatteryLog.load()
+    /// Settings → Add-ons. On by default; only shown on a Mac with a battery.
+    @AppStorage("batteryAddOn") var batteryAddOn = true
+    var showsBattery: Bool { batteryAddOn && battery != nil }
+
+    /// Cheap (one IOKit read). `record` keeps a reading for the trend and the monthly recap, at most every 4 minutes.
+    func refreshBattery(record: Bool = false) {
+        guard !Self.demoMode, let status = BatteryStatus.current() else { return }
+        battery = status
+        if record, batteryAddOn { batteryLog.record(status) }
+    }
+
+    // MARK: Planner
+
+    /// Tasks and habits (Settings → Add-ons → Planner). Written by the app and `headroom-cli`; see `PlannerStore`.
+    @Published var planner = AppModel.demoMode ? PlannerDemo.planner() : PlannerStore.load()
+    @AppStorage("plannerAddOn") var plannerAddOn = true
+    /// The file's date when last read, so a change from the CLI (or Claude Code) is picked up on the next tick.
+    var plannerRead: Date? = PlannerStore.modified()
+    /// The XP just earned, shown for a moment where it was earned.
+    @Published var plannerReward: PlannerReward?
+    /// The focus session you just stopped, for "Finished this task? How did it feel?".
+    @Published var justStopped: FocusSession?
+    /// The season whose wrap is showing (after End Season, or from the season card).
+    @Published var wrapSeason: Season?
+    /// The evening ritual sheet is open (from the day path or the top-thing card).
+    @Published var closingDay = false
+
+    // MARK: Keep awake + energy
+
+    /// The running keep-awake session, if any (macOS's own sleep assertion; released when it ends or Headroom quits).
+    @Published var awake: AwakeSession?
+    @Published var awakeState: KeepAwake.Decision = .ended("")
+    @Published var awakeAgents: [String] = []
+    @AppStorage("awakeRequireCharger") var awakeRequireCharger = false
+    /// 0 = no cutoff.
+    @AppStorage("awakeBatteryCutoff") var awakeBatteryCutoff = 20
+    @AppStorage("awakeKeepDisplay") var awakeKeepDisplay = false
+    let awakeAssertion = KeepAwake.Assertion()
+    @Published var energy: [Energy.Use] = []
+    @Published var sleepBlockers: [Energy.Blocker] = []
+
+    func startAwake(_ mode: AwakeSession.Mode, minutes: Int? = nil) {
+        var s = minutes.map { AwakeSession.timed(TimeInterval($0 * 60)) } ?? AwakeSession(mode: mode)
+        s.mode = mode
+        s.keepDisplay = awakeKeepDisplay
+        s.requireCharger = awakeRequireCharger
+        s.batteryCutoff = awakeBatteryCutoff > 0 ? awakeBatteryCutoff : nil
+        awake = s
+        updateAwake()
+    }
+
+    func stopAwake() {
+        awake = nil
+        awakeAssertion.release()
+        awakeState = .ended("Stopped")
+    }
+
+    /// From the 30 s tick (and on start). Returns why a session ended, for the notification.
+    @discardableResult func updateAwake() -> String? {
+        guard let s = awake else { return nil }
+        awakeAgents = s.mode == .whileAgents ? KeepAwake.agentsWorking(ProcessScanner.snapshot(includeArguments: false)) : []
+        let d = KeepAwake.decide(s, battery: battery, agentsWorking: awakeAgents)
+        awakeState = d
+        switch d {
+        case .awake: awakeAssertion.hold(true, display: s.keepDisplay)
+        case .paused: awakeAssertion.release()
+        case .ended(let why): stopAwake(); awakeState = d; return why
+        }
+        return nil
+    }
+
+    var awakeLabel: String {
+        guard let s = awake else { return "Off" }
+        switch awakeState {
+        case .paused(let why): return why
+        case .ended(let why): return why
+        case .awake:
+            if let ends = s.ends { return "Until \(ends.formatted(date: .omitted, time: .shortened))" }
+            return s.mode == .whileAgents ? "While \(awakeAgents.joined(separator: ", ")) works" : "Until you stop it"
+        }
+    }
+
+    /// What's using the battery: two samples `seconds` apart, grouped by app. Off the main thread.
+    func measureEnergy(seconds: Double = 3) async {
+        let (use, blockers) = await Task.detached { () -> ([Energy.Use], [Energy.Blocker]) in
+            let procs = ProcessScanner.snapshot(includeArguments: false)
+            let pids = procs.map(\.pid)
+            let before = Energy.sample(pids)
+            try? await Task.sleep(for: .seconds(seconds))
+            let after = Energy.sample(pids)
+            return (Energy.use(groups: ProcessScanner.groups(procs), before: before, after: after, seconds: seconds), Energy.blockers())
+        }.value
+        energy = Array(use.prefix(8))
+        sleepBlockers = blockers
+    }
+
+    func clearBatteryLog() {
+        batteryLog = BatteryLog()
+        try? FileManager.default.removeItem(at: BatteryLog.defaultURL)
+    }
+
+    /// nil when the group can be quit; otherwise why not.
+    func quitRefusal(_ g: MemoryGroup) -> String? {
+        if g.kind == .system { return "Part of macOS — it manages its own memory" }
+        guard let main = g.processes.min(by: { $0.pid < $1.pid }) else { return "Not running" }
+        if case .refused(let why) = ProcessGuard.check(main) { return why.prefix(1).uppercased() + why.dropFirst() }
+        return nil
+    }
+
+    /// Quit apps the polite way (they can save), or force them; stop other processes with SIGTERM/SIGKILL.
+    func quit(_ groups: [MemoryGroup], force: Bool) async -> String {
+        let targets = groups.filter { quitRefusal($0) == nil }
+        guard !targets.isEmpty else { return "Nothing to quit" }
+        let before = targets.reduce(0) { $0 + $1.footprint }
+        var failed: [String] = []
+        for g in targets {
+            if let bundle = g.bundlePath,
+               let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleURL?.standardizedFileURL.path == bundle }) {
+                let ok = force ? app.forceTerminate() : app.terminate()
+                if !ok { failed.append(g.name) }
+            } else {
+                // Children first, then the parent, so nothing restarts what we just stopped.
+                for p in g.processes.sorted(by: { $0.pid > $1.pid }) {
+                    if case .refused(let why) = ProcessGuard.stop(p, force: force) { failed.append("\(g.name): \(why)"); break }
+                }
+            }
+        }
+        // Judge by the processes we asked to stop, not the group: a lingering helper or an app that
+        // relaunches itself keeps the group alive even though the quit worked. Apps can take seconds.
+        func alive(_ p: ProcessInfoSnapshot) -> Bool {
+            var bsd = proc_bsdinfo()
+            guard proc_pidinfo(p.pid, PROC_PIDTBSDINFO, 0, &bsd, Int32(MemoryLayout<proc_bsdinfo>.size)) > 0 else { return false }
+            let started = bsd.pbi_start_tvsec > 0 ? Date(timeIntervalSince1970: TimeInterval(bsd.pbi_start_tvsec)) : nil
+            return p.started == nil || started == p.started // same pid, same start: still the same process
+        }
+        func mainAlive(_ g: MemoryGroup) -> Bool { g.processes.first { $0.pid == g.mainPID }.map(alive) ?? false }
+        let deadline = Date().addingTimeInterval(force ? 2 : 8)
+        while Date() < deadline, targets.contains(where: mainAlive) {
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+        let waiting = targets.filter(mainAlive)
+        let freed = targets.flatMap(\.processes).filter { !alive($0) }.reduce(0) { $0 + $1.footprint }
+        await refreshMemory()
+        if !failed.isEmpty { return "Couldn't quit \(failed.joined(separator: ", "))" }
+        if !waiting.isEmpty {
+            // Usually a Save dialog: bring it to the front so it isn't hidden behind Headroom.
+            for g in waiting {
+                if let bundle = g.bundlePath,
+                   let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleURL?.standardizedFileURL.path == bundle }) {
+                    app.activate()
+                }
+            }
+            let quit = targets.count - waiting.count
+            let who = waiting.count == 1 ? waiting[0].name : "\(waiting.count) apps"
+            return (quit > 0 ? "Quit \(quit), freed \(freed.gb) · " : "")
+                + "\(who) didn't quit yet — check for a Save dialog, or use Force Quit"
+        }
+        let names = targets.count == 1 ? targets[0].name : "\(targets.count) apps"
+        return "Quit \(names) — freed about \(max(freed, before).gb) of memory"
     }
 
     // MARK: Headroom's own data
@@ -374,7 +600,7 @@ final class AppModel: ObservableObject {
         let method: CleanupMethod
         switch action {
         case .reclaim:
-            guard let known, known.method != .none else { return "Not a known cache or build output" }
+            guard let known, known.method != .none else { return "Not something Headroom knows is safe to remove" }
             method = known.method
         case .emptyContents:
             guard isDirectory(url) else { return "Not a folder" }

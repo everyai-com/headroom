@@ -14,18 +14,19 @@ public enum Safety: Int, Codable, Sendable, Comparable, CaseIterable {
     public var label: String {
         switch self {
         case .safe: "Safe to reclaim"
-        case .review: "Review first"
+        case .review: "Check first"
         case .keep: "Your data"
         }
     }
 }
 
 public enum StorageCategory: String, CaseIterable, Codable, Sendable {
-    case projectArtifacts, packageCaches, developerTools, aiAgents, appCaches, browsers, logs, trash, userData
+    case projectArtifacts, worktrees, packageCaches, developerTools, aiAgents, appCaches, browsers, logs, trash, userData
 
     public var title: String {
         switch self {
         case .projectArtifacts: "Project build artifacts"
+        case .worktrees: "Worktrees"
         case .packageCaches: "Package manager caches"
         case .developerTools: "Xcode & simulators"
         case .aiAgents: "AI coding agents"
@@ -40,6 +41,7 @@ public enum StorageCategory: String, CaseIterable, Codable, Sendable {
     public var symbol: String {
         switch self {
         case .projectArtifacts: "shippingbox.fill"
+        case .worktrees: "arrow.triangle.branch"
         case .packageCaches: "archivebox.fill"
         case .developerTools: "hammer.fill"
         case .aiAgents: "sparkles"
@@ -131,7 +133,7 @@ extension Finding {
 extension URL {
     /// "~/Desktop/x" for display.
     public var tildePath: String {
-        let home = NSHomeDirectory()
+        let home = HeadroomPaths.home
         return path.hasPrefix(home) ? "~" + path.dropFirst(home.count) : path
     }
 }

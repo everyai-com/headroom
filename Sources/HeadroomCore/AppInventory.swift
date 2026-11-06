@@ -32,11 +32,11 @@ public struct InstalledApp: Sendable, Hashable, Identifiable {
 /// Lists installed apps with the data they keep, and uninstalls them completely —
 /// to the Trash, so an uninstall is always recoverable until you empty it.
 public enum AppInventory {
-    public static func appDirectories(home: URL = URL(fileURLWithPath: NSHomeDirectory())) -> [URL] {
+    public static func appDirectories(home: URL = URL(fileURLWithPath: HeadroomPaths.home)) -> [URL] {
         [URL(fileURLWithPath: "/Applications"), home.appendingPathComponent("Applications")]
     }
 
-    public static func scan(home: URL = URL(fileURLWithPath: NSHomeDirectory()),
+    public static func scan(home: URL = URL(fileURLWithPath: HeadroomPaths.home),
                             isCancelled: @escaping @Sendable () -> Bool = { false }) async -> [InstalledApp] {
         let fm = FileManager.default
         var bundles: [URL] = []
@@ -62,7 +62,10 @@ public enum AppInventory {
                     let name = (info["CFBundleDisplayName"] as? String) ?? (info["CFBundleName"] as? String)
                         ?? bundle.deletingPathExtension().lastPathComponent
                     let leftovers = index.leftovers(bundleID: id, name: name, executable: info["CFBundleExecutable"] as? String,
-                                                    otherBundleIDs: allIDs).map {
+                                                    otherBundleIDs: allIDs)
+                        // Another app's container can sit behind a permission prompt: skip it rather than wait.
+                        .filter { Access.readable($0.url, home: home.path) }
+                        .map {
                         Leftover(url: $0.url, kind: $0.kind, size: DiskWalker.measure($0.url, isCancelled: isCancelled))
                     }.filter { $0.size.allocated > 0 }
                     // Spotlight first; otherwise the newest change in the app's own data — apps
@@ -94,8 +97,8 @@ public enum AppInventory {
         let library: URL
         /// (subfolder, matching rule): exact bundle-ID names, or contains for group containers.
         static let places: [(folder: String, kind: String)] = [
-            ("Application Support", "Application Support"), ("Caches", "Caches"), ("Containers", "Sandbox container"),
-            ("Group Containers", "Shared container"), ("Preferences", "Preferences"), ("Preferences/ByHost", "Preferences"),
+            ("Application Support", "Application Support"), ("Caches", "Caches"), ("Containers", "App data folder"),
+            ("Group Containers", "Shared data folder"), ("Preferences", "Preferences"), ("Preferences/ByHost", "Preferences"),
             ("Saved Application State", "Saved window state"), ("HTTPStorages", "Web storage"), ("WebKit", "Web data"),
             ("Cookies", "Cookies"), ("Logs", "Logs"), ("LaunchAgents", "Launch agent"), ("Application Scripts", "Scripts"),
         ]

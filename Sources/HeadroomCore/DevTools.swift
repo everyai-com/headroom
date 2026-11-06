@@ -3,14 +3,58 @@ import Foundation
 /// Space held by developer tools that need their own logic (not just "a folder"): Docker,
 /// simulator runtimes and devices, old toolchain versions, Time Machine snapshots, installers.
 public enum DevTools {
-    public static func scan(home: URL = URL(fileURLWithPath: NSHomeDirectory())) async -> [Finding] {
+    public static func scan(home: URL = URL(fileURLWithPath: HeadroomPaths.home)) async -> [Finding] {
         async let docker = dockerFindings(home: home)
         async let sims = simulatorFindings(home: home)
         var out = await docker + sims
         out += toolchainFindings(home: home)
         if let f = timeMachineSnapshots() { out.append(f) }
         if let f = oldInstallers(home: home) { out.append(f) }
+        if let f = vmDiskBackups(home: home, health: { dockerDiskHealth() }) { out.append(f) }
         return out
+    }
+
+    // MARK: VM disk backups
+
+    /// Is Docker's VM disk healthy right now? Docker must answer, and the VM's kernel must
+    /// report no filesystem errors since it booted. nil reason = healthy.
+    public static func dockerDiskHealth() -> String? {
+        guard let docker = Shell.which("docker") else { return "Docker isn't installed or isn't on the PATH" }
+        guard Shell.run(docker, ["system", "df"], timeout: 20) != nil else { return "Docker isn't answering — start it and rescan" }
+        if let colima = Shell.which("colima"),
+           let kernel = Shell.run(colima, ["ssh", "--", "sudo", "dmesg"], timeout: 20),
+           let line = kernel.split(separator: "\n").first(where: { $0.contains("EXT4-fs error") || $0.contains("I/O error") }) {
+            return "its disk reported errors since it started (\(line.suffix(80)))"
+        }
+        return nil
+    }
+
+    /// Copies of a VM's disk kept as a safety net (e.g. `~/.colima/backups/datadisk-….img`, made
+    /// before repairing a damaged disk). Offered only once the live disk checks healthy, and only
+    /// to the Trash — until then it's the only way back, so it's shown as your data.
+    public static func vmDiskBackups(home: URL, health: () -> String?) -> Finding? {
+        let dirs = BigFileCollector.vmHomes.map { home.appendingPathComponent($0).appendingPathComponent("backups") }
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
+        let files = dirs.flatMap { dir in
+            ((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? [])
+                .filter { !$0.hasPrefix(".") }.map { dir.appendingPathComponent($0) }
+        }
+        guard !files.isEmpty else { return nil }
+        let size = DiskWalker.measure(files)
+        guard size.allocated > 0 else { return nil }
+        let problem = health()
+        let when = size.newestModification.map { RelativeDateTimeFormatter().localizedString(for: $0, relativeTo: .now) } ?? "a while ago"
+        let common = "A copy of Docker's disk made \(when) as a safety net. Disk copies on APFS share unchanged blocks with the live disk, so removing it frees up to this much — the more Docker changed since, the more."
+        if let problem {
+            return Finding(id: "vm-disk-backups", title: "Docker disk backup (keep for now)", subtitle: files.map(\.tildePath).joined(separator: ", "),
+                           detail: common + " Keep it: \(problem). It may be the only way back.",
+                           category: .developerTools, safety: .keep, paths: files, size: size, lastUsed: size.newestModification,
+                           method: .none, symbol: "externaldrive.badge.timemachine")
+        }
+        return Finding(id: "vm-disk-backups", title: "Docker disk backup", subtitle: files.map(\.tildePath).joined(separator: ", "),
+                       detail: common + " Docker's disk checked healthy just now. If you keep databases in Docker, open them once first. It goes to the Trash — delete it for good from Activity to free the space.",
+                       category: .developerTools, safety: .review, paths: files, size: size, lastUsed: size.newestModification,
+                       method: .trash, symbol: "externaldrive.badge.timemachine")
     }
 
     // MARK: Docker

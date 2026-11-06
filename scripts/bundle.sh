@@ -2,9 +2,26 @@
 # Build Headroom.app (release), with icon and an ad-hoc signature, into ./dist.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-swift build -c release --product Headroom
-swift build -c release --product headroom-cli
-BIN=.build/release
+# Const values let the App Intents metadata step see the Shortcuts actions (both products share the flags,
+# so the second build reuses the first one's HeadroomCore).
+INTENT_FLAGS=(-Xswiftc -emit-const-values -Xswiftc -Xfrontend -Xswiftc -const-gather-protocols-file
+              -Xswiftc -Xfrontend -Xswiftc "$(pwd)/scripts/appintents-protocols.json")
+if [ "${HEADROOM_SIGN_ID:--}" = "-" ]; then
+  # This Mac only: its own architecture, quick.
+  swift build -c release --product Headroom "${INTENT_FLAGS[@]}"
+  swift build -c release --product headroom-cli "${INTENT_FLAGS[@]}"
+  BIN=.build/release
+  CONSTVALS="$(pwd)/$BIN/Headroom.build"
+  TRIPLE="$(uname -m)-apple-macosx15.0"
+else
+  # A download for anyone: one universal app for Apple silicon and Intel Macs.
+  UNIVERSAL=(--arch arm64 --arch x86_64 --build-path .build/universal)
+  swift build -c release --product Headroom "${UNIVERSAL[@]}" "${INTENT_FLAGS[@]}"
+  swift build -c release --product headroom-cli "${UNIVERSAL[@]}" "${INTENT_FLAGS[@]}"
+  BIN=.build/universal/apple/Products/Release
+  CONSTVALS="$(pwd)/.build/universal"
+  TRIPLE="arm64-apple-macosx15.0"
+fi
 APP=dist/Headroom.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
@@ -21,6 +38,19 @@ for s in 16 32 128 256 512; do
 done
 rm "$ICONSET/base.png"
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/Headroom.icns"
+
+# Shortcuts & Siri: what Xcode's App Intents step makes (Metadata.appintents). Skipped without Xcode.
+if xcrun --find appintentsmetadataprocessor >/dev/null 2>&1; then
+  LISTS=$(mktemp -d)
+  ls "$(pwd)"/Sources/Headroom/*.swift > "$LISTS/sources.txt"
+  find "$CONSTVALS" -path "*Headroom.build*" -name "*.swiftconstvalues" > "$LISTS/constvals.txt"
+  xcrun appintentsmetadataprocessor --output "$APP/Contents/Resources" \
+    --toolchain-dir "$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain" --module-name Headroom \
+    --sdk-root "$(xcrun --show-sdk-path --sdk macosx)" --xcode-version "$(xcodebuild -version | awk '/Build version/{print $3}')" \
+    --platform-family macOS --deployment-target 15.0 --target-triple "$TRIPLE" \
+    --binary-file "$APP/Contents/MacOS/Headroom" --source-file-list "$LISTS/sources.txt" \
+    --swift-const-vals-list "$LISTS/constvals.txt" --force --quiet-warnings >/dev/null
+fi
 
 VERSION=$(cat VERSION 2>/dev/null || echo 0.1.0)
 BUILD=$(git rev-list --count HEAD 2>/dev/null || echo 1)
@@ -43,6 +73,12 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSUIElement</key><true/>
   <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
   <key>NSHumanReadableCopyright</key><string>Headroom</string>
+  <key>NSCalendarsFullAccessUsageDescription</key><string>Headroom shows today's events beside your plan, and the coach plans around them. It never changes your calendar.</string>
+  <key>NSAppleEventsUsageDescription</key><string>Headroom's Timeline asks your browser for the site you're on (never the full address), only after you turn it on.</string>
+  <key>CFBundleURLTypes</key><array><dict>
+    <key>CFBundleURLName</key><string>app.headroom.Headroom</string>
+    <key>CFBundleURLSchemes</key><array><string>headroom</string></array>
+  </dict></array>
 </dict></plist>
 PLIST
 
@@ -64,7 +100,17 @@ else
     xcrun stapler staple "$APP"
     spctl --assess --type execute --verbose "$APP"
     ditto -c -k --keepParent "$APP" dist/Headroom.zip
-    echo "notarized: dist/Headroom.zip is ready to share"
+    # The download people expect: open the disk image, drag Headroom onto Applications.
+    DMGDIR=$(mktemp -d)
+    ditto "$APP" "$DMGDIR/Headroom.app"
+    ln -s /Applications "$DMGDIR/Applications"
+    rm -f dist/Headroom.dmg
+    hdiutil create -volname Headroom -srcfolder "$DMGDIR" -fs HFS+ -format UDZO -ov dist/Headroom.dmg >/dev/null
+    codesign --force --timestamp --sign "$SIGN_ID" dist/Headroom.dmg
+    xcrun notarytool submit dist/Headroom.dmg --keychain-profile "$HEADROOM_NOTARY_PROFILE" --wait
+    xcrun stapler staple dist/Headroom.dmg
+    spctl --assess --type open --context context:primary-signature --verbose dist/Headroom.dmg
+    echo "notarized: dist/Headroom.dmg and dist/Headroom.zip are ready to share"
   fi
 fi
 echo "built $APP ($(du -sh "$APP" | cut -f1))"

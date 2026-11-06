@@ -12,6 +12,26 @@ import HeadroomCore
 //   headroom-cli files           single files over 500 MB in your folders
 //   headroom-cli growth [hours]  what grew since the app's map snapshot ~N hours ago (default 24)
 //   headroom-cli activity        what Headroom removed, and what can still be put back
+//   headroom-cli library         your files by kind (images, videos, music…) and where downloads came from
+//   headroom-cli search "<q>"    find files in plain English: "pdfs from last week over 5 mb"
+//
+//
+// The planner (the only commands that write — and only Headroom's own planner.json):
+//   headroom-cli today                         today's tasks (★ = one of the Big 3), habits, level
+//   headroom-cli add "<task>" [--big] [--tomorrow|--day YYYY-MM-DD|--inbox] [--project name] [--from claude]
+//   headroom-cli done <n|words> · later <n|words>
+//   headroom-cli habits · habit add "<habit>" [--identity …] [--cue …] [--two-minute …] [--at 21:00] [--days mon,wed]
+//   headroom-cli habit done <n|words> [--undo]
+//   headroom-cli habit add "<habit>" --avoid · habit slip <n|words> [--undo]   a habit to break: clean days count
+//   headroom-cli focus start "<what>"|<n> [--area a] · focus stop · focus   20 XP an hour, up to 3 h a session
+//   headroom-cli rewards · reward add "<reward>" <coins> · buy <n|words>       coins come 1:1 with XP
+//   headroom-cli challenge add "<habit>" <times> [--days 30] · stats           areas, rank, challenges, what earned what
+//   headroom-cli timeline [--day YYYY-MM-DD] · season · season set "<main>" 20 ["<side>" 8] · season end
+//   headroom-cli timeline rules · timeline teach <app|host|title|project> "<value>" [--project p] [--area a] [--kind k]
+//   headroom-cli blocks [--day D] · block add "<title>" 09:30 11:00 [--project p] · block remove <n>   time blocks
+//   headroom-cli journal ["how it went"] [--mood 1-5] [--energy 1-5] · sleep   the journal and check-in; nights the Mac saw
+//   headroom-cli habit add "Commit something" --commit [project]   checked off by your first commit of the day
+//   headroom-cli habit add "<quest>" --minutes 240 [--track "<project>" | --area "<area>"]   a daily quest that fills from the timeline
 //
 // Add --json to any of them for machine-readable output (for scripts and coding agents —
 // e.g. check free space before a large install).
@@ -42,6 +62,12 @@ func findingJSON(_ f: Finding) -> [String: Any] {
     return ["id": f.id, "title": f.title, "category": f.category.rawValue, "safety": "\(f.safety)",
             "paths": f.paths.map(\.path), "bytes": f.size.allocated, "reclaimableBytes": f.reclaimable,
             "lastUsed": date(f.lastUsed), "method": method, "rebuild": f.rebuild ?? NSNull(), "project": f.project ?? NSNull()]
+}
+
+// The planner writes only Headroom's own planner.json, and skips the disk header.
+if PlannerCommands.names.contains(command) {
+    PlannerCommands.run(args, json: json)
+    exit(0)
 }
 
 let volume = VolumeStatus.current()
@@ -128,8 +154,64 @@ Task {
         if log.entries.isEmpty { say("Nothing removed yet.") }
         emit(log.entries.map { ["date": date($0.date), "kind": $0.kind.rawValue, "title": $0.title, "bytes": $0.bytes,
                                 "paths": $0.items.map(\.original), "canPutBack": $0.canPutBack, "automatic": $0.automatic] })
+    case "library":
+        let started = Date()
+        let index = await LibraryScanner.scan()
+        say("\(index.items.count) files in \(index.roots.count) folders (\(String(format: "%.1f", Date().timeIntervalSince(started)))s)\n")
+        for kind in FileKind.allCases {
+            let t = index.totals(kind)
+            say("  \(pad(kind.title, 12)) \(pad("\(t.count)", 8)) \(gb(t.bytes))")
+        }
+        let sources = Dictionary(grouping: index.items.compactMap { item in DownloadSources.source(of: item).map { ($0, item) } }, by: { $0.0 })
+        say("\nDownloaded from (\(sources.values.reduce(0) { $0 + $1.count }) files):")
+        for (source, list) in sources.sorted(by: { $0.value.count > $1.value.count }).prefix(20) {
+            say("  \(pad(source.name, 24)) \(pad("\(list.count)", 6)) \(gb(list.reduce(0) { $0 + $1.1.bytes }))")
+        }
+        say("\nScreenshots: \(index.screenshots.count)")
+        if args.contains("--ext") {
+            for kind in FileKind.allCases {
+                let byExt = Dictionary(grouping: index.items.filter { $0.kind == kind }, by: \.ext).map { ($0.key, $0.value.count) }
+                say("  \(kind.title): " + byExt.sorted { $0.1 > $1.1 }.prefix(12).map { "\($0.0)=\($0.1)" }.joined(separator: " "))
+            }
+        }
+        emit(["files": index.items.count, "kinds": Dictionary(uniqueKeysWithValues: FileKind.allCases.map { k in
+            (k.rawValue, ["count": index.totals(k).count, "bytes": index.totals(k).bytes]) })])
+    case "search":
+        let text = args.dropFirst().joined(separator: " ")
+        var cached = LibraryIndex.loadCache()
+        if cached == nil { cached = await LibraryScanner.scan() }
+        let index = cached ?? LibraryIndex()
+        let q = LibraryQuery.parse(text)
+        let context = LibraryQuery.MatchContext(recognizedText: TextIndex().all)
+        let found = index.items.filter { q.matches($0, in: context) }.sorted { $0.latest > $1.latest }
+        say("Looking for: " + (q.chips.isEmpty ? "everything" : q.chips.map(\.label).joined(separator: " · ")))
+        say("\(found.count) files · \(gb(found.reduce(0) { $0 + $1.bytes }))\n")
+        for item in found.prefix(30) {
+            say("  \(pad(gb(item.bytes), 10)) \(pad(iso.string(from: item.latest).prefix(10).description, 11)) \(item.url.tildePath)")
+        }
+        emit(found.prefix(500).map { ["path": $0.path, "kind": $0.kind.rawValue, "bytes": $0.bytes, "modified": date($0.modified),
+                                      "source": DownloadSources.source(of: $0)?.name as Any] })
+    case "battery":
+        guard let b = BatteryStatus.current() else { say("No battery (this Mac is a desktop)."); emit(["battery": NSNull()]); break }
+        say("Battery \(b.percent)% · \(b.pluggedIn ? (b.charging ? "charging" : "on the charger") : "on battery")")
+        say("  health      \(b.healthPercent)% (\(b.maxCapacity) of \(b.designCapacity) mAh)")
+        say("  cycles      \(b.cycles) of \(b.designCycles)")
+        say(String(format: "  temperature %.1f °C", b.temperature))
+        say(String(format: "  battery     %+.1f W", b.batteryWatts))
+        if let w = b.systemWatts { say(String(format: "  Mac         %.1f W", w)) }
+        if let a = b.adapterWatts { say("  charger     \(b.adapterName ?? "\(a) W")\(b.adapterDelivering.map { String(format: ", delivering %.1f W", $0) } ?? "")") }
+        let log = BatteryLog.load()
+        if let t = log.trend() {
+            say(String(format: "\nWear %.1f%% a year · %.0f cycles a month", t.wearPerYear * 100, t.cyclesPerMonth)
+                + (t.yearsTo80.map { String(format: " · about %.1f years until 80%%", $0) } ?? ""))
+        }
+        say("\n\(log.samples.count) readings recorded")
+        emit(["percent": b.percent, "pluggedIn": b.pluggedIn, "charging": b.charging, "health": b.health, "cycles": b.cycles,
+              "designCycles": b.designCycles, "maxCapacity": b.maxCapacity, "designCapacity": b.designCapacity,
+              "temperature": b.temperature, "batteryWatts": b.batteryWatts, "systemWatts": b.systemWatts as Any,
+              "adapterWatts": b.adapterWatts as Any, "readings": log.samples.count])
     default:
-        print("usage: headroom-cli [status|reclaim|projects|apps|map|files|growth [hours]|activity] [--json]")
+        print("usage: headroom-cli [status|reclaim|projects|apps|map|files|growth [hours]|activity|library|search \"query\"|battery|today|add|done|later|habits|habit|focus|rewards|reward|buy|challenge|stats|blocks|block|journal|sleep|timeline|season|milestones|milestone|protect|stack|top|sync|score|wrap|vision|grateful|gave|way] [--json]")
     }
 }
 semaphore.wait()

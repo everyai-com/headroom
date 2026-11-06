@@ -59,7 +59,7 @@ public enum ProjectScanner {
     static let byName: [String: Artifact] = Dictionary(uniqueKeysWithValues: artifacts.map { ($0.name, $0) })
 
     /// Folders worth searching. Anything else (Library, Pictures…) is never walked for projects.
-    public static func defaultRoots(home: URL = URL(fileURLWithPath: NSHomeDirectory())) -> [URL] {
+    public static func defaultRoots(home: URL = URL(fileURLWithPath: HeadroomPaths.home)) -> [URL] {
         let candidates = ["Desktop", "Documents", "Developer", "Projects", "projects", "Code", "code", "src", "dev",
                           "GitHub", "repos", "work", "Sites"]
             .map { home.appendingPathComponent($0) }
